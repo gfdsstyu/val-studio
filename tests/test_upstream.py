@@ -14,8 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from calc_core import (  # noqa: E402
-    ModelConfig, WaccInputs, build_wacc, corporate_tax, ebit, fa,
-    relever_beta, revenue, run_model, unlever_beta, wc,
+    DcfSpineInput, ModelConfig, WaccInputs, build_wacc, corporate_tax, ebit, fa,
+    relever_beta, revenue, run, run_model, unlever_beta, wc,
 )
 
 FX = ROOT / "fixtures" / "viol"
@@ -143,6 +143,60 @@ def test_run_model_end_to_end():
     assert res.enterprise_value > 0 and res.per_share > 0
     # 민감도 중심 == base
     assert close(res.sensitivity["per_share"][1][1], res.per_share)
+
+
+# ── 개선 A(세금 주입)·B(터미널 정규화) ──────────────────────────────────────
+def _base_dcf(**over):
+    """단일연도 간단 DCF 입력(테스트용). over 로 개선 필드 주입."""
+    kw = dict(
+        wacc=0.10, terminal_growth=0.02,
+        revenue=[1000.0], cogs=[400.0], sga=[200.0],
+        dep_amort=[50.0], capex=[50.0], delta_nwc_cash_adj=[0.0],
+        non_operating_assets=0.0, net_debt=0.0, shares_outstanding=1,
+        mid_year_periods=[0.5], terminal_discount_period=0.5,
+    )
+    kw.update(over)
+    return DcfSpineInput(**kw)
+
+
+def test_tax_override_beats_bracket():
+    # EBIT=400. 구간세율 대신 명시세금 100 주입 → NOPLAT=300.
+    res = run(_base_dcf(tax_override=[100.0]))
+    assert close(res.tax[0], 100.0) and close(res.noplat[0], 300.0)
+
+
+def test_effective_tax_rate():
+    # EBIT=400 × 25% = 100 세금.
+    res = run(_base_dcf(effective_tax_rate=0.25))
+    assert close(res.tax[0], 100.0)
+
+
+def test_default_tax_still_bracket():
+    # 주입 없으면 구간세율(EBIT=400) 그대로.
+    res = run(_base_dcf())
+    assert close(res.tax[0], corporate_tax(400.0))
+
+
+def test_terminal_fcff_override():
+    # 터미널 FCF 를 500 으로 정규화 주입 → TV=500/(0.10−0.02).
+    res = run(_base_dcf(terminal_fcff_override=500.0))
+    assert close(res.terminal_fcff, 500.0)
+    assert close(res.terminal_value, 500.0 / (0.10 - 0.02))
+
+
+def test_terminal_reinvestment_rate_reduces_tv():
+    # 재투자율 30% → 터미널 FCF 가 그만큼 감소(순진 대비).
+    naive = run(_base_dcf()).terminal_value
+    reinv = run(_base_dcf(terminal_reinvestment_rate=0.30)).terminal_value
+    assert reinv < naive and close(reinv, naive * 0.70)
+
+
+def test_improvements_dont_touch_default_path():
+    # 개선 필드 전부 None 이면 기존 순수 스파인과 동일(비올 무회귀의 근거).
+    a = run(_base_dcf())
+    b = run(_base_dcf(tax_override=None, terminal_fcff_override=None,
+                      effective_tax_rate=None, terminal_reinvestment_rate=None))
+    assert close(a.per_share, b.per_share)
 
 
 ALL = [v for k, v in sorted(globals().items()) if k.startswith("test_")]

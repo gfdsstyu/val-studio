@@ -31,6 +31,14 @@ class DcfSpineInput:
     # 중간연도 할인 컨벤션. 기본 0.5,1.5,... ; terminal 은 마지막 명시연도 factor 로 할인.
     mid_year_periods: list[float] | None = None
     terminal_discount_period: float | None = None
+    # ── 세금 주입(개선 A) — 우선순위: tax_override > effective_tax_rate > 구간세율(EBIT).
+    # 실무 모델은 분석가 예측세금(세전이익 기반, 종종 절대액 고정)을 쓰므로 재계산 대신 주입.
+    tax_override: list[float] | None = None      # 연도별 세금(백만원, 양수 크기)
+    effective_tax_rate: float | None = None      # EBIT 대비 유효세율
+    # ── 터미널 정규화(개선 B) — 우선순위: fcff_override > reinvestment_rate > D&A=CAPEX.
+    # WACC≈g 에서 순진한 Gordon 이 폭발 → 정규화 FCF 주입 또는 재투자율(g/ROIC) 반영.
+    terminal_fcff_override: float | None = None  # 영구구간 FCF_{n+1} 직접 주입
+    terminal_reinvestment_rate: float | None = None  # NOPLAT_T×(1−rate), rate=g/ROIC
 
     def n_years(self) -> int:
         return len(self.revenue)

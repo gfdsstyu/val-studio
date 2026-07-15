@@ -1,0 +1,9 @@
+{
+  "_note": "원본 시트 표기값(4~5 유효숫자 반올림). per_share 는 정확히 일치, 나머지는 소스 반올림 허용(rel_tol 2e-3).",
+  "fcff": [83563, 100020, 124380, 158160, 198700],
+  "pv_explicit_sum": 558600,
+  "terminal_value_pv": 1940000,
+  "enterprise_value": 2498000,
+  "equity_value": 2598000,
+  "per_share": 40600
+}

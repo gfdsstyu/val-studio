@@ -43,15 +43,15 @@ rev−cogs−sga 로 우리 엔진이 계산한 EBIT이 원본과 백만원 단�
 
 ## 개선 가능점 (우선순위)
 
-### A. 세금 주입 지원 (HIGH)
-현재 `DcfSpineInput`은 세금을 항상 `corporate_tax(EBIT)`로 재계산 → 분석가 예측세금/유효세율을
-넣을 방법이 없다. **필요**: `tax_override: list[float] | None` 또는 `effective_tax_rate` +
-과세표준 선택(EBIT vs 세전이익). 실무 모델 대부분이 명시 세금을 씀.
+### A. 세금 주입 지원 (HIGH) — ✅ 구현 완료
+`DcfSpineInput`에 `tax_override: list[float] | None` + `effective_tax_rate` 추가.
+우선순위 `tax_override > effective_tax_rate > corporate_tax(EBIT)`. 터미널은 마지막
+유효세율을 성장 EBIT에 적용. → 클래시스 명시세금(27,100~37,900) 그대로 주입, FCF 일치.
 
-### B. 터미널 정규화 노브 (HIGH)
-현재 terminal FCF = 성장시킨 last NOPLAT(재투자 0). WACC≈g에서 폭발.
-**필요**: (a) `terminal_fcff_override`, 또는 (b) 재투자율 `g/ROIC` 반영,
-또는 (c) fade 기간. F1 체크는 경고만 하고 엔진이 교정 못함 → 교정 수단 필요.
+### B. 터미널 정규화 노브 (HIGH) — ✅ 구현 완료
+`terminal_fcff_override`(정규화 FCF 직접 주입) + `terminal_reinvestment_rate`(NOPLAT_T×(1−g/ROIC))
+추가. 우선순위 `override > reinvestment_rate > D&A=CAPEX 기본`. → 클래시스 31,557 주입으로
+TV비중 77.6% 재현. **결과: 클래시스가 3차 골든**(`tests/golden/test_classys_spine.py`, 주당 40,600원 정확 일치).
 
 ### C. WACC≈g 가드레일 강화 (MEDIUM)
 스프레드 1.24%는 위험. `check_terminal_value_weight`(>90%)·narrow-spread(<1%) 외에,
@@ -63,5 +63,6 @@ rev−cogs−sga 로 우리 엔진이 계산한 EBIT이 원본과 백만원 단�
 
 ## 결론
 - **재현 로직(EBIT)은 2사례 연속 정상.** 괴리는 전부 **의도적 설계 차이**(세금 주입·터미널 정규화)에서 발생.
-- 개선 A·B는 엔진을 "비올 전용"에서 "임의 실무 모델 수용"으로 확장하는 핵심.
+- 개선 A·B **구현 완료** → 엔진이 "비올 전용"에서 **"임의 실무 모델 수용"으로 확장**. 클래시스가 **3차 골든**(40,600원 정확 재현), 비올 8,413.38 무회귀.
+- 모든 신규 필드는 옵셔널(None 기본) → 기존 경로 불변으로 회귀 0.
 - checks.py가 공격적 가정을 실사례에서 포착 → 감사인 트랙 가치 입증.

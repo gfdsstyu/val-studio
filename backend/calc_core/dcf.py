@@ -29,13 +29,32 @@ def _per_share_only(inp: DcfSpineInput, wacc: float, g: float) -> float:
     return _compute(inp, wacc, g).per_share
 
 
+def _tax_on(inp: DcfSpineInput, ebit_val: float, i: int | None) -> float:
+    """세금 결정(개선 A). i=연도 인덱스, i=None 이면 터미널.
+
+    우선순위: tax_override(명시) > effective_tax_rate(비율) > 구간세율(EBIT).
+    터미널은 override 가 없으므로 effective_tax_rate → (tax_override 있으면 마지막
+    유효세율) → 구간세율 순으로 성장시킨 EBIT 에 적용.
+    """
+    if i is not None and inp.tax_override is not None:
+        return inp.tax_override[i]
+    if inp.effective_tax_rate is not None:
+        return ebit_val * inp.effective_tax_rate
+    if i is None and inp.tax_override is not None:
+        # 터미널: 마지막 명시연도의 유효세율을 성장 EBIT 에 적용(절대액 고정은 비현실)
+        last_ebit = inp.revenue[-1] - inp.cogs[-1] - inp.sga[-1]
+        last_eff = inp.tax_override[-1] / last_ebit if last_ebit else 0.0
+        return ebit_val * last_eff
+    return corporate_tax(ebit_val)
+
+
 def _compute(inp: DcfSpineInput, wacc: float, g: float) -> DcfResult:
     n = inp.n_years()
     periods = inp.mid_year_periods or [i - 0.5 for i in range(1, n + 1)]
     term_period = inp.terminal_discount_period if inp.terminal_discount_period is not None else periods[-1]
 
     ebit = [inp.revenue[i] - inp.cogs[i] - inp.sga[i] for i in range(n)]
-    tax = [corporate_tax(e) for e in ebit]
+    tax = [_tax_on(inp, ebit[i], i) for i in range(n)]
     noplat = [ebit[i] - tax[i] for i in range(n)]
     fcff = [
         noplat[i] + inp.dep_amort[i] - inp.capex[i] + inp.delta_nwc_cash_adj[i]
@@ -44,10 +63,18 @@ def _compute(inp: DcfSpineInput, wacc: float, g: float) -> DcfResult:
     pv_factor = [1.0 / (1.0 + wacc) ** periods[i] for i in range(n)]
     pv_fcff = [fcff[i] * pv_factor[i] for i in range(n)]
 
-    # Terminal: 성장시킨 EBIT 에 세금 재계산(구간세율 비선형 → 스케일 불가)
-    terminal_ebit = ebit[-1] * (1.0 + g)
-    terminal_tax = corporate_tax(terminal_ebit)
-    terminal_fcff = terminal_ebit - terminal_tax  # 영구구간 D&A=CAPEX, ΔNWC=0
+    # Terminal(개선 B): fcff_override > reinvestment_rate(g/ROIC) > D&A=CAPEX 기본.
+    if inp.terminal_fcff_override is not None:
+        terminal_fcff = inp.terminal_fcff_override  # 정규화된 FCF_{n+1} 직접 주입
+    else:
+        terminal_ebit = ebit[-1] * (1.0 + g)
+        terminal_tax = _tax_on(inp, terminal_ebit, None)
+        terminal_noplat = terminal_ebit - terminal_tax
+        if inp.terminal_reinvestment_rate is not None:
+            # 성장에 필요한 재투자 차감: FCFF_T = NOPLAT_T×(1−g/ROIC)
+            terminal_fcff = terminal_noplat * (1.0 - inp.terminal_reinvestment_rate)
+        else:
+            terminal_fcff = terminal_noplat  # 영구구간 D&A=CAPEX, ΔNWC=0
     terminal_value = terminal_fcff / (wacc - g)
     terminal_value_pv = terminal_value * (1.0 / (1.0 + wacc) ** term_period)
 
