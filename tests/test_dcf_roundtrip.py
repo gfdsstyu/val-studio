@@ -74,6 +74,38 @@ def test_roundtrip_recompute_matches_golden():
     assert _close(run(back).per_share, exp["per_share"])
 
 
+def _classys() -> DcfSpineInput:
+    d = json.loads((ROOT / "fixtures" / "classys" / "inputs.json").read_text(encoding="utf-8"))
+    kw = {k: v for k, v in d.items() if not k.startswith("_")}
+    return DcfSpineInput(**kw)
+
+
+def test_roundtrip_overrides_preserved():
+    # 클래시스: tax_override + terminal_fcff_override 완전 왕복 → 40,600원 재현
+    inp = _classys()
+    p = _path()
+    export_dcf(inp, run(inp), p)
+    back = import_dcf_model(p)
+    assert back.tax_override is not None
+    for a, b in zip(back.tax_override, inp.tax_override):
+        assert _close(a, b)
+    assert _close(back.terminal_fcff_override, inp.terminal_fcff_override)
+    # 재계산 → 원본 주당가치 40,600 일치
+    assert _close(run(back).per_share, run(inp).per_share)
+    exp = json.loads((ROOT / "fixtures" / "classys" / "expected.json").read_text(encoding="utf-8"))
+    assert _close(run(back).per_share, exp["per_share"], tol=1e-4)
+
+
+def test_standard_model_no_false_override():
+    # 비올(오버라이드 없음): 세금이 수식이라 tax_override 미검출
+    inp = _viol()
+    p = _path()
+    export_dcf(inp, run(inp), p)
+    back = import_dcf_model(p)
+    assert back.tax_override is None
+    assert back.terminal_fcff_override is None
+
+
 def test_reader_reads_formulas_and_values():
     inp = _viol()
     p = _path()

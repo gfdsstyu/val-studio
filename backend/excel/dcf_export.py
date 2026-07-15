@@ -75,7 +75,13 @@ def build_dcf_sheet(inp: DcfSpineInput, res: DcfResult) -> Workbook:
     for j, c in enumerate(cols):
         s.formula(f"{c}{R['gp']}", f"{c}{R['rev']}-{c}{R['cogs']}", res.ebit[j] + inp.sga[j])
         s.formula(f"{c}{R['ebit']}", f"{c}{R['gp']}-{c}{R['sga']}", res.ebit[j])
-        s.formula(f"{c}{R['tax']}", _tax_formula(f"{c}{R['ebit']}"), res.tax[j])
+        # 세금(개선 A): override면 하드값, effective_tax_rate면 EBIT×율, 아니면 구간세율.
+        if inp.tax_override is not None:
+            s.num(f"{c}{R['tax']}", res.tax[j])
+        elif inp.effective_tax_rate is not None:
+            s.formula(f"{c}{R['tax']}", f"{c}{R['ebit']}*$C$37", res.tax[j])
+        else:
+            s.formula(f"{c}{R['tax']}", _tax_formula(f"{c}{R['ebit']}"), res.tax[j])
         s.formula(f"{c}{R['noplat']}", f"{c}{R['ebit']}-{c}{R['tax']}", res.noplat[j])
         s.formula(
             f"{c}{R['fcff']}",
@@ -101,6 +107,21 @@ def build_dcf_sheet(inp: DcfSpineInput, res: DcfResult) -> Workbook:
     s.formula("C32", "C31+C6-C7", res.equity_value)
     s.text("B33", "주당가치(원)")
     s.formula("C33", "C32/C5*1000000", res.per_share)
+
+    # ── 모델 메타(개선 A/B 오버라이드) — import 완전 왕복용. 설정된 것만 기록 ──
+    s.text("B35", "── 모델 메타(오버라이드) ──")
+    if inp.effective_tax_rate is not None:
+        s.text("B37", "effective_tax_rate")
+        s.num("C37", inp.effective_tax_rate)
+    if inp.terminal_fcff_override is not None:
+        s.text("B38", "terminal_fcff_override")
+        s.num("C38", inp.terminal_fcff_override)
+    if inp.terminal_reinvestment_rate is not None:
+        s.text("B39", "terminal_reinvestment_rate")
+        s.num("C39", inp.terminal_reinvestment_rate)
+    # tax_override 는 세금 행(하드값)에서 복원되므로 별도 셀 불요(플래그만).
+    if inp.tax_override is not None:
+        s.text("B36", "tax_override=행16하드값")
 
     return wb
 

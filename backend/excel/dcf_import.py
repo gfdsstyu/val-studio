@@ -18,7 +18,7 @@ from .dcf_export import YEAR_COLS
 from .xlsx_reader import read_workbook
 
 # export 의 행 맵과 일치(single source: dcf_export._compute 주석 참조)
-_ROW = {"year": 10, "rev": 11, "cogs": 12, "sga": 14,
+_ROW = {"year": 10, "rev": 11, "cogs": 12, "sga": 14, "tax": 16,
         "da": 18, "capex": 19, "nwc": 20, "period": 22}
 
 
@@ -50,6 +50,18 @@ def import_dcf_model(path: str, *, sheet: str = "DCF") -> DcfSpineInput:
         return [num(f"{c}{_ROW[key]}") for c in cols]
 
     periods = row("period")
+
+    # ── 개선 A/B 오버라이드 복원(메타/세금행) ──
+    def opt(ref: str) -> float | None:
+        c = cells.get(ref)
+        return c.number if c and c.number is not None else None
+
+    # 세금 행이 수식(구간세율)이 아니라 하드값이면 tax_override.
+    tax_cells = [cells.get(f"{c}{_ROW['tax']}") for c in cols]
+    tax_override = None
+    if tax_cells and all(t is not None and t.formula is None for t in tax_cells):
+        tax_override = [t.number for t in tax_cells]
+
     return DcfSpineInput(
         wacc=num("C3"),
         terminal_growth=num("C4"),
@@ -64,4 +76,8 @@ def import_dcf_model(path: str, *, sheet: str = "DCF") -> DcfSpineInput:
         shares_outstanding=int(round(num("C5"))),
         mid_year_periods=periods,
         terminal_discount_period=periods[-1],  # export 는 마지막 명시연도 factor 로 할인
+        tax_override=tax_override,
+        effective_tax_rate=opt("C37"),
+        terminal_fcff_override=opt("C38"),
+        terminal_reinvestment_rate=opt("C39"),
     )
