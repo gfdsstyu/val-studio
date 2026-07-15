@@ -18,6 +18,7 @@
 | [모델링_실무_2강4강](모델링_실무_2강4강.md) | 매출 P×Q 사업유형 사전(구독ARPU·웹툰ARPPU)·구분실익·Finalize 연결체크 | MSVALUE 2강/4강 |
 | [베타_Bloomberg_vs_KICPA](베타_Bloomberg_vs_KICPA.md) | β 기준시장 선택(S&P500 vs KOSPI)·Adjusted β(0.67/0.33)·CAPM 체계적위험 한계·CSRP·고성장 과대평가 | 회계업계 실무 이슈노트 |
 | [영구성장률_PGR_적합성](영구성장률_PGR_적합성.md) | TV 비중 ~75%·한국관행 0~1% vs 글로벌 2~4%(평균3%)·PGR≤GDP 철칙·민감도 | 실무 이슈노트 |
+| [검증_클래시스_DCF](검증_클래시스_DCF.md) | ⭐ 2차 실사례 교차검증: EBIT 완전일치, 세금주입·터미널정규화 개선점(A/B), checks.py 위험포착 입증 | pe양식 클래시스 DCF |
 
 ## 소스 자료 위치 (D:\Valuation\)
 - `DCF_비올\` — 메인 벤치마크 비올 (엔진 파일 `DCF Model_최종본.xlsx`, IR, 참고보고서, 유사회사재무)
