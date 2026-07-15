@@ -110,15 +110,17 @@ def test_ingest_ocr_fallback_applies_profile():
     assert r.profile is not None               # 프로파일 여전히 적용
 
 
-def test_ingest_non_pdf_no_profile():
-    # XBRL/XLSX 는 프로파일 미적용(구조화만)
+def test_ingest_xbrl_structured_profile():
+    # XBRL 사업보고서 → 구조화 프로파일(BusinessFinancials), OCR 없음
     from ingest.router import ingest
+    from ingest.profiles.business_report import BusinessFinancials
     hits = list(Path(r"D:/valuation-platform/scratch/xbrl").glob("*.xbrl"))
     if not hits:
         print("  (skip: xbrl 없음)"); return
     r = ingest(str(hits[0]))
     assert r.decision.method is InputMethod.XBRL
-    assert r.profile is None and r.extract_method is None
+    assert r.extract_method is None                    # OCR 무관
+    assert isinstance(r.profile, BusinessFinancials)   # 구조화 프로파일 자동
     assert len(r.structured.values) > 0
 
 
