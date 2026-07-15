@@ -45,15 +45,49 @@ echo '{"wacc":0.09,"terminal_growth":0.01,"revenue":[...],"cogs":[...],"sga":[..
 - **audit 경고를 반드시 사용자에게 해석해 전달**(예: "TV비중 95% → 터미널 과의존, 재검토 권장").
 - 세금 override·터미널 정규화가 필요하면 입력에 `tax_override`·`terminal_fcff_override` 추가.
 
+### 4b. WACC 산정 (도구)
+```
+echo '{"risk_free":..,"equity_risk_premium":..,"unlevered_beta":..,"target_debt_to_equity":..,
+"tax_rate":..,"pre_tax_cost_of_debt":..,"size_premium":..,"beta_source":"kicpa",
+"beta_market":"KOSPI","erp_market":"KOSPI","market_cap_musd":500}' | python scripts/wacc.py
+```
+- β/ERP 시장 정합·β provenance 검증 + 시가총액 주면 Kroll size premium 제안.
+
 ### 5. 해석·리포트 (LLM)
 - 결과를 밸류에이션 북 근거와 함께 설명. audit 경고는 리스크로 명시.
-- 외부평가의견서 검증 시: 의견서의 가정(WACC·PGR)을 추출 → dcf.py로 **독립 재계산** → 차이 리포트
-  (감사인 트랙). references/deloitte_감사인검토 체크리스트 활용.
+
+## 감사인 트랙 워크플로우 (외부평가의견서 검증)
+회계감사의 '독립적 재수행'. **평가자와 검증자를 분리**한다(가능하면 다른 에이전트):
+1. `python scripts/ingest.py <의견서.pdf>` → 의견서의 가정(WACC·PGR·SOTP·통화) 추출.
+2. 의견서가 주장한 주당가치를 확인.
+3. 의견서 가정으로 DcfSpineInput 구성 → `python scripts/audit.py inputs.json <주장주당가치>`.
+4. 반환: **독립 주당가치 · 차이(%) · audit 경고 · 민감도**.
+   - 차이 크면 → 어느 가정(WACC/PGR/매출)이 원인인지 민감도로 짚어 리포트.
+   - 민감도 이웃 셀이 크게 요동 → WACC≈g 등 불안정 → 리스크 명시.
+5. references/deloitte_감사인검토 체크리스트(WARA↔IRR↔WACC·Apple-to-Apple)로 교차확인.
+> ⚠️ 검증자는 평가자의 결론을 **재사용하지 말 것**(독립성). 원자료에서 다시 계산.
 
 ## 신뢰 원칙
 - 계산 결과는 **항상 scripts/dcf.py**로. 암산·추정 금지(재현·감사 불가).
 - 숫자에 출처를 붙인다(어느 문서·어느 가정). audit 경고를 숨기지 않는다.
 - 모르는 방법론은 references/ 북에서 확인 후 답한다(환각 금지).
+
+## 다중에이전트(MAS) 오케스트레이션 지침
+**원칙: MAS 가치 ∝ (하위작업 독립성) × (다양한 관점의 가치).** 무조건 나누지 말 것.
+
+- **평가인 트랙 뼈대(분류→가정→계산→리포트) = 단일 에이전트 + 도구.** 순차·수렴·단일 모델이라
+  나누면 일관성 깨지고 조율 비용만 늘어남. MAS 비효율.
+- **평가인 트랙 가장자리 = MAS 유효**: ①다수 문서(사업보고서+peers+IR) 병렬 인제스트(독립)
+  ②다중 방법(DCF+상대가치+본질가치) 병렬 산출 후 삼각검증(의견서의 조정순자산+DCF+시장접근처럼).
+- **감사인 트랙 = MAS 최적**: 평가자(생성) ↔ 감사자(독립 재계산·반박)를 **분리**. 이게 가장 강한
+  패턴 = generator+critic. 검증자는 원자료에서 다시 계산(결론 재사용 금지).
+- **트리거**: 다수 문서·다수 방법·다수 기업 비교·고위험(독립검증 필요) → MAS. 단건 루틴 → 단일.
+
+## 도구 (scripts/)
+- `dcf.py` — DCF 계산 + 가정 audit. **모든 계산은 이것으로.**
+- `wacc.py` — CAPM 빌드업 + β/ERP 정합 + Kroll size premium.
+- `audit.py` — 독립 재계산 + 주장값 차이 + 민감도(감사인 트랙·검증 에이전트용).
+- `ingest.py` — 파일 → 방식·유형 라우팅 + 프로파일.
 
 ## 참조
 `references/index.md` — 밸류에이션 북(방법론·계정분류·의견서 양식·파서) 챕터 색인.
