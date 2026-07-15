@@ -31,6 +31,40 @@ def relever_beta(unlevered_beta: float, debt_to_equity: float, tax_rate: float) 
     return unlevered_beta * (1.0 + (1.0 - tax_rate) * debt_to_equity)
 
 
+# Kroll(구 Duff & Phelps) 2019 CRSP Deciles Size Premium — 근거: Deloitte VKG 교육자료
+# (deloitte_감사인검토_WACC방법론.md). (시가총액 하한 $M, decile 라벨, size premium).
+# ⚠️ 실제 평가 시 반드시 당해연도 Valuation Handbook 값으로 갱신할 것(예시 고정치).
+_KROLL_2019_DECILES: list[tuple[float, str, float]] = [
+    (13456.0, "1 (Largest)", 0.0052),
+    (7254.0,  "2",           0.0081),
+    (4504.0,  "3 (Mid 3-5)", 0.0085),
+    (2992.0,  "4",           0.0128),
+    (1960.0,  "5",           0.0150),
+    (1292.0,  "6 (Low 6-8)", 0.0158),
+    (728.0,   "7",           0.0180),
+    (325.0,   "8",           0.0246),
+    (0.0,     "9-10 (Micro)", 0.0522),
+]
+
+
+def kroll_size_decile(market_cap_musd: float) -> tuple[str, float]:
+    """시가총액($백만) → (decile 라벨, size premium). 큰 회사일수록 낮은 프리미엄.
+
+    자유입력 size_premium 대신 근거 있는 decile 룩업으로 provenance 를 강제한다.
+    """
+    if market_cap_musd < 0:
+        raise ValueError("시가총액은 음수일 수 없음")
+    for floor, label, premium in _KROLL_2019_DECILES:
+        if market_cap_musd >= floor:
+            return label, premium
+    return _KROLL_2019_DECILES[-1][1], _KROLL_2019_DECILES[-1][2]
+
+
+def kroll_size_premium(market_cap_musd: float) -> float:
+    """시가총액($백만) → size premium (Kroll decile). kroll_size_decile 의 편의 래퍼."""
+    return kroll_size_decile(market_cap_musd)[1]
+
+
 def peer_unlevered_beta(
     peers: list[tuple[float, float, float]]
 ) -> float:
@@ -60,6 +94,9 @@ class WaccInputs:
     beta_source: str | None = None   # 'bloomberg' | 'kicpa'
     beta_market: str | None = None   # 'SP500' | 'KOSPI' | 'KOSDAQ'
     beta_adjusted: bool | None = None  # Bloomberg Adjusted(0.67·raw+0.33) 여부
+    # ERP provenance — β 와 MRP 는 같은 시장에서 와야 한다(KICPA β ↔ KICPA MRP).
+    erp_source: str | None = None    # 'kicpa' | 'damodaran' | 'deloitte_fas' ...
+    erp_market: str | None = None    # 'SP500' | 'KOSPI' — beta_market 와 일치해야 함
 
 
 @dataclass(frozen=True)

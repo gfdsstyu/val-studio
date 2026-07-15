@@ -26,6 +26,9 @@ from .wacc import WaccInputs
 DEFAULT_LONG_TERM_GDP = 0.02
 # TV(영구가치) 비중 관행 상단. 초과 시 과대평가 편중 경고(문서상 최빈 ~75%).
 TV_WEIGHT_WARN = 0.90
+# 재투자 모델 없이(D&A=CAPEX, ΔNWC=0) 이 값을 넘는 PGR 은 TV 과대계상 위험.
+# 근거: FCFF_T = NOPLAT_T·(1−g/ROIC) 이나 엔진은 재투자율 0 가정 → g 클수록 왜곡↑.
+REINVESTMENT_FREE_PGR = 0.02
 
 
 def check_terminal_growth(
@@ -71,6 +74,15 @@ def check_terminal_growth(
             "pgr_vs_gdp", Severity.PASS,
             f"PGR({pgr:.2%}) ≤ 장기 GDP({long_term_gdp:.2%})",
             {"pgr": pgr, "long_term_gdp": long_term_gdp},
+        ))
+
+    # F1: 재투자 모델 없이 PGR 이 높으면 terminal FCFF(=NOPLAT) 과대 → TV 과대계상.
+    if pgr > REINVESTMENT_FREE_PGR:
+        out.append(Finding(
+            "terminal_reinvestment", Severity.WARN,
+            f"PGR({pgr:.2%}) > {REINVESTMENT_FREE_PGR:.0%} 이나 재투자 미반영(D&A=CAPEX) "
+            f"— TV 과대계상 위험(재투자율 g/ROIC 필요)",
+            {"pgr": pgr, "threshold": REINVESTMENT_FREE_PGR},
         ))
 
     if report is not None:
@@ -137,6 +149,34 @@ def check_beta_provenance(
     return f
 
 
+def check_beta_erp_consistency(
+    inp: WaccInputs,
+    *,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """β 기준시장 == ERP 기준시장 정합 검사.
+
+    핵심 원칙(베타 문서): β 와 그에 곱해질 MRP 는 **같은 시장**에서 와야 한다.
+    KOSPI β 에 S&P500 ERP 를 곱하는 혼용은 체계적위험 이중기준 → WARN.
+    두 market 이 모두 명시된 경우에만 판정(하나라도 없으면 provenance 검사가 담당).
+    """
+    bm, em = inp.beta_market, inp.erp_market
+    if bm is None or em is None:
+        f = Finding("beta_erp_consistency", Severity.PASS,
+                    "β/ERP 시장 정합 판정보류(provenance 부족)",
+                    {"beta_market": bm, "erp_market": em})
+    elif bm != em:
+        f = Finding("beta_erp_consistency", Severity.WARN,
+                    f"β 시장({bm}) ≠ ERP 시장({em}) — 체계적위험 이중기준 혼용",
+                    {"beta_market": bm, "erp_market": em})
+    else:
+        f = Finding("beta_erp_consistency", Severity.PASS,
+                    f"β/ERP 시장 일치({bm})", {"beta_market": bm, "erp_market": em})
+    if report is not None:
+        report.add(f)
+    return f
+
+
 def audit_dcf(
     inp: DcfSpineInput,
     result: DcfResult,
@@ -155,4 +195,5 @@ def audit_dcf(
     check_terminal_value_weight(result, report=report)
     if wacc_inputs is not None:
         check_beta_provenance(wacc_inputs, report=report)
+        check_beta_erp_consistency(wacc_inputs, report=report)
     return report

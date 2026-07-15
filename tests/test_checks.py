@@ -12,11 +12,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from calc_core.checks import (  # noqa: E402
-    audit_dcf, check_beta_provenance, check_terminal_growth,
-    check_terminal_value_weight,
+    audit_dcf, check_beta_erp_consistency, check_beta_provenance,
+    check_terminal_growth, check_terminal_value_weight,
 )
 from calc_core.models import DcfResult, DcfSpineInput  # noqa: E402
-from calc_core.wacc import WaccInputs  # noqa: E402
+from calc_core.wacc import WaccInputs, kroll_size_decile, kroll_size_premium  # noqa: E402
 from ingest.validators import Severity  # noqa: E402
 
 
@@ -50,6 +50,48 @@ def test_pgr_above_gdp_warns():
 def test_pgr_within_gdp_passes():
     fs = check_terminal_growth(pgr=0.01, wacc=0.10, long_term_gdp=0.02)
     assert _sev(fs, "pgr_vs_gdp") is Severity.PASS
+
+
+# ── F1: terminal 재투자 정합성 ───────────────────────────────────────────────
+def test_high_pgr_reinvestment_warns():
+    # PGR 3% > 2% + 재투자모델無 → TV 과대 경고
+    fs = check_terminal_growth(pgr=0.03, wacc=0.10)
+    assert _sev(fs, "terminal_reinvestment") is Severity.WARN
+
+
+def test_low_pgr_no_reinvestment_finding():
+    # PGR 1% ≤ 2% → 재투자 경고 없음(한국 관행 안전대)
+    fs = check_terminal_growth(pgr=0.01, wacc=0.10)
+    assert not any(f.rule == "terminal_reinvestment" for f in fs)
+
+
+# ── F2: Kroll size premium ───────────────────────────────────────────────────
+def test_kroll_large_cap_low_premium():
+    label, prem = kroll_size_decile(20000.0)  # $20B → decile 1
+    assert prem == 0.0052 and label.startswith("1")
+
+
+def test_kroll_micro_cap_high_premium():
+    label, prem = kroll_size_decile(100.0)  # $100M → micro
+    assert prem == 0.0522 and "Micro" in label
+
+
+def test_kroll_monotonic_decreasing():
+    # 시가총액 ↑ → premium ↓ (단조)
+    caps = [50, 500, 1500, 3000, 8000, 20000]
+    prems = [kroll_size_premium(c) for c in caps]
+    assert prems == sorted(prems, reverse=True)
+
+
+# ── F3: β↔ERP 시장정합 ───────────────────────────────────────────────────────
+def test_beta_erp_market_mismatch_warns():
+    inp = _wacc_inp(beta_market="KOSPI", erp_market="SP500")
+    assert check_beta_erp_consistency(inp).severity is Severity.WARN
+
+
+def test_beta_erp_market_match_passes():
+    inp = _wacc_inp(beta_market="KOSPI", erp_market="KOSPI")
+    assert check_beta_erp_consistency(inp).severity is Severity.PASS
 
 
 # ── TV 비중 ──────────────────────────────────────────────────────────────────
