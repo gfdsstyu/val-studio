@@ -65,13 +65,29 @@ def test_ocr_confidence_combines():
     assert c == 0.75                             # 0.75 × 1.0(정상)
 
 
-def test_tesseract_backend_missing_raises_clear():
-    from ingest.parsers.ocr import TesseractBackend
+def test_ocr_environment_diagnostic():
+    from ingest.parsers.ocr import ocr_environment
+    env = ocr_environment()
+    # 진단 필드 존재 + 일관성
+    assert set(env) >= {"tesseract", "renderer", "langs", "has_korean", "ready", "missing"}
+    assert env["ready"] == (not env["missing"])
+    assert env["has_korean"] == ("kor" in env["langs"])
+    print(f"  OCR 환경: tesseract={'O' if env['tesseract'] else 'X'} "
+          f"renderer={'O' if env['renderer'] else 'X'} kor={'O' if env['has_korean'] else 'X'}")
+
+
+def test_tesseract_backend_reports_missing():
+    from ingest.parsers.ocr import TesseractBackend, ocr_environment
+    env = ocr_environment()
+    if env["ready"]:
+        print("  (OCR 환경 완비 — skip)"); return
     try:
         TesseractBackend().ocr_pdf("x.pdf")
-        print("  (tesseract 설치됨 — skip)")
+        assert False, "미비 환경인데 오류 안 남"
     except RuntimeError as e:
-        assert "OCR 백엔드 미설치" in str(e)
+        assert "OCR 실행 불가" in str(e)
+        # 실제 미비 항목이 메시지에 반영
+        assert any(m.split("(")[0][:4] in str(e) or m[:4] in str(e) for m in env["missing"])
 
 
 if __name__ == "__main__":
