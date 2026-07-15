@@ -81,6 +81,47 @@ def test_real_files_smoke():
         print("  (skip: 실파일 없음)")
 
 
+def test_ingest_applies_opinion_profile():
+    """의견서 PDF ingest → 구조화 + 프로파일(OpinionExtract) 자동적용."""
+    hits = list(Path(r"D:/Valuation/외부평가의견서").glob("*다산*DCF.pdf"))
+    if not hits:
+        print("  (skip: 실파일 없음)"); return
+    from ingest.router import ingest
+    from ingest.profiles.opinion_template import OpinionExtract
+    r = ingest(str(hits[0]))
+    assert r.decision.doc_type is DocType.OPINION
+    assert isinstance(r.profile, OpinionExtract)
+    assert r.profile.entity_count >= 2 and r.profile.is_sotp   # 5개체 SOTP
+    assert r.extract_method == "pdftotext(ocr없음)"            # garble 감지·백엔드 없음
+    assert len(r.structured.values) > 0                        # 표 셀도 추출
+    print(f"  다산 ingest → 프로파일 entity={r.profile.entity_count} "
+          f"terminal={r.profile.terminal_growths}")
+
+
+def test_ingest_ocr_fallback_applies_profile():
+    hits = list(Path(r"D:/Valuation/외부평가의견서").glob("*다산*DCF.pdf"))
+    if not hits:
+        print("  (skip)"); return
+    from ingest.router import ingest
+    from ingest.parsers.ocr import MockOcrBackend
+    backend = MockOcrBackend(["WACC = Ke E/V + Kd\n2028 (1+B) 1.00%\n매출 1,000\n"])
+    r = ingest(str(hits[0]), ocr_backend=backend)
+    assert r.extract_method == "ocr"           # garble → OCR 폴백
+    assert r.profile is not None               # 프로파일 여전히 적용
+
+
+def test_ingest_non_pdf_no_profile():
+    # XBRL/XLSX 는 프로파일 미적용(구조화만)
+    from ingest.router import ingest
+    hits = list(Path(r"D:/valuation-platform/scratch/xbrl").glob("*.xbrl"))
+    if not hits:
+        print("  (skip: xbrl 없음)"); return
+    r = ingest(str(hits[0]))
+    assert r.decision.method is InputMethod.XBRL
+    assert r.profile is None and r.extract_method is None
+    assert len(r.structured.values) > 0
+
+
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding="utf-8")

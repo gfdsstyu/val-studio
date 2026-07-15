@@ -124,27 +124,63 @@ def route(path: str) -> RouteDecision:
     return RouteDecision(method, dt, round(conf, 2), path, why)
 
 
-def build_parser(decision: RouteDecision, source_id: str | None = None) -> BaseParser:
-    """RouteDecision → 파서 인스턴스(방식별)."""
+def build_parser(decision: RouteDecision, source_id: str | None = None,
+                 *, extractor=None) -> BaseParser:
+    """RouteDecision → 파서 인스턴스(방식별). extractor 주입 시 PDF 는 그걸로 추출."""
     sid = source_id or Path(decision.path).stem
     if decision.method is InputMethod.XBRL:
         from .parsers.xbrl import XbrlParser
         return XbrlParser(sid)
     if decision.method is InputMethod.PDF:
-        from .parsers.pdf import PdfParser
-        return PdfParser(sid)
+        from .parsers.pdf import PdfParser, pdftotext_layout
+        return PdfParser(sid, extractor=extractor or pdftotext_layout)
     if decision.method is InputMethod.XLSX:
         from .parsers.xlsx import XlsxParser
         return XlsxParser(sid)
     raise ValueError(f"라우팅 불가 방식: {decision.method}")
 
 
-def ingest(path: str, *, source_id: str | None = None) -> tuple[RouteDecision, ParseResult]:
-    """end-to-end: 라우팅 → 파서 실행 → (결정, 결과). 의견서면 프로파일도 자동 적용은
+@dataclass
+class IngestResult:
+    """end-to-end 인제스트 산출: 라우팅 + 구조화 + (유형별) 시맨틱 프로파일."""
+    decision: RouteDecision
+    structured: ParseResult
+    profile: object | None = None        # OpinionExtract 등 유형별 시맨틱 추출
+    extract_method: str | None = None    # 'pdftotext' | 'ocr' 등
 
-    호출측에서(결과 텍스트 필요). 여기선 구조화 추출까지.
-    """
+    @property
+    def ok(self) -> bool:
+        return self.structured.ok
+
+
+def _apply_profile(decision: RouteDecision, text: str, garble_conf: float):
+    """자료유형별 시맨틱 프로파일 적용. 미지원 유형은 None."""
+    if decision.doc_type is DocType.OPINION:
+        from .profiles.opinion_template import extract_opinion
+        return extract_opinion(text, garble_confidence=garble_conf)
+    # TODO: BUSINESS_REPORT/RESEARCH 프로파일
+    return None
+
+
+def ingest(path: str, *, source_id: str | None = None, ocr_backend=None) -> IngestResult:
+    """end-to-end: 라우팅 → (PDF는 OCR 폴백) 추출 → 구조화 + 시맨틱 프로파일 자동적용."""
     decision = route(path)
-    parser = build_parser(decision, source_id)
-    result = parser.extract(path)
-    return decision, result
+    method_used = None
+    profile = None
+
+    if decision.method is InputMethod.PDF:
+        from .parsers.ocr import make_ocr_extractor, smart_extract
+        from .parsers.pdf import PdfPage, confidence_from_garble
+        pages, method_used = smart_extract(path, ocr_backend=ocr_backend)
+        # 이미 추출한 pages 재사용(재추출 방지)로 PdfParser 구동
+        parser = build_parser(decision, source_id, extractor=lambda _p: pages)
+        result = parser.extract(path)
+        text = "\n".join(p.text for p in pages)
+        garble_conf = confidence_from_garble(text)
+        profile = _apply_profile(decision, text, garble_conf)
+    else:
+        parser = build_parser(decision, source_id)
+        result = parser.extract(path)
+
+    return IngestResult(decision=decision, structured=result,
+                        profile=profile, extract_method=method_used)
