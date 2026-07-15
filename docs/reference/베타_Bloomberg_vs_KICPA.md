@@ -1,3 +1,13 @@
+---
+topic: 베타(β) 산출: Bloomberg(S&P500) vs KICPA(KOSPI) + CAPM 한계
+keywords: [베타, Bloomberg, KICPA, KOSPI, S&P500, Adjusted Beta, Raw Beta, CSRP, 체계적위험, MRP, 기준시장]
+canonical_questions:
+  - "Bloomberg 베타와 KICPA 베타의 차이는?"
+  - "Adjusted Beta 공식(0.67·raw+0.33)은?"
+  - "어느 베타를 써야 하나?"
+  - "CAPM이 못 잡는 위험(비체계적)은?"
+doc_type: knowledge
+---
 # 베타(β) 산출: Bloomberg β vs KICPA β
 
 출처: 회계업계 실무 이슈 노트(2023~24 KICPA 베타·MRP 조회서비스 도입). `deloitte_감사인검토_WACC방법론.md` Beta 절 심화.

@@ -1,3 +1,13 @@
+---
+topic: 감사인 관점 WACC 방법론·검토 체크리스트 (Modified CAPM·Kroll size premium)
+keywords: [Deloitte, Modified CAPM, Kroll, Duff Phelps, size premium, CSRP, WARA, IRR, kd, BBB-, 감사인 검토, ERP, beta]
+canonical_questions:
+  - "감사인은 WACC를 어떻게 검토하나?"
+  - "size premium(규모프리미엄)은 어떻게 정하나?"
+  - "WARA·IRR·WACC 정합은 무엇인가?"
+  - "cost of debt(kd)는 어떻게 산정하나?"
+doc_type: knowledge
+---
 # Deloitte 외부평가보고서 검토 유의사항 + WACC 방법론 (감사인 트랙 정본)
 
 출처: `0004-Deloitte-외부평가보고서 검토 및 관련 유의사항_교육.pdf` (Deloitte VKG=Valuation Knowledge Gateway 기준). 삼일 Fulcrum 단편 병합.

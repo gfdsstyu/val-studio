@@ -1,3 +1,13 @@
+---
+topic: WACC 할인율 서식의 셀 수식 논리 (Hamada·규모별세율·베타옵션)
+keywords: [WACC, 할인율, Hamada, unlever, relever, 베타, 규모별 유효세율, 빌드업, 자본구조, D/E]
+canonical_questions:
+  - "WACC는 어떻게 계산하나?"
+  - "Hamada 언레버/리레버 공식은?"
+  - "베타를 자본구조로 조정하는 법은?"
+  - "규모별 유효세율은 어떻게 적용하나?"
+doc_type: knowledge
+---
 # 할인율(WACC) 서식·강의자료 — 시트 논리 정본 명세
 
 출처: `DCF_비올\강의자료\할인율 서식.xlsx`(빈 템플릿) · `할인율 강의자료_JYP.xlsx`(JYP엔터 예시).

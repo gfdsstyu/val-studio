@@ -1,3 +1,13 @@
+---
+topic: 영구성장률(Terminal Growth Rate) 적합성 — 0~1% vs 2~4%
+keywords: [영구성장률, PGR, terminal growth, TV비중, GDP, Gordon, 민감도, 보수주의, 성숙단계]
+canonical_questions:
+  - "영구성장률은 몇 %로 잡나?"
+  - "한국 관행 0~1%와 글로벌 2~4% 중 무엇?"
+  - "영구성장률과 GDP성장률의 관계는?"
+  - "TV(영구가치) 비중은 얼마가 정상인가?"
+doc_type: knowledge
+---
 # 영구성장률(Perpetual/Terminal Growth Rate) 적합성
 
 출처: 실무 이슈 노트(DCF 영구성장율 0~1% 적합성). `모델링_실무_2강4강.md` TV 절 심화.

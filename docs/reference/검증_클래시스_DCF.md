@@ -1,3 +1,12 @@
+---
+topic: 엔진 검증 사례 — 클래시스 DCF 재현 + 세금주입·터미널정규화
+keywords: [클래시스, 검증, 골든, 세금주입, tax_override, 터미널 정규화, terminal_fcff_override, WACC≈g]
+canonical_questions:
+  - "클래시스 DCF를 엔진으로 재현하면?"
+  - "세금·터미널 처리 차이는?"
+  - "WACC와 g가 가까우면 터미널이 왜 폭발하나?"
+doc_type: reference
+---
 # 엔진 검증 — 클래시스 DCF (2차 실사례)
 
 대상: `pe양식/DCF_클래시스_1ㅁ2ㅁ3ㅁ.xlsx` (복호화 pw=`1a2a3a`, ㅁ→동일위치 영문키).
