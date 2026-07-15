@@ -111,5 +111,7 @@ class BaseParser(ABC):
         """
         kind = classify_cell(raw_text)
         if kind.value in ("blank", "dash", "missing"):
-            kw.setdefault("note", f"cell_kind={kind.value}")
+            tag = f"cell_kind={kind.value}"
+            existing = kw.get("note")
+            kw["note"] = f"{existing}; {tag}" if existing else tag
         return self.emit(field_name, raw_text, **kw)
