@@ -32,3 +32,4 @@ data/source/
 # Node (frontend 추가 시)
 node_modules/
 dist/
+scratch/
