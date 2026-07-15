@@ -55,6 +55,11 @@ class WaccInputs:
     size_premium: float = 0.0      # CSRP size (Kroll)
     country_risk_premium: float = 0.0
     company_specific_risk: float = 0.0
+    # β provenance (감사 추적) — 근거: docs/reference/베타_Bloomberg_vs_KICPA.md.
+    # β 는 숫자가 아니라 "어느 시장의 체계적위험인가"의 선택이므로 출처·기준시장을 남긴다.
+    beta_source: str | None = None   # 'bloomberg' | 'kicpa'
+    beta_market: str | None = None   # 'SP500' | 'KOSPI' | 'KOSDAQ'
+    beta_adjusted: bool | None = None  # Bloomberg Adjusted(0.67·raw+0.33) 여부
 
 
 @dataclass(frozen=True)
