@@ -4,6 +4,10 @@
 이게 영구성장률". 고정양식([[외부평가의견서_고정양식_구조]])의 앵커를 이용해, 한글 라벨이
 깨진 상황에서도 필드를 특정한다.
 """
+from .business_report import BusinessFinancials, extract_business_report
 from .opinion_template import OpinionExtract, extract_opinion
 
-__all__ = ["OpinionExtract", "extract_opinion"]
+__all__ = [
+    "OpinionExtract", "extract_opinion",
+    "BusinessFinancials", "extract_business_report",
+]

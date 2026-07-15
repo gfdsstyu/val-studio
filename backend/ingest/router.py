@@ -153,12 +153,19 @@ class IngestResult:
         return self.structured.ok
 
 
-def _apply_profile(decision: RouteDecision, text: str, garble_conf: float):
-    """자료유형별 시맨틱 프로파일 적용. 미지원 유형은 None."""
+def _profile_from_text(decision: RouteDecision, text: str, garble_conf: float):
+    """텍스트 기반 프로파일(PDF). 미지원 유형 None."""
     if decision.doc_type is DocType.OPINION:
         from .profiles.opinion_template import extract_opinion
         return extract_opinion(text, garble_confidence=garble_conf)
-    # TODO: BUSINESS_REPORT/RESEARCH 프로파일
+    return None
+
+
+def _profile_from_parser(decision: RouteDecision, parser: BaseParser):
+    """구조화 기반 프로파일(XBRL). 사업보고서 → 핵심 재무계정."""
+    if decision.doc_type is DocType.BUSINESS_REPORT and hasattr(parser, "primary_facts"):
+        from .profiles.business_report import extract_business_report
+        return extract_business_report(parser.primary_facts(), getattr(parser, "labels", {}))
     return None
 
 
@@ -169,18 +176,18 @@ def ingest(path: str, *, source_id: str | None = None, ocr_backend=None) -> Inge
     profile = None
 
     if decision.method is InputMethod.PDF:
-        from .parsers.ocr import make_ocr_extractor, smart_extract
-        from .parsers.pdf import PdfPage, confidence_from_garble
+        from .parsers.ocr import smart_extract
+        from .parsers.pdf import confidence_from_garble
         pages, method_used = smart_extract(path, ocr_backend=ocr_backend)
         # 이미 추출한 pages 재사용(재추출 방지)로 PdfParser 구동
         parser = build_parser(decision, source_id, extractor=lambda _p: pages)
         result = parser.extract(path)
         text = "\n".join(p.text for p in pages)
-        garble_conf = confidence_from_garble(text)
-        profile = _apply_profile(decision, text, garble_conf)
+        profile = _profile_from_text(decision, text, confidence_from_garble(text))
     else:
         parser = build_parser(decision, source_id)
         result = parser.extract(path)
+        profile = _profile_from_parser(decision, parser)
 
     return IngestResult(decision=decision, structured=result,
                         profile=profile, extract_method=method_used)
