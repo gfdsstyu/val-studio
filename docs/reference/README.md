@@ -13,6 +13,10 @@
 | [wacc_할인율서식](wacc_할인율서식.md) | WACC 서식 **셀 수식 논리**(Hamada·규모별세율·베타옵션·빌드업) | 할인율 서식·강의자료 |
 | [외부평가의견서_활용](외부평가의견서_활용.md) | DART 공시 의견서 활용(감사인 트랙·report 양식·정형문구+슬롯·방법론 taxonomy) | 외부평가의견서 13건 + dcf공시사례.pptx |
 | [참고보고서_활용](참고보고서_활용.md) | 증권사·산업 IR 리포트 → RAG 지식원천·산업 CAGR·컨센서스·provenance | 참고보고서 11건 |
+| [deloitte_감사인검토_WACC방법론](deloitte_감사인검토_WACC방법론.md) | ⭐ **감사인 트랙 정본**: Modified CAPM·Kroll size premium deciles·kd(BBB-)·WARA↔IRR↔WACC·검토 체크리스트 | Deloitte 교육 PDF + 삼일 Fulcrum |
+| [합병_주식교환_방법론](합병_주식교환_방법론.md) | 상장=기준주가/비상장=본질가치(자산1:수익1.5), 두산 주식교환비율 사례 | 두산 합병 특강 |
+| [모델링_실무_2강4강](모델링_실무_2강4강.md) | 매출 P×Q 사업유형 사전(구독ARPU·웹툰ARPPU)·구분실익·Finalize 연결체크 | MSVALUE 2강/4강 |
+| [베타_Bloomberg_vs_KICPA](베타_Bloomberg_vs_KICPA.md) | β 기준시장 선택(S&P500 vs KOSPI)·Adjusted β(0.67/0.33)·CAPM 체계적위험 한계·CSRP·고성장 과대평가 | 회계업계 실무 이슈노트 |
 
 ## 소스 자료 위치 (D:\Valuation\)
 - `DCF_비올\` — 메인 벤치마크 비올 (엔진 파일 `DCF Model_최종본.xlsx`, IR, 참고보고서, 유사회사재무)
@@ -30,8 +34,13 @@
 - **매출추정**: 장비=시장 CAGR(top-down), 소모품=장비 누적연동, 화장품=시장성장률.
 - **외부평가**: 비상장 타법인주식양수 = DCF법 기본(11/13), 자산·옵션성 시 보조 병행.
 
+## 추가 확정 사실 (집대성)
+- **합병/주식교환**: 상장=자본시장법 기준주가(1M·1W·최근일 산술평균), 비상장=본질가치(자산1:수익1.5). DCF는 수익가치·검토.
+- **Size premium**: Kroll(Duff&Phelps) CSRP Deciles 1-10 (0.52%~5.22%+). 소형사 WACC↑ 정량근거.
+- **감사인 정합**: WARA ↔ IRR ↔ WACC ±1% reconciliation. Apple-to-Apple(분자·분모 일관성).
+- **매출 P×Q 사전**: 구독=고객수×ARPU, 웹툰=결제자×ARPPU, 공간=점포×점포매출, 수주=건수×프로젝트.
+
 ## 남은 문서화 (TODO)
-- [ ] Deloitte 외부평가검토 유의사항 — WACC/beta/ERP/Kd 상세 + **감사인 체크리스트**(WARA↔IRR↔WACC) → 감사인 트랙 직결.
-- [ ] 삼일 Fulcrum — 할인율·CGU·Size premium(텍스트 레이어 불량 → 정밀 추출 필요).
-- [ ] MSVALUE 2강/4강 모델링 STEP·두산 합병 특강.
-- [ ] NOA IBD 구분 참고자료(스캔 여부 확인).
+- [ ] 삼일 Fulcrum 전문 — CGU·IFRS16·할인율(한글 CID폰트 → OCR 시 보강). 현재 단편만.
+- [ ] NOA IBD 구분 참고자료 정밀(스캔 여부 확인).
+- [ ] 리포트 템플릿(빈 양식) 셀 구조 → report 슬롯 스키마.
