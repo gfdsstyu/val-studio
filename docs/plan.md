@@ -144,6 +144,7 @@ Claude in Excel 처럼 **작업(단계)별로 모델을 나눠 쓰고 사용자�
 |---|---|---|
 | 0단계 기업·산업 이해(Brief 완성) | **Sonnet 5** | 판단+종합. 검색 그라운딩은 Gemini 병행(딥서치 실증됨) |
 | 2 계정 분류(대량 태깅) | Sonnet 5 (Haiku 검토중) | 문항수 많음·스키마 고정 — 하향 후보 1순위 |
+| 3b-pre 유사회사 선정 Step2(사업 유사성) | **Sonnet 5** | 판단 + 회사별 선정/탈락 사유(감사 방어). Step1·3·4는 결정론 |
 | 3a 매출·원가 가정 도출 | **Sonnet 5** | Brief+북 근거 종합 판단 |
 | 3b~4 WACC·DCF | (LLM 아님 — 결정론 scripts) | 계산은 모델 무관, 코드가 담당 |
 | 5 리포트·평가의견서 서술 | **Sonnet 5**, "정밀 모드"=**Opus** | 고객 제출물 — 품질이 곧 상품 |
@@ -293,7 +294,28 @@ API가 없는 소스(Bloomberg 채권수익률 매트릭스·베타, 한공회 �
 > **검증(정합성)**: WARA ↔ IRR ↔ WACC reconciliation(PPA calibration, ±1% 이내) — Deloitte 교육자료 강조. 감사인 트랙 테스트 항목으로도 재사용.
 
 ### 유사기업(peer) — WACC 정확도의 핵심 (사용자 강조)
-`peer_fs.py`: 각 유사기업의 **재무제표를 DART로 적재 → 계정매핑(가치평가 목적)** → unlever beta에 필요한 D/E·유효세율, 자본구조 산출. (2강 강의자료 `유사회사FS` 시트가 근거 구조.) 주가·시총은 `price_client.py`(FinanceDataReader/pykrx).
+
+**선정 로직 = MSVALUE 할인율 서식 4-step 정본**(서식 `유사기업선정 Step0~3` + 클래시스
+리포트 실측 83→11→9→6사; 북 msvalue_리포트예시 §E·wacc_할인율서식 §1):
+
+| Step | 기준 | 담당 | 구현 |
+|---|---|---|---|
+| 0 대상 리서치 | 평가대상 사업·재무 파악 | — | **Company Brief 재사용**(0단계 산출물) |
+| 1 모집단 | KRX 동일/유사 산업코드 | 결정론 | FinanceDataReader 산업분류 필터 |
+| 2 사업 유사성 | 사업보고서·홈피로 주요사업 유사 판단 | **LLM** | Brief ⑤⑦⑧ 근거 + 회사별 선정/탈락 사유 provenance |
+| 3 매출 비중 | DART 매출비중 임계(관련사업 ~70%) | 결정론 | 사업보고서 부문매출(research_brief ④ 로직 재사용) |
+| 4 기타 | 상장일(베타포인트 충족)·거래정지 | 결정론 | pykrx 상장일·거래상태 체크 |
+
+LLM 은 Step2 **한 곳만** 관여(모델 티어링 표의 '계정 분류'급 판단 작업) — 나머지는
+결정론이라 재현·감사 가능. 감사인 트랙에서 "왜 이 peer 인가"가 단골 질문이므로
+회사별 사유가 필수 산출물. 최종 peer 셋은 **유저 승인**(human-in-the-loop) 후 확정.
+
+`peer_fs.py`: 확정된 peer 의 **재무제표를 DART로 적재 → 계정매핑(가치평가 목적)** → unlever beta에 필요한 D/E·유효세율, 자본구조 산출. (2강 강의자료 `유사회사FS` 시트가 근거 구조.) 주가·시총은 `price_client.py`(FinanceDataReader/pykrx).
+
+> **⭐ 이중 소비자 설계(사용자 확정)**: peer 선정·FS 적재 모듈은 WACC(β·자본구조)
+> 전용이 아니라 **상대가치평가(⏳나중 구현)의 peer 배수(PER·EV/EBITDA 등) 산출에도
+> 재사용**된다. 선정 파이프라인은 `peer_selection`(공유) ← {`wacc`(β·D/E),
+> `relative_valuation`(배수)} 구조로 — Brief ⑨(경쟁사 밸류 비교)가 초기 후보군 힌트.
 
 ### NOA/IBD 계정 분류 — EV→Equity bridge
 `fs_mapper.py`가 계정을 **영업/비영업(NOA)** 과 **이자부부채(IBD)** 로 분류 → DCF의 `(+)비영업자산 (−)순차입부채`(원본 H_FS D53-67) 정확 매핑. 참고: `NOA IBD 구분 참고자료.pdf` + 삼일/안진 교육자료.

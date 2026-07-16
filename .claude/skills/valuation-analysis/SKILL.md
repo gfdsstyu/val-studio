@@ -21,6 +21,7 @@ description: 기업가치평가(DCF) 수행·검증·해석. 재무제표/사업
 | 1 인제스트 | `ingest.py` | 파서_아키텍처_매트릭스 (XBRL우선·CID) |
 | 2 계정분류 | (LLM) | **xDCF_계정분류_모델아키텍처** (유형·방법 taxonomy) |
 | 3a 매출·원가 가정 | (LLM) | **모델링_실무_2강4강** (4방식·P×Q·원가4요소) |
+| 3b-pre 유사회사 선정 | (LLM=Step2만) | **msvalue_리포트예시 §E**(4-step 정본) + wacc_할인율서식 §1 |
 | 3b WACC | `wacc.py` | **베타_Bloomberg_vs_KICPA** + deloitte_감사인검토 (size premium·kd) |
 | 3c 영구성장률 | (LLM) | **영구성장률_PGR_적합성** (0~1% 관행·PGR≤GDP) |
 | 4 DCF 계산·검증 | `dcf.py` | 검증_클래시스_DCF (세금주입·터미널정규화 선례) |
@@ -80,8 +81,20 @@ python scripts/ingest.py <파일경로>
 > ⚠️ 매출(Sales) 분석방법은 특히 신중히 — 무조건 "매출성장률"로 몰지 말 것(경쟁사 LLM의 약점).
 
 ### 3. 가정 산정 (LLM 판단 + 북 근거)
+- **유사회사 선정(3b-pre, WACC β·자본구조의 전제)**: MSVALUE 할인율 서식 4-step 정본
+  (references/msvalue_리포트예시 §E — 클래시스 실측 83→11→9→6사):
+  | Step | 기준 | 담당 |
+  |---|---|---|
+  | 1 모집단 | KRX 동일/유사 산업코드 | 결정론(코드 필터) |
+  | 2 사업 유사성 | 사업보고서·홈페이지로 주요사업 유사 판단 | **LLM** ← Brief ⑤⑦⑧이 판단 근거 |
+  | 3 매출 비중 | DART 매출비중 임계(예: 관련사업 70%) | 결정론(수치 비교) |
+  | 4 기타 | 상장일(베타포인트 수 충족)·거래정지 | 결정론(체크) |
+  LLM 은 Step2 에서만 판단하고, 탈락/선정 사유를 회사별로 남긴다(감사인이 "왜 이
+  peer 인가"를 반드시 물음 — deloitte 체크리스트). 최종 peer 는 유저 승인 후 확정.
+  선정된 peer 셋은 WACC(β·자본구조)와 **상대가치 peer 배수(향후)** 둘 다에 쓰인다.
 - **WACC**: CAPM 빌드업(Rf+β·ERP+size). β 출처(Bloomberg=글로벌 / KICPA=한국)와 ERP 시장을
-  일치시킬 것. references/베타, references/deloitte_감사인검토 참조.
+  일치시킬 것. peer 개별 세율로 무부채화 후 평균(Hamada) — references/wacc_할인율서식.
+  references/베타, references/deloitte_감사인검토 참조.
 - **영구성장률(PGR)**: 한국 관행 0~1%(실측 DART 의견서 다수 1.00%), 글로벌 2~4%.
   **철칙: PGR ≤ 장기 GDP.** references/영구성장률 참조.
 
