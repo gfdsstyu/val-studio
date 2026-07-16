@@ -17,7 +17,7 @@ description: 기업가치평가(DCF) 수행·검증·해석. 재무제표/사업
 ## 단계 ↔ 도구 ↔ 지식 바인딩 (요약표)
 | 단계 | 도구 | 📖 지식 (docs/reference/) |
 |---|---|---|
-| **0 기업·산업 이해** ⭐ | (LLM 고투자) | **기업리서치_양식**(Brief 10섹션 정본) + 참고보고서_활용 |
+| **0 기업·산업 이해** ⭐ | `brief.py`(XBRL 프리필) + LLM 고투자 | **기업리서치_양식**(Brief 10섹션 정본) + 참고보고서_활용 |
 | 1 인제스트 | `ingest.py` | 파서_아키텍처_매트릭스 (XBRL우선·CID) |
 | 2 계정분류 | (LLM) | **xDCF_계정분류_모델아키텍처** (유형·방법 taxonomy) |
 | 3a 매출·원가 가정 | (LLM) | **모델링_실무_2강4강** (4방식·P×Q·원가4요소) |
@@ -43,8 +43,13 @@ description: 기업가치평가(DCF) 수행·검증·해석. 재무제표/사업
 ## 워크플로우
 
 ### 0. 기업·산업 이해 → Company Brief (⭐ 고투자 단계)
-원자료를 충분히 읽고(여기만 컨텍스트 아끼지 않음), **기업리서치_양식.md 의 10섹션 정본**대로
-Company Brief 를 산출한다(각 표에 출처 URL 병기):
+**원문 XBRL 이 있으면 먼저 기계 프리필**(②주식수·유통비율 ④부문·지역 매출 ⑩Financials):
+```
+python scripts/brief.py <원문XBRL.xbrl> brief.md --name=회사명
+```
+그 다음 원자료를 충분히 읽고(여기만 컨텍스트 아끼지 않음), 남은 `_(LLM: ...)_` 슬롯을
+**기업리서치_양식.md 의 10섹션 정본**대로 완성한다(각 표에 출처 URL 병기; 검색 그라운딩
+사용 시 수치는 추정치 표기 — 실증 예시: docs/examples/brief_삼성전자_2026Q1.md):
 ```
 ①Summary(투자포인트) ②회사개요(주주구성·유통주식비율·신용등급) ③자회사 지분·구조도
 ④사업부문·종속회사별 제품 매출·비중 ⑤주요 제품 설명(향처·점유율) ⑥Value Chain
@@ -135,6 +140,7 @@ echo '{"risk_free":..,"equity_risk_premium":..,"unlevered_beta":..,"target_debt_
 - `wacc.py` — CAPM 빌드업 + β/ERP 정합 + Kroll size premium.
 - `audit.py` — 독립 재계산 + 주장값 차이 + 민감도(감사인 트랙·검증 에이전트용).
 - `ingest.py` — 파일 → 방식·유형 라우팅 + 프로파일.
+- `brief.py` — 0단계: XBRL → Company Brief 10섹션 골격(②④⑩ 기계 프리필 + LLM 슬롯).
 - 전환사채/RCPS 평가: `backend/calc_core/convertible.py`(이항+TF) 직접 호출 —
   `price_convertible(ConvertibleInputs(...))`. DCF와 별개 수학(옵션평가).
 
