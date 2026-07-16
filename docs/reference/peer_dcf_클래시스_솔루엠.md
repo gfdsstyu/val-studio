@@ -5,6 +5,8 @@ canonical_questions:
   - "클래시스·솔루엠의 DCF 가정은?"
   - "동종업종의 마진 수준은?"
   - "실무 CAPM 빌드업은 어떻게 하나?"
+layer: practice
+parent: 모델링_실무_2강4강
 doc_type: knowledge
 ---
 # Peer/실무 DCF 템플릿 명세 — 클래시스·솔루엠

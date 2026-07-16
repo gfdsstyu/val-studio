@@ -6,6 +6,8 @@ canonical_questions:
   - "size premium(규모프리미엄)은 어떻게 정하나?"
   - "WARA·IRR·WACC 정합은 무엇인가?"
   - "cost of debt(kd)는 어떻게 산정하나?"
+layer: methodology
+parent: 밸류에이션_스코프_로드맵
 doc_type: knowledge
 ---
 # Deloitte 외부평가보고서 검토 유의사항 + WACC 방법론 (감사인 트랙 정본)

@@ -6,6 +6,8 @@ canonical_questions:
   - "유사회사(peer)는 어떻게 선정하나?"
   - "미용 의료기기 업종 비교기업은?"
   - "매출·원가·판관비 추정 가정은 어떻게 잡나?"
+layer: practice
+parent: 모델링_실무_2강4강
 doc_type: knowledge
 ---
 # MSVALUE 리포트 예시 (클래시스) — 최종 리포트 양식 정본 명세

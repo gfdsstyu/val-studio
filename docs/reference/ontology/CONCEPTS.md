@@ -1,6 +1,28 @@
 # 밸류에이션 북 — 개념·트랙 색인 (자동생성, build.py)
 
-챕터 19 · 개념 220 · 링크 21
+챕터 20 · 개념 243 · 링크 24
+
+## 위계 트리 (root → foundation → methodology/infrastructure → practice)
+- 🌳 **밸류에이션_스코프_로드맵** (root) — 밸류에이션 플랫폼 스코프 지도 — 대상×목적별 평가 트랙과 방법론
+  - 🧱 **베타_Bloomberg_vs_KICPA** (foundation) — 베타(β) 산출: Bloomberg(S&P500) vs KICPA(KOSPI) + CAPM 한계
+  - 🧱 **영구성장률_PGR_적합성** (foundation) — 영구성장률(Terminal Growth Rate) 적합성 — 0~1% vs 2~4%
+  - 🧱 **채권_기간구조_할인율기초** (foundation) — 채권수익률 기간구조·위험구조 — 할인율·옵션평가의 기초
+  - 📐 **FDD_재무실사_정상화** (methodology) — 재무실사(FDD) — QOE·NWC·정상화(Normalization)
+  - 📐 **PPA_무형자산평가** (methodology) — PPA(매수가격배분) 무형자산 평가 — MEEM·RFRM·TAB
+  - 📐 **deloitte_감사인검토_WACC방법론** (methodology) — 감사인 관점 WACC 방법론·검토 체크리스트 (Modified CAPM·Kroll size premium)
+  - 📐 **wacc_할인율서식** (methodology) — WACC 할인율 서식의 셀 수식 논리 (Hamada·규모별세율·베타옵션)
+  - 📐 **모델링_실무_2강4강** (methodology) — DCF 매출추정 P×Q 사업유형 + Finalize 체크리스트
+    - 🛠 **msvalue_리포트예시_클래시스** (practice) — 밸류에이션 리포트 양식 + 미용의료기기 peer + 상세 추정가정
+    - 🛠 **peer_dcf_클래시스_솔루엠** (practice) — 동종업종 실무 DCF 가정·로직·CAPM (클래시스·솔루엠)
+    - 🛠 **검증_클래시스_DCF** (practice) — 엔진 검증 사례 — 클래시스 DCF 재현 + 세금주입·터미널정규화
+  - 📐 **복합금융상품_평가** (methodology) — 복합금융상품 평가 — 전환사채(CB)·RCPS·신주인수권(BW) 옵션평가
+  - 📐 **손상검사_impairment** (methodology) — 손상검사(Impairment Test) — CGU·회수가능액·사용가치 DCF
+  - 📐 **합병_주식교환_방법론** (methodology) — 합병·주식교환 평가방법 (상장=기준주가 / 비상장=본질가치)
+  - 🔩 **파서_아키텍처_매트릭스** (infrastructure) — 파서 아키텍처 — 불러오기 방식 × 자료유형 매트릭스
+    - 🔩 **xDCF_계정분류_모델아키텍처** (infrastructure) — DCF 계정분류·추정방법 taxonomy + 자동화 모델 아키텍처
+    - 🛠 **외부평가의견서_활용** (practice) — 외부평가의견서 활용 — 방법론 taxonomy·감사인 트랙·리포트 정형문구
+      - 🛠 **외부평가의견서_고정양식_구조** (practice) — 외부평가의견서 고정 양식 — 고정부(skeleton) vs 가변부(slot) 구조
+    - 🛠 **참고보고서_활용** (practice) — 증권사·산업 리포트를 RAG 지식원천으로 — 산업 CAGR·컨센서스
 
 ## 트랙별 챕터
 
@@ -17,6 +39,9 @@
 - **Deloitte 외부평가보고서 검토 유의사항 + WACC 방법론 (감사인 트랙 정본)** ([deloitte_감사인검토_WACC방법론](deloitte_감사인검토_WACC방법론.md)) — 감사인 관점 WACC 방법론·검토 체크리스트 (Modified CAPM·Kroll size premium)
 - **엔진 검증 — 클래시스 DCF (2차 실사례)** ([검증_클래시스_DCF](검증_클래시스_DCF.md)) — 엔진 검증 사례 — 클래시스 DCF 재현 + 세금주입·터미널정규화
 - **외부평가의견서 고정 양식 — 고정부 vs 가변부** ([외부평가의견서_고정양식_구조](외부평가의견서_고정양식_구조.md)) — 외부평가의견서 고정 양식 — 고정부(skeleton) vs 가변부(slot) 구조
+
+### 기타
+- **채권수익률 기간구조·위험구조 — 할인율의 기초** ([채권_기간구조_할인율기초](채권_기간구조_할인율기초.md)) — 채권수익률 기간구조·위험구조 — 할인율·옵션평가의 기초
 
 ### 복합금융상품
 - **밸류에이션 스코프 로드맵** ([밸류에이션_스코프_로드맵](밸류에이션_스코프_로드맵.md)) — 밸류에이션 플랫폼 스코프 지도 — 대상×목적별 평가 트랙과 방법론

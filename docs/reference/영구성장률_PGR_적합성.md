@@ -6,6 +6,8 @@ canonical_questions:
   - "한국 관행 0~1%와 글로벌 2~4% 중 무엇?"
   - "영구성장률과 GDP성장률의 관계는?"
   - "TV(영구가치) 비중은 얼마가 정상인가?"
+layer: foundation
+parent: 밸류에이션_스코프_로드맵
 doc_type: knowledge
 ---
 # 영구성장률(Perpetual/Terminal Growth Rate) 적합성

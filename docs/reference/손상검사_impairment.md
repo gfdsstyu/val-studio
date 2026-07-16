@@ -6,6 +6,8 @@ canonical_questions:
   - "CGU(현금창출단위)란 무엇이고 영업권 손상은 어떻게 하나?"
   - "손상검사용 DCF는 일반 밸류에이션 DCF와 뭐가 다른가?"
   - "손상차손은 어떤 순서로 인식하나?"
+layer: methodology
+parent: 밸류에이션_스코프_로드맵
 doc_type: knowledge
 ---
 

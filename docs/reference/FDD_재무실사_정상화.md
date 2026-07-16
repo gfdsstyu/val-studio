@@ -6,6 +6,8 @@ canonical_questions:
   - "정상화(normalized) EBITDA란? 어떤 항목을 조정하나?"
   - "순운전자본(NWC) 실사와 target NWC(peg)는 무엇인가?"
   - "거래가격은 NWC로 어떻게 조정되나?"
+layer: methodology
+parent: 밸류에이션_스코프_로드맵
 doc_type: knowledge
 ---
 

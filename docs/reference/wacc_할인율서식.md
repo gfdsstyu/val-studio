@@ -6,6 +6,8 @@ canonical_questions:
   - "Hamada 언레버/리레버 공식은?"
   - "베타를 자본구조로 조정하는 법은?"
   - "규모별 유효세율은 어떻게 적용하나?"
+layer: methodology
+parent: 밸류에이션_스코프_로드맵
 doc_type: knowledge
 ---
 # 할인율(WACC) 서식·강의자료 — 시트 논리 정본 명세

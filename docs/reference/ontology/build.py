@@ -90,6 +90,8 @@ def main() -> None:
             "title": title,
             "topic": topic,
             "track": track,
+            "layer": meta.get("layer", "unclassified"),
+            "parent": meta.get("parent"),
             "doc_type": meta.get("doc_type", "knowledge"),
             "keywords": keywords,
             "canonical_questions": meta.get("canonical_questions", []),
@@ -108,8 +110,10 @@ def main() -> None:
 
     graph = {
         "nodes": [{"id": r["id"], "title": r["title"], "track": r["track"],
+                   "layer": r["layer"], "parent": r["parent"],
                    "doc_type": r["doc_type"]} for r in records],
         "edges": edges,
+        "hierarchy": {r["id"]: r["parent"] for r in records},
         "concepts": {k: sorted(set(v)) for k, v in sorted(concepts.items())},
     }
     (OUT / "graph.json").write_text(
@@ -118,6 +122,35 @@ def main() -> None:
     # 사람용 CONCEPTS.md
     lines = ["# 밸류에이션 북 — 개념·트랙 색인 (자동생성, build.py)", ""]
     lines.append(f"챕터 {len(records)} · 개념 {len(concepts)} · 링크 {len(edges)}\n")
+
+    # ── 위계 트리 (layer + parent) ──
+    _LAYER_MARK = {"root": "🌳", "foundation": "🧱", "methodology": "📐",
+                   "infrastructure": "🔩", "practice": "🛠", "unclassified": "❓"}
+    by_id = {r["id"]: r for r in records}
+    children: dict[str, list[str]] = {}
+    roots: list[str] = []
+    for r in records:
+        p = r["parent"]
+        if p and p in by_id:
+            children.setdefault(p, []).append(r["id"])
+        else:
+            roots.append(r["id"])
+
+    def render(node_id: str, depth: int) -> None:
+        r = by_id[node_id]
+        mark = _LAYER_MARK.get(r["layer"], "•")
+        lines.append(f"{'  ' * depth}- {mark} **{r['id']}** ({r['layer']}) — {r['topic'][:60]}")
+        # foundation → methodology/infrastructure → practice 순 정렬
+        order = {"foundation": 0, "methodology": 1, "infrastructure": 2, "practice": 3}
+        for c in sorted(children.get(node_id, []),
+                        key=lambda x: (order.get(by_id[x]["layer"], 9), x)):
+            render(c, depth + 1)
+
+    lines.append("## 위계 트리 (root → foundation → methodology/infrastructure → practice)")
+    for root in sorted(roots, key=lambda x: 0 if by_id[x]["layer"] == "root" else 1):
+        render(root, 0)
+    lines.append("")
+
     by_track: dict[str, list] = {}
     for r in records:
         by_track.setdefault(r["track"], []).append(r)

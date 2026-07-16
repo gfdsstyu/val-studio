@@ -6,6 +6,8 @@ canonical_questions:
   - "MEEM(다기간초과이익법)의 절차와 기여자산비용은?"
   - "RFRM(로열티면제법)은 언제 어떻게 쓰나?"
   - "TAB(세금상각편익)는 무엇이고 왜 더하나?"
+layer: methodology
+parent: 밸류에이션_스코프_로드맵
 doc_type: knowledge
 ---
 

@@ -6,6 +6,8 @@
       "title": "Deloitte 외부평가보고서 검토 유의사항 + WACC 방법론 (감사인 트랙 정본)",
       "topic": "감사인 관점 WACC 방법론·검토 체크리스트 (Modified CAPM·Kroll size premium)",
       "track": "검증·감사인",
+      "layer": "methodology",
+      "parent": "밸류에이션_스코프_로드맵",
       "doc_type": "knowledge",
       "keywords": [
         "Deloitte",
@@ -37,6 +39,8 @@
       "title": "재무실사(FDD) — QOE·NWC·정상화",
       "topic": "재무실사(FDD) — QOE·NWC·정상화(Normalization)",
       "track": "실사·정상화",
+      "layer": "methodology",
+      "parent": "밸류에이션_스코프_로드맵",
       "doc_type": "knowledge",
       "keywords": [
         "FDD",
@@ -74,6 +78,8 @@
       "title": "MSVALUE 리포트 예시 (클래시스) — 최종 리포트 양식 정본 명세",
       "topic": "밸류에이션 리포트 양식 + 미용의료기기 peer + 상세 추정가정",
       "track": "거래평가·DCF",
+      "layer": "practice",
+      "parent": "모델링_실무_2강4강",
       "doc_type": "knowledge",
       "keywords": [
         "리포트양식",
@@ -105,6 +111,8 @@
       "title": "Peer/실무 DCF 템플릿 명세 — 클래시스·솔루엠",
       "topic": "동종업종 실무 DCF 가정·로직·CAPM (클래시스·솔루엠)",
       "track": "거래평가·DCF",
+      "layer": "practice",
+      "parent": "모델링_실무_2강4강",
       "doc_type": "knowledge",
       "keywords": [
         "클래시스",
@@ -130,6 +138,8 @@
       "title": "PPA 무형자산 평가 (MEEM·RFRM) — ⏳ 미래 트랙",
       "topic": "PPA(매수가격배분) 무형자산 평가 — MEEM·RFRM·TAB",
       "track": "손상·FV",
+      "layer": "methodology",
+      "parent": "밸류에이션_스코프_로드맵",
       "doc_type": "knowledge",
       "keywords": [
         "PPA",
@@ -168,6 +178,8 @@
       "title": "할인율(WACC) 서식·강의자료 — 시트 논리 정본 명세",
       "topic": "WACC 할인율 서식의 셀 수식 논리 (Hamada·규모별세율·베타옵션)",
       "track": "거래평가·DCF",
+      "layer": "methodology",
+      "parent": "밸류에이션_스코프_로드맵",
       "doc_type": "knowledge",
       "keywords": [
         "WACC",
@@ -196,6 +208,8 @@
       "title": "DCF 계정분류 체계 & 자동화 모델 아키텍처",
       "topic": "DCF 계정분류·추정방법 taxonomy + 자동화 모델 아키텍처",
       "track": "파서·인제스트",
+      "layer": "infrastructure",
+      "parent": "파서_아키텍처_매트릭스",
       "doc_type": "knowledge  # 밸류에이션 북 챕터 (RAG 코퍼스)",
       "keywords": [
         "계정유형",
@@ -241,6 +255,8 @@
       "title": "엔진 검증 — 클래시스 DCF (2차 실사례)",
       "topic": "엔진 검증 사례 — 클래시스 DCF 재현 + 세금주입·터미널정규화",
       "track": "검증·감사인",
+      "layer": "practice",
+      "parent": "모델링_실무_2강4강",
       "doc_type": "reference",
       "keywords": [
         "클래시스",
@@ -266,6 +282,8 @@
       "title": "DCF 모델링 실무 (MSVALUE 2강·4강)",
       "topic": "DCF 매출추정 P×Q 사업유형 + Finalize 체크리스트",
       "track": "거래평가·DCF",
+      "layer": "methodology",
+      "parent": "밸류에이션_스코프_로드맵",
       "doc_type": "knowledge",
       "keywords": [
         "매출추정",
@@ -295,6 +313,8 @@
       "title": "밸류에이션 스코프 로드맵",
       "topic": "밸류에이션 플랫폼 스코프 지도 — 대상×목적별 평가 트랙과 방법론",
       "track": "복합금융상품",
+      "layer": "root",
+      "parent": null,
       "doc_type": "reference",
       "keywords": [
         "밸류에이션 스코프",
@@ -337,6 +357,8 @@
       "title": "베타(β) 산출: Bloomberg β vs KICPA β",
       "topic": "베타(β) 산출: Bloomberg(S&P500) vs KICPA(KOSPI) + CAPM 한계",
       "track": "거래평가·DCF",
+      "layer": "foundation",
+      "parent": "밸류에이션_스코프_로드맵",
       "doc_type": "knowledge",
       "keywords": [
         "베타",
@@ -366,6 +388,8 @@
       "title": "복합금융상품 평가 (CB·RCPS·BW) — ⏳ 미래 트랙",
       "topic": "복합금융상품 평가 — 전환사채(CB)·RCPS·신주인수권(BW) 옵션평가",
       "track": "복합금융상품",
+      "layer": "methodology",
+      "parent": "밸류에이션_스코프_로드맵",
       "doc_type": "knowledge",
       "keywords": [
         "복합금융상품",
@@ -407,6 +431,8 @@
       "title": "손상검사 (Impairment Test)",
       "topic": "손상검사(Impairment Test) — CGU·회수가능액·사용가치 DCF",
       "track": "손상·FV",
+      "layer": "methodology",
+      "parent": "밸류에이션_스코프_로드맵",
       "doc_type": "knowledge",
       "keywords": [
         "손상검사",
@@ -442,6 +468,8 @@
       "title": "영구성장률(Perpetual/Terminal Growth Rate) 적합성",
       "topic": "영구성장률(Terminal Growth Rate) 적합성 — 0~1% vs 2~4%",
       "track": "거래평가·DCF",
+      "layer": "foundation",
+      "parent": "밸류에이션_스코프_로드맵",
       "doc_type": "knowledge",
       "keywords": [
         "영구성장률",
@@ -469,6 +497,8 @@
       "title": "외부평가의견서 고정 양식 — 고정부 vs 가변부",
       "topic": "외부평가의견서 고정 양식 — 고정부(skeleton) vs 가변부(slot) 구조",
       "track": "검증·감사인",
+      "layer": "practice",
+      "parent": "외부평가의견서_활용",
       "doc_type": "knowledge",
       "keywords": [
         "외부평가의견서",
@@ -502,6 +532,8 @@
       "title": "DART 외부평가기관 평가의견서 — 활용 설계",
       "topic": "외부평가의견서 활용 — 방법론 taxonomy·감사인 트랙·리포트 정형문구",
       "track": "파서·인제스트",
+      "layer": "practice",
+      "parent": "파서_아키텍처_매트릭스",
       "doc_type": "knowledge",
       "keywords": [
         "외부평가의견서",
@@ -530,6 +562,8 @@
       "title": "참고보고서(증권사·산업 IR 리포트) 활용 설계",
       "topic": "증권사·산업 리포트를 RAG 지식원천으로 — 산업 CAGR·컨센서스",
       "track": "파서·인제스트",
+      "layer": "practice",
+      "parent": "파서_아키텍처_매트릭스",
       "doc_type": "knowledge",
       "keywords": [
         "증권사리포트",
@@ -549,11 +583,61 @@
       "has_frontmatter": true
     },
     {
+      "id": "채권_기간구조_할인율기초",
+      "path": "docs/reference/채권_기간구조_할인율기초.md",
+      "title": "채권수익률 기간구조·위험구조 — 할인율의 기초",
+      "topic": "채권수익률 기간구조·위험구조 — 할인율·옵션평가의 기초",
+      "track": "기타",
+      "layer": "foundation",
+      "parent": "밸류에이션_스코프_로드맵",
+      "doc_type": "knowledge",
+      "keywords": [
+        "기간구조",
+        "term structure",
+        "수익률곡선",
+        "yield curve",
+        "현물이자율",
+        "spot rate",
+        "선도이자율",
+        "forward rate",
+        "부트스트래핑",
+        "bootstrapping",
+        "기대이론",
+        "유동성프리미엄이론",
+        "시장분할이론",
+        "선호영역이론",
+        "위험구조",
+        "신용스프레드",
+        "credit spread",
+        "채무불이행위험프리미엄",
+        "무위험이자율",
+        "Rf",
+        "채권평가",
+        "옵션평가",
+        "할인율 기초"
+      ],
+      "canonical_questions": [
+        "이자율 기간구조(수익률곡선)란 무엇이고 왜 우상향하나?",
+        "현물이자율과 선도이자율의 차이는? 부트스트래핑은?",
+        "신용스프레드(위험구조)는 어떻게 구성되나?",
+        "무위험이자율(Rf)과 kd는 어디서 도출하나?",
+        "복합금융상품 평가에서 이자율 커브는 왜 필요한가?"
+      ],
+      "links": [
+        "deloitte_감사인검토_WACC방법론",
+        "복합금융상품_평가",
+        "외부평가의견서_고정양식_구조"
+      ],
+      "has_frontmatter": true
+    },
+    {
       "id": "파서_아키텍처_매트릭스",
       "path": "docs/reference/파서_아키텍처_매트릭스.md",
       "title": "파서 아키텍처 — 불러오기 방식 × 자료유형 매트릭스",
       "topic": "파서 아키텍처 — 불러오기 방식 × 자료유형 매트릭스",
       "track": "파서·인제스트",
+      "layer": "infrastructure",
+      "parent": "밸류에이션_스코프_로드맵",
       "doc_type": "reference",
       "keywords": [
         "파서",
@@ -589,6 +673,8 @@
       "title": "합병·주식교환 평가 방법론 (두산 사례)",
       "topic": "합병·주식교환 평가방법 (상장=기준주가 / 비상장=본질가치)",
       "track": "거래평가·DCF",
+      "layer": "methodology",
+      "parent": "밸류에이션_스코프_로드맵",
       "doc_type": "knowledge",
       "keywords": [
         "합병",

@@ -6,6 +6,8 @@ canonical_questions:
   - "Adjusted Beta 공식(0.67·raw+0.33)은?"
   - "어느 베타를 써야 하나?"
   - "CAPM이 못 잡는 위험(비체계적)은?"
+layer: foundation
+parent: 밸류에이션_스코프_로드맵
 doc_type: knowledge
 ---
 # 베타(β) 산출: Bloomberg β vs KICPA β

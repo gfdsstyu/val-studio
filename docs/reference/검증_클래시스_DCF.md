@@ -5,6 +5,8 @@ canonical_questions:
   - "클래시스 DCF를 엔진으로 재현하면?"
   - "세금·터미널 처리 차이는?"
   - "WACC와 g가 가까우면 터미널이 왜 폭발하나?"
+layer: practice
+parent: 모델링_실무_2강4강
 doc_type: reference
 ---
 # 엔진 검증 — 클래시스 DCF (2차 실사례)
