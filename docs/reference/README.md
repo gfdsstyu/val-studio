@@ -32,6 +32,13 @@
 | [검증_클래시스_DCF](검증_클래시스_DCF.md) | ⭐ 2차 실사례 교차검증: EBIT 완전일치, 세금주입·터미널정규화 개선점(A/B), checks.py 위험포착 입증 | pe양식 클래시스 DCF |
 | [손상검사_impairment](손상검사_impairment.md) | ⭐ **평가의 다른 목적축**: VIU vs FVLCD·CGU·영업권·손상DCF(내용연수/성능CAPEX제외/synergy제거) | joy-accounting 블로그 |
 | [밸류에이션_스코프_로드맵](밸류에이션_스코프_로드맵.md) | ⭐ **전체 스코프 지도**: 거래평가(DCF✅)·손상(VIU)·공정가치(PPA)·복합금융상품(RCPS·TF·이항·OPM) 트랙별 방법론·상태 | 스코프 정리 |
+| [복합금융상품_평가](복합금융상품_평가.md) | ⏳ CB·RCPS·BW 옵션평가: 혼합할인율(TF)·이자율모형(BDT/HW)·전환권 자본/부채별·공정가치 Level 3 | 블로그 |
+| [PPA_무형자산평가](PPA_무형자산평가.md) | ⏳ 매수가격배분: MEEM(고객관계·CAC)·RFRM(로열티면제)·TAB·WARA | 블로그 |
+| [FDD_재무실사_정상화](FDD_재무실사_정상화.md) | 재무실사: QOE(normalized EBITDA)·NWC(peg·pro forma·가격조정)·정상화 | 블로그 |
+
+## 온톨로지 + RAG 인덱스
+`ontology/` — 북을 자동 컴파일한 개념 그래프·RAG 검색 인덱스(SSOT→컴파일). 재생성:
+`python docs/reference/ontology/build.py`. 설계: [ontology/README.md](ontology/README.md).
 
 ## 소스 자료 위치 (D:\Valuation\)
 - `DCF_비올\` — 메인 벤치마크 비올 (엔진 파일 `DCF Model_최종본.xlsx`, IR, 참고보고서, 유사회사재무)
