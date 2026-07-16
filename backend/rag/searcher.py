@@ -180,14 +180,29 @@ class BookSearcher:
     def search(self, query: str, *, top_k: int = 5, expand: bool = True) -> list[SearchHit]:
         """질의 → 상위 top_k 히트(그래프 확장 + embedder 있으면 hybrid)."""
         emb = self._embed_scores(query)                       # hybrid cosine(섹션별)
+        # 챕터별 best cosine → z-정규화. 시맨틱 임베딩의 cosine 은 좁게 뭉쳐 분포(실측
+        # 0.45~0.72)해 절대값 가중으로는 변별력이 죽는다 — "다른 챕터 대비 유독 높은가"
+        # (z>0)에 보너스를 줘야 어휘 안 겹치는 질의에서 정답이 범용 키워드 노이즈를 이긴다.
+        best_cos_by: dict[str, float] = {}
+        if emb:
+            for cid, ch in self.chapters.items():
+                best_cos_by[cid] = max(
+                    (emb.get((cid, i), 0.0) for i in range(len(ch.sections))), default=0.0)
+            vals = list(best_cos_by.values())
+            mean = sum(vals) / len(vals)
+            var = sum((v - mean) ** 2 for v in vals) / len(vals)
+            std = var ** 0.5 or 1.0
         direct: dict[str, tuple[float, str]] = {}
         for cid, ch in self.chapters.items():
             s, w = self._direct_score(query, ch)
             if emb:
-                best_cos = max((emb.get((cid, i), 0.0) for i in range(len(ch.sections))),
-                               default=0.0)
+                best_cos = best_cos_by[cid]
                 if best_cos > 0.15:
-                    s += 0.5 * best_cos
+                    if getattr(self.embedder, "semantic", False):
+                        z = (best_cos - mean) / std
+                        s += 0.25 * best_cos + 0.35 * max(z, 0.0)
+                    else:                       # 해싱 등 lexical 연속화 — 절대값만
+                        s += 0.5 * best_cos
                     w = (w + ", " if w != "본문유사" else "") + f"임베딩 {best_cos:.2f}"
             direct[cid] = (s, w)
 

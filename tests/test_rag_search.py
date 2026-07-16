@@ -127,7 +127,7 @@ def test_default_embedder_fallback():
     import os
     from rag.embedder import default_embedder
     e = default_embedder()
-    expected = "gemini-te004" if os.environ.get("GEMINI_API_KEY") else "hashing-512"
+    expected = "gemini-emb-001" if os.environ.get("GEMINI_API_KEY") else "hashing-512"
     assert e.name == expected
 
 
