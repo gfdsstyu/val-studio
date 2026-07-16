@@ -30,6 +30,8 @@
 | [베타_Bloomberg_vs_KICPA](베타_Bloomberg_vs_KICPA.md) | β 기준시장 선택(S&P500 vs KOSPI)·Adjusted β(0.67/0.33)·CAPM 체계적위험 한계·CSRP·고성장 과대평가 | 회계업계 실무 이슈노트 |
 | [영구성장률_PGR_적합성](영구성장률_PGR_적합성.md) | TV 비중 ~75%·한국관행 0~1% vs 글로벌 2~4%(평균3%)·PGR≤GDP 철칙·민감도 | 실무 이슈노트 |
 | [검증_클래시스_DCF](검증_클래시스_DCF.md) | ⭐ 2차 실사례 교차검증: EBIT 완전일치, 세금주입·터미널정규화 개선점(A/B), checks.py 위험포착 입증 | pe양식 클래시스 DCF |
+| [손상검사_impairment](손상검사_impairment.md) | ⭐ **평가의 다른 목적축**: VIU vs FVLCD·CGU·영업권·손상DCF(내용연수/성능CAPEX제외/synergy제거) | joy-accounting 블로그 |
+| [밸류에이션_스코프_로드맵](밸류에이션_스코프_로드맵.md) | ⭐ **전체 스코프 지도**: 거래평가(DCF✅)·손상(VIU)·공정가치(PPA)·복합금융상품(RCPS·TF·이항·OPM) 트랙별 방법론·상태 | 스코프 정리 |
 
 ## 소스 자료 위치 (D:\Valuation\)
 - `DCF_비올\` — 메인 벤치마크 비올 (엔진 파일 `DCF Model_최종본.xlsx`, IR, 참고보고서, 유사회사재무)
