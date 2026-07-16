@@ -84,10 +84,14 @@ echo '{"risk_free":..,"equity_risk_premium":..,"unlevered_beta":..,"target_debt_
 - **트리거**: 다수 문서·다수 방법·다수 기업 비교·고위험(독립검증 필요) → MAS. 단건 루틴 → 단일.
 
 ## 도구 (scripts/)
+- `book_search.py "질의"` — **밸류에이션 북 검색.** 방법론이 궁금하면 index.md 통독 대신 이걸로
+  정확한 챕터·섹션을 찾아 그 부분만 Read. (한글 argv 깨지면 `-f query.txt`)
 - `dcf.py` — DCF 계산 + 가정 audit. **모든 계산은 이것으로.**
 - `wacc.py` — CAPM 빌드업 + β/ERP 정합 + Kroll size premium.
 - `audit.py` — 독립 재계산 + 주장값 차이 + 민감도(감사인 트랙·검증 에이전트용).
 - `ingest.py` — 파일 → 방식·유형 라우팅 + 프로파일.
+- 전환사채/RCPS 평가: `backend/calc_core/convertible.py`(이항+TF) 직접 호출 —
+  `price_convertible(ConvertibleInputs(...))`. DCF와 별개 수학(옵션평가).
 
 ## 참조
 `references/index.md` — 밸류에이션 북(방법론·계정분류·의견서 양식·파서) 챕터 색인.
