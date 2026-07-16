@@ -110,6 +110,53 @@ def test_straight_bond_closed_form():
     assert abs(straight_bond_value(inp) - expect) < 1e-9
 
 
+# ── RCPS 상환권(보장수익률 스케줄) ──────────────────────────────────────────
+def test_accrual_zero_equals_fixed_put_at_face():
+    # 보장수익률 0% 스케줄 = 고정 put_price=face 와 동치(스케줄 배선 검증)
+    fixed = price_convertible(_base(stock_price=60.0, put_price=100.0)).value
+    accr0 = price_convertible(_base(stock_price=60.0, put_accrual_rate=0.0)).value
+    assert math.isclose(fixed, accr0, rel_tol=1e-9)
+
+
+def test_guaranteed_rate_monotonic_value():
+    # 보장수익률↑ → 상환가 스케줄 전체↑ → RCPS 가치 단조 증가
+    vals = [price_convertible(_base(stock_price=60.0, put_accrual_rate=r)).value
+            for r in (0.0, 0.04, 0.08)]
+    assert vals[0] < vals[1] < vals[2]
+
+
+def test_otm_rcps_floor_is_accrued_redemption():
+    # 깊은 OTM RCPS: 전환 무가치 → 가치 하한 = 보장상환액의 risky 현가
+    # (조기 풋 최적행사로 그 이상일 수 있으나 미만은 불가)
+    inp = _base(stock_price=5.0, volatility=0.2, put_accrual_rate=0.06)
+    r = price_convertible(inp)
+    accrued_floor = 100.0 * (1.06 ** 3.0) * math.exp(-(0.03 + 0.04) * 3.0)
+    assert r.value >= accrued_floor * 0.999
+    assert r.equity_component < 0.5           # 사실상 전액 채권성분
+    # straight_bond 도 만기 보장상환액 기준으로 계산돼야 함
+    assert straight_bond_value(inp) > 100.0 * math.exp(-0.07 * 3.0)
+
+
+def test_early_put_exercised_when_optimal():
+    # 스프레드가 보장수익률보다 훨씬 크면(위험 할인 > 상환가 증가) 조기 풋이 유리
+    # → 가치가 '만기 보장상환 현가'보다 커진다(조기행사 프리미엄)
+    inp = _base(stock_price=5.0, volatility=0.2,
+                credit_spread=0.15, put_accrual_rate=0.03)
+    r = price_convertible(inp)
+    hold_to_maturity = 100.0 * (1.03 ** 3.0) * math.exp(-(0.03 + 0.15) * 3.0)
+    assert r.value > hold_to_maturity * 1.05
+
+
+def test_call_accrual_schedule_binds():
+    # 발행자 콜 스케줄: 고정 105 콜과 5% accrual 콜(3년 후 ~115.8)은 다른 값
+    fixed = price_convertible(_base(call_price=105.0)).value
+    accr = price_convertible(_base(call_accrual_rate=0.05)).value
+    assert not math.isclose(fixed, accr, rel_tol=1e-6)
+    # 콜은 여전히 보유자 가치를 깎는 방향
+    plain = price_convertible(_base()).value
+    assert accr < plain
+
+
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
