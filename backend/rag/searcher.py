@@ -80,9 +80,15 @@ def _split_sections(body: str) -> list[Section]:
 
 
 class BookSearcher:
-    """rag_index.json + graph.json + 챕터 본문을 로드해 검색."""
+    """rag_index.json + graph.json + 챕터 본문을 로드해 검색.
 
-    def __init__(self, ref_dir: Path | str = _REF) -> None:
+    embedder 주면 hybrid: 섹션 임베딩 인덱스(lazy)를 만들고 lexical 점수에
+    cosine 을 합성한다. 기본 None = 순수 lexical(하위호환).
+    """
+
+    def __init__(self, ref_dir: Path | str = _REF, *, embedder=None) -> None:
+        self.embedder = embedder
+        self._sec_index: list[tuple[str, int, list[float]]] | None = None  # (chapter, sec_i, vec)
         self.ref = Path(ref_dir)
         ont = self.ref / "ontology"
         idx = json.loads((ont / "rag_index.json").read_text(encoding="utf-8"))
@@ -136,10 +142,34 @@ class BookSearcher:
         score = 1.0 * cq + 0.6 * kw + 0.4 * tp
         return score, ", ".join(why) or "본문유사"
 
-    def _best_section(self, query: str, ch: Chapter) -> tuple[str | None, str]:
+    # ── hybrid: 섹션 임베딩 인덱스(lazy) + cosine 합성 ──────────────────────
+    def _ensure_sec_index(self) -> None:
+        if self.embedder is None or self._sec_index is not None:
+            return
+        entries: list[tuple[str, int, str]] = []
+        for cid, ch in self.chapters.items():
+            for i, sec in enumerate(ch.sections):
+                entries.append((cid, i, f"{sec.heading}\n{sec.text[:800]}"))
+        vecs = self.embedder.embed([e[2] for e in entries])
+        self._sec_index = [(cid, i, v) for (cid, i, _), v in zip(entries, vecs)]
+
+    def _embed_scores(self, query: str) -> dict[tuple[str, int], float]:
+        """(chapter, sec_i) → cosine. embedder 없으면 빈 dict."""
+        if self.embedder is None:
+            return {}
+        from .embedder import cosine
+        self._ensure_sec_index()
+        qv = self.embedder.embed([query])[0]
+        return {(cid, i): cosine(qv, v) for cid, i, v in self._sec_index}
+
+    def _best_section(self, query: str, ch: Chapter,
+                      emb: dict[tuple[str, int], float] | None = None
+                      ) -> tuple[str | None, str]:
         best, best_s = None, 0.0
-        for sec in ch.sections:
+        for i, sec in enumerate(ch.sections):
             s = _sim(query, sec.heading) * 1.5 + _sim(query, sec.text[:600])
+            if emb:
+                s += 0.8 * emb.get((ch.id, i), 0.0)      # hybrid: cosine 합성
             if s > best_s:
                 best, best_s = sec, s
         if best is None:
@@ -148,10 +178,18 @@ class BookSearcher:
         return best.heading, snippet
 
     def search(self, query: str, *, top_k: int = 5, expand: bool = True) -> list[SearchHit]:
-        """질의 → 상위 top_k 히트(그래프 확장 포함)."""
+        """질의 → 상위 top_k 히트(그래프 확장 + embedder 있으면 hybrid)."""
+        emb = self._embed_scores(query)                       # hybrid cosine(섹션별)
         direct: dict[str, tuple[float, str]] = {}
         for cid, ch in self.chapters.items():
-            direct[cid] = self._direct_score(query, ch)
+            s, w = self._direct_score(query, ch)
+            if emb:
+                best_cos = max((emb.get((cid, i), 0.0) for i in range(len(ch.sections))),
+                               default=0.0)
+                if best_cos > 0.15:
+                    s += 0.5 * best_cos
+                    w = (w + ", " if w != "본문유사" else "") + f"임베딩 {best_cos:.2f}"
+            direct[cid] = (s, w)
 
         scores = {cid: s for cid, (s, _) in direct.items()}
         why = {cid: w for cid, (_, w) in direct.items()}
@@ -174,7 +212,7 @@ class BookSearcher:
             if s <= 0.05:
                 continue
             ch = self.chapters[cid]
-            heading, snippet = self._best_section(query, ch)
+            heading, snippet = self._best_section(query, ch, emb or None)
             hits.append(SearchHit(chapter_id=cid, path=ch.path, score=round(s, 3),
                                   why=why[cid], best_section=heading, snippet=snippet))
         return hits
@@ -187,7 +225,9 @@ def main() -> None:
         pass
     if len(sys.argv) < 2:
         raise SystemExit('사용: python searcher.py "질의"')
-    hits = BookSearcher().search(" ".join(sys.argv[1:]))
+    from .embedder import default_embedder
+    searcher = BookSearcher(embedder=default_embedder(cache_dir=_ONT))
+    hits = searcher.search(" ".join(sys.argv[1:]))
     print(json.dumps([h.__dict__ for h in hits], ensure_ascii=False, indent=2))
 
 

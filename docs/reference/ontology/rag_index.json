@@ -277,6 +277,44 @@
       "has_frontmatter": true
     },
     {
+      "id": "기업리서치_양식",
+      "path": "docs/reference/기업리서치_양식.md",
+      "title": "기업 리서치 정본 양식 (Company Brief 10섹션)",
+      "topic": "기업 리서치 정본 양식 — Company Brief 10섹션 (0단계 기업·산업 이해 산출물)",
+      "track": "기타",
+      "layer": "methodology",
+      "parent": "밸류에이션_스코프_로드맵",
+      "doc_type": "knowledge",
+      "keywords": [
+        "기업리서치",
+        "Company Brief",
+        "리서치 양식",
+        "회사개요",
+        "사업부문",
+        "제품별 매출",
+        "Value Chain",
+        "고객사",
+        "경쟁사",
+        "시장분석",
+        "경쟁사 밸류에이션",
+        "주주구성",
+        "유통주식",
+        "종속회사",
+        "전방산업",
+        "리서치 템플릿"
+      ],
+      "canonical_questions": [
+        "기업 리서치(Company Brief)는 어떤 양식으로 정리하나?",
+        "사업보고서에서 무엇을 뽑아 리서치를 만드나?",
+        "밸류에이션 전 기업·산업 이해 단계의 산출물 구조는?"
+      ],
+      "links": [
+        "FDD_재무실사_정상화",
+        "손상검사_impairment"
+      ],
+      "has_frontmatter": true
+    },
+    {
       "id": "모델링_실무_2강4강",
       "path": "docs/reference/모델링_실무_2강4강.md",
       "title": "DCF 모델링 실무 (MSVALUE 2강·4강)",

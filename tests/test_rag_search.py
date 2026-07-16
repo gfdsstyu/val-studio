@@ -79,6 +79,58 @@ def test_all_chapters_loaded_with_sections():
     assert all(len(c.sections) >= 1 for c in S.chapters.values())
 
 
+# ── 임베딩 hybrid ────────────────────────────────────────────────────────────
+from rag.embedder import HashingEmbedder, cosine  # noqa: E402
+
+H = BookSearcher(embedder=HashingEmbedder())
+
+
+def test_hashing_embedder_normalized_and_similar():
+    e = HashingEmbedder()
+    v1, v2, v3 = e.embed(["영구성장률은 몇 퍼센트", "영구성장률 몇 %로 잡나", "전환사채 콜옵션 평가"])
+    import math
+    assert abs(math.sqrt(sum(x * x for x in v1)) - 1.0) < 1e-9   # L2 정규화
+    assert cosine(v1, v2) > cosine(v1, v3)                        # 유사 > 비유사
+    assert cosine(v1, v1) > 0.999
+
+
+def test_hybrid_keeps_lexical_winners():
+    # hybrid 도 기존 정답 유지(품질 회귀 없음)
+    assert H.search("영구성장률 몇 퍼센트로 잡아야 하나")[0].chapter_id == "영구성장률_PGR_적합성"
+    assert H.search("CGU 영업권 손상검사는 어떻게 하나")[0].chapter_id == "손상검사_impairment"
+
+
+def test_hybrid_adds_embedding_signal():
+    hits = H.search("영구성장률 몇 퍼센트", top_k=3)
+    assert any("임베딩" in h.why for h in hits)      # cosine 신호가 근거에 표기
+
+
+def test_hybrid_partial_word_robustness():
+    # 부분어·붙여쓰기 변형(해싱 n-gram 강점) — lexical 키워드 미스에도 회수
+    hits = H.search("전환사채콜옵션 강제전환", top_k=3)
+    assert any(h.chapter_id == "복합금융상품_평가" for h in hits)
+
+
+def test_gemini_embedder_requires_key():
+    import os
+    from rag.embedder import GeminiEmbedder
+    if os.environ.get("GEMINI_API_KEY"):
+        print("  (키 있음 — skip)"); return
+    try:
+        GeminiEmbedder().embed(["x"])
+        assert False
+    except RuntimeError as e:
+        assert "GEMINI_API_KEY" in str(e)
+
+
+def test_default_embedder_fallback():
+    import os
+    from rag.embedder import default_embedder
+    e = default_embedder()
+    expected = "gemini-te004" if os.environ.get("GEMINI_API_KEY") else "hashing-512"
+    assert e.name == expected
+
+
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding="utf-8")

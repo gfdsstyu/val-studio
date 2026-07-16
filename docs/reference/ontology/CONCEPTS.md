@@ -1,6 +1,6 @@
 # 밸류에이션 북 — 개념·트랙 색인 (자동생성, build.py)
 
-챕터 20 · 개념 243 · 링크 24
+챕터 21 · 개념 259 · 링크 26
 
 ## 위계 트리 (root → foundation → methodology/infrastructure → practice)
 - 🌳 **밸류에이션_스코프_로드맵** (root) — 밸류에이션 플랫폼 스코프 지도 — 대상×목적별 평가 트랙과 방법론
@@ -11,6 +11,7 @@
   - 📐 **PPA_무형자산평가** (methodology) — PPA(매수가격배분) 무형자산 평가 — MEEM·RFRM·TAB
   - 📐 **deloitte_감사인검토_WACC방법론** (methodology) — 감사인 관점 WACC 방법론·검토 체크리스트 (Modified CAPM·Kroll size premium)
   - 📐 **wacc_할인율서식** (methodology) — WACC 할인율 서식의 셀 수식 논리 (Hamada·규모별세율·베타옵션)
+  - 📐 **기업리서치_양식** (methodology) — 기업 리서치 정본 양식 — Company Brief 10섹션 (0단계 기업·산업 이해 산출물)
   - 📐 **모델링_실무_2강4강** (methodology) — DCF 매출추정 P×Q 사업유형 + Finalize 체크리스트
     - 🛠 **msvalue_리포트예시_클래시스** (practice) — 밸류에이션 리포트 양식 + 미용의료기기 peer + 상세 추정가정
     - 🛠 **peer_dcf_클래시스_솔루엠** (practice) — 동종업종 실무 DCF 가정·로직·CAPM (클래시스·솔루엠)
@@ -41,6 +42,7 @@
 - **외부평가의견서 고정 양식 — 고정부 vs 가변부** ([외부평가의견서_고정양식_구조](외부평가의견서_고정양식_구조.md)) — 외부평가의견서 고정 양식 — 고정부(skeleton) vs 가변부(slot) 구조
 
 ### 기타
+- **기업 리서치 정본 양식 (Company Brief 10섹션)** ([기업리서치_양식](기업리서치_양식.md)) — 기업 리서치 정본 양식 — Company Brief 10섹션 (0단계 기업·산업 이해 산출물)
 - **채권수익률 기간구조·위험구조 — 할인율의 기초** ([채권_기간구조_할인율기초](채권_기간구조_할인율기초.md)) — 채권수익률 기간구조·위험구조 — 할인율·옵션평가의 기초
 
 ### 복합금융상품
