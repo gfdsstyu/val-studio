@@ -20,7 +20,7 @@ MSVALUE 기업가치평가연수 과제(정종범 _비올_ DCF Model)는 손으�
 | 스택 | **Python(FastAPI) 백엔드 + React+Vite SPA + Postgres(Supabase)** |
 | 배포(MVP) | 프론트=**Vercel** · 백엔드=**Railway/Render 컨테이너** · DB/Auth/Storage/벡터=**Supabase(pgvector)** |
 | 외부 데이터 | **OpenDART API** + IR/교육 PDF + Big4 평가의견서 |
-| LLM | Gemini(+Groq 폴백) — 감린이 아키텍처 재사용 |
+| LLM | **실서비스=Claude 작업별 티어링(Sonnet 5 기본/Opus 정밀)** + Gemini(검색그라운딩·임베딩)+Groq 폴백 — §LLM 모델 전략 |
 
 ## 원본 엑셀에서 확인된 실제 로직 (재현 대상)
 
@@ -130,8 +130,37 @@ valuation-platform/               # 새 GitHub 레포
 | DB/Auth/Storage | **Supabase** | Postgres(모델 버전·감사로그) + Auth + Storage(업로드 PDF/xlsx) 한 서비스 |
 | 벡터검색 | **Supabase pgvector** (MVP) | 관계형+벡터 한 DB=배관 최소. `retrieve.py` 인터페이스 추상화로 후일 Qdrant 스왑 |
 | 임베딩/리랭크 | **Gemini 임베딩 API**(MVP) | self-host rag-inference 생략; 스케일 필요 시 감린이 `services/rag-inference` 포팅 |
-| LLM | Gemini(+Groq 폴백) | 감린이 `llm/router.py` 포팅 |
+| LLM | **Claude 작업별 티어링**(아래 §LLM 모델 전략) + Gemini/Groq | `llm/router.py` 멀티프로바이더(Anthropic 추가) |
 > 기밀성 낮은 MVP라 매니지드 우선. 후일 기밀 요구 생기면 전부 Docker Compose로 셀프호스트 이전(앱은 불변).
+
+## LLM 모델 전략 — Claude 작업별 티어링 (실서비스, "Claude in Excel" UX)
+
+**원칙: 판단 품질이 돈이 되는 곳에 상위 모델, 대량·기계적인 곳에 하위 모델.** UX 는
+Claude in Excel 처럼 **작업(단계)별로 모델을 나눠 쓰고 사용자가 오버라이드** 가능하게
+— 이미 SKILL 의 "단계↔도구↔지식" 사전 바인딩 표가 있으므로 **모델 컬럼을 추가해
+3중 바인딩(도구·지식·모델)**으로 확장하면 된다.
+
+| 작업(단계) | 기본 모델 | 근거 |
+|---|---|---|
+| 0단계 기업·산업 이해(Brief 완성) | **Sonnet 5** | 판단+종합. 검색 그라운딩은 Gemini 병행(딥서치 실증됨) |
+| 2 계정 분류(대량 태깅) | Sonnet 5 (Haiku 검토중) | 문항수 많음·스키마 고정 — 하향 후보 1순위 |
+| 3a 매출·원가 가정 도출 | **Sonnet 5** | Brief+북 근거 종합 판단 |
+| 3b~4 WACC·DCF | (LLM 아님 — 결정론 scripts) | 계산은 모델 무관, 코드가 담당 |
+| 5 리포트·평가의견서 서술 | **Sonnet 5**, "정밀 모드"=**Opus** | 고객 제출물 — 품질이 곧 상품 |
+| 감사인 트랙(독립 재수행·반박) | **Opus** | 최고난도 추론 + generator(Sonnet)↔critic(Opus) 모델 분리 = 관점 다양성 보너스 |
+| 파서 LLM 보조 변형(스키마 매핑) | Sonnet 5 (Haiku 검토중) | 검증 게이트가 뒤에 있어 모델 리스크 흡수 |
+| 챗 폴백·요약 등 경량 | Gemini Flash/Groq | 기존 폴백 체인 유지 |
+| 임베딩/검색 그라운딩 | **Gemini**(고정) | Anthropic 은 임베딩 API 없음. 검색 그라운딩도 Gemini 실증 |
+
+- **UX**: 각 단계 패널에 모델 뱃지 + 드롭다운(기본값=위 표). 프리셋 2개 — "표준"(전부
+  Sonnet 5) / "정밀"(리포트·감사인=Opus). 비용 표시(단계별 예상 토큰×단가).
+- **라우터**: `llm/router.py` 는 OpenAI 호환 멀티프로바이더 설계 그대로 — Anthropic
+  프로바이더 1개 추가 + `task→model` 매핑 테이블(설정 파일, SKILL 바인딩 표와 동기).
+  Claude 429/장애 시 Gemini 폴백(기존 체인 재사용).
+- **Haiku 는 검토중(미확정)**: 계정분류·파서변형이 후보지만, 분류 오류는 하류(DCF 입력)
+  오염 비용이 커서 Sonnet 5 대비 오류율·비용 실측 후 결정(골든 분류셋으로 A/B).
+- **프롬프트 캐싱**: 단계별 고정 컨텍스트(북 챕터+Brief)가 반복 투입되므로 Anthropic
+  prompt caching 으로 비용 절감 — 단계 바인딩 구조와 정확히 맞물림.
 
 ## 파서 인프라 (범용 인제스트 백본 — 사용자 강조)
 
