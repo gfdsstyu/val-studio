@@ -177,6 +177,47 @@ def check_beta_erp_consistency(
     return f
 
 
+# 추정 시계열 YoY 급변 경고 임계. 근거: 모델링_워크플로우_기초 "일부 연도 값·비중·YoY
+# 가 튀는 경우 재검토" — 오류 발견 장치의 정본 규율을 결정론 검사로 승격.
+YOY_JUMP_WARN = 0.50
+
+
+def check_projection_smoothness(
+    series: list[float],
+    *,
+    name: str = "revenue",
+    jump_threshold: float = YOY_JUMP_WARN,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """추정 시계열의 YoY 급변(절대 |YoY| > 임계) 감지 — '튀는 연도' 재검토 신호.
+
+    key-in 오류(0 하나 더)·driver 배선 실수가 흔히 특정 연도만 튀는 형태로 드러난다.
+    급변이 실제 사업 이벤트(신제품 출시 등)라면 근거를 남기고 무시하면 됨(WARN).
+    직전값이 0/음수인 구간은 YoY 정의 불가 — 건너뛴다.
+    """
+    jumps = []
+    for i in range(1, len(series)):
+        prev, cur = series[i - 1], series[i]
+        if prev <= 0:
+            continue
+        yoy = cur / prev - 1.0
+        if abs(yoy) > jump_threshold:
+            jumps.append({"index": i, "prev": prev, "cur": cur, "yoy": yoy})
+    if jumps:
+        worst = max(jumps, key=lambda j: abs(j["yoy"]))
+        f = Finding("projection_smoothness", Severity.WARN,
+                    f"{name} 추정 YoY 급변 {len(jumps)}건(최대 {worst['yoy']:+.0%}, "
+                    f"t={worst['index']}) — key-in/driver 오류 재검토 또는 사업 근거 기재",
+                    {"series": name, "jumps": jumps, "threshold": jump_threshold})
+    else:
+        f = Finding("projection_smoothness", Severity.PASS,
+                    f"{name} 추정 YoY 급변 없음(|YoY| ≤ {jump_threshold:.0%})",
+                    {"series": name, "threshold": jump_threshold})
+    if report is not None:
+        report.add(f)
+    return f
+
+
 def audit_dcf(
     inp: DcfSpineInput,
     result: DcfResult,
@@ -193,6 +234,7 @@ def audit_dcf(
     check_terminal_growth(inp.terminal_growth, inp.wacc,
                           long_term_gdp=long_term_gdp, report=report)
     check_terminal_value_weight(result, report=report)
+    check_projection_smoothness(list(inp.revenue), name="revenue", report=report)
     if wacc_inputs is not None:
         check_beta_provenance(wacc_inputs, report=report)
         check_beta_erp_consistency(wacc_inputs, report=report)

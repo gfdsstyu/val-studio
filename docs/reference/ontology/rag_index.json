@@ -346,6 +346,51 @@
       "has_frontmatter": true
     },
     {
+      "id": "모델링_워크플로우_기초",
+      "path": "docs/reference/모델링_워크플로우_기초.md",
+      "title": "모델링 워크플로우 기초 — 프로세스·역할·엑셀 규율",
+      "topic": "모델링 워크플로우 기초 — 업무 프로세스 8단계·모델러 역할·엑셀 규율(가독성/무결성)",
+      "track": "기타",
+      "layer": "methodology",
+      "parent": "모델링_실무_2강4강",
+      "doc_type": "knowledge",
+      "keywords": [
+        "모델링",
+        "워크플로우",
+        "업무 프로세스",
+        "RFI",
+        "Skeleton",
+        "Projection",
+        "Driver",
+        "모델러 역할",
+        "OP Model",
+        "Pro-Forma",
+        "Market Model",
+        "시트 구성",
+        "Assumption",
+        "Backdata",
+        "단방향 참조",
+        "hard number",
+        "Sanitizing",
+        "Cleansing",
+        "Zero Defect",
+        "Reader Friendliness",
+        "컬러코딩",
+        "Leveling"
+      ],
+      "canonical_questions": [
+        "모델링 업무는 어떤 순서(프로세스)로 진행하나?",
+        "모델러의 역할은 무엇인가?",
+        "엑셀 모델 시트는 어떻게 구성하고 참조 방향은?",
+        "모델 오류를 예방·발견하는 규율은?",
+        "RFI(자료 요청)는 언제 하나?"
+      ],
+      "links": [
+        "장표_작성법"
+      ],
+      "has_frontmatter": true
+    },
+    {
       "id": "밸류에이션_스코프_로드맵",
       "path": "docs/reference/밸류에이션_스코프_로드맵.md",
       "title": "밸류에이션 스코프 로드맵",
@@ -460,6 +505,46 @@
       ],
       "links": [
         "밸류에이션_스코프_로드맵"
+      ],
+      "has_frontmatter": true
+    },
+    {
+      "id": "상대가치_계절성_LTM",
+      "path": "docs/reference/상대가치_계절성_LTM.md",
+      "title": "상대가치법 — 계절성 유사회사 처리와 LTM 보정 (분·반기 평가)",
+      "topic": "상대가치법(CCA) 분·반기 평가 — 계절성 유사회사 처리와 LTM 보정",
+      "track": "기타",
+      "layer": "methodology",
+      "parent": "밸류에이션_스코프_로드맵",
+      "doc_type": "knowledge",
+      "keywords": [
+        "상대가치법",
+        "CCA",
+        "Comparable Company Analysis",
+        "멀티플",
+        "계절성",
+        "Seasonality",
+        "연환산",
+        "Annualize",
+        "LTM",
+        "Last Twelve Months",
+        "분기 평가",
+        "반기 평가",
+        "EV/EBITDA",
+        "PSR",
+        "유사회사 제외",
+        "normalization",
+        "보고서 문구"
+      ],
+      "canonical_questions": [
+        "분기·반기 기준 상대가치 평가에서 계절성은 어떻게 처리하나?",
+        "LTM 실적은 어떻게 계산하나?",
+        "계절성 큰 유사회사는 멀티플 산정에서 제외해야 하나?",
+        "1분기 실적 연환산(×4)의 문제는?"
+      ],
+      "links": [
+        "FDD_재무실사_정상화",
+        "msvalue_리포트예시_클래시스"
       ],
       "has_frontmatter": true
     },
@@ -592,6 +677,45 @@
         "비상장회사 평가에 주로 쓰는 방법은?"
       ],
       "links": [],
+      "has_frontmatter": true
+    },
+    {
+      "id": "장표_작성법",
+      "path": "docs/reference/장표_작성법.md",
+      "title": "장표 작성법 — 리포트 단계의 산출물 규율",
+      "topic": "장표(슬라이드) 작성법 — 메시지 우선·MECE 축·차트 선택 정본 (리포트 단계 산출물 규율)",
+      "track": "거래평가·DCF",
+      "layer": "methodology",
+      "parent": "모델링_워크플로우_기초",
+      "doc_type": "knowledge",
+      "keywords": [
+        "장표",
+        "슬라이드",
+        "Slide Writing",
+        "보고서",
+        "리포트",
+        "메시지",
+        "MECE",
+        "Head",
+        "Body",
+        "차트 선택",
+        "Waterfall",
+        "Mekko",
+        "Stacked bar",
+        "Leveling",
+        "스토리라인",
+        "밸류체인 축",
+        "value driver 분해"
+      ],
+      "canonical_questions": [
+        "장표(슬라이드)는 어떻게 구성하나?",
+        "어떤 차트를 언제 쓰나?",
+        "좋은 보고서 장표의 기준은?",
+        "MECE 축은 어떻게 잡나?"
+      ],
+      "links": [
+        "모델링_워크플로우_기초"
+      ],
       "has_frontmatter": true
     },
     {

@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from calc_core.checks import (  # noqa: E402
     audit_dcf, check_beta_erp_consistency, check_beta_provenance,
-    check_terminal_growth, check_terminal_value_weight,
+    check_projection_smoothness, check_terminal_growth, check_terminal_value_weight,
 )
 from calc_core.models import DcfResult, DcfSpineInput  # noqa: E402
 from calc_core.wacc import WaccInputs, kroll_size_decile, kroll_size_premium  # noqa: E402
@@ -134,6 +134,38 @@ def test_beta_provenance_missing_warns():
 def test_beta_provenance_present_passes():
     f = check_beta_provenance(_wacc_inp(beta_source="kicpa", beta_market="KOSPI"))
     assert f.severity is Severity.PASS
+
+
+# ── 추정 시계열 YoY 급변 (모델링_워크플로우_기초 '튀는 연도 재검토' 승격) ───────
+def test_smooth_series_passes():
+    f = check_projection_smoothness([100, 110, 121, 133, 146])
+    assert f.severity is Severity.PASS
+
+
+def test_yoy_jump_warns_with_location():
+    # t=2 에서 +100% 급변(key-in 오류 패턴) → WARN + 위치·크기 detail
+    f = check_projection_smoothness([100, 110, 220, 230], name="revenue")
+    assert f.severity is Severity.WARN
+    assert f.detail["jumps"][0]["index"] == 2
+    assert abs(f.detail["jumps"][0]["yoy"] - 1.0) < 1e-9
+
+
+def test_yoy_skips_nonpositive_base():
+    # 직전값 0/음수 → YoY 정의불가 구간은 건너뜀(허위 경고 방지)
+    f = check_projection_smoothness([0.0, 50.0, 60.0])
+    assert f.severity is Severity.PASS
+
+
+def test_audit_dcf_includes_smoothness():
+    inp = DcfSpineInput(
+        wacc=0.09, terminal_growth=0.01,
+        revenue=[100.0, 400.0], cogs=[40.0, 40.0], sga=[20.0, 20.0],
+        dep_amort=[5.0, 5.0], capex=[5.0, 5.0], delta_nwc_cash_adj=[0.0, 0.0],
+        non_operating_assets=0.0, net_debt=0.0, shares_outstanding=1,
+    )
+    rep = audit_dcf(inp, _result(25.0, 75.0))
+    assert any(f.rule == "projection_smoothness" and f.severity is Severity.WARN
+               for f in rep.findings)
 
 
 # ── 종합 audit_dcf ──────────────────────────────────────────────────────────

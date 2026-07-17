@@ -36,6 +36,9 @@
 | [PPA_무형자산평가](PPA_무형자산평가.md) | ⏳ 매수가격배분: MEEM(고객관계·CAC)·RFRM(로열티면제)·TAB·WARA | 블로그 |
 | [기업리서치_양식](기업리서치_양식.md) | ⭐ **Company Brief 10섹션 정본**(0단계 산출물): 개요·부문매출·제품·ValueChain·경쟁사·시장·peer배수 | pe양식 리서치 예시 2건 |
 | [FDD_재무실사_정상화](FDD_재무실사_정상화.md) | 재무실사: QOE(normalized EBITDA)·NWC(peg·pro forma·가격조정)·정상화 | 블로그 |
+| [모델링_워크플로우_기초](모델링_워크플로우_기초.md) | ⭐ **업무 프로세스 8단계(RFI→Skeleton→Projection→장표)**·모델 유형 3·엑셀 규율(단방향 참조·hard 1곳·컬러코딩 정본·Sanitizing) | 컨설팅 교육 docx 2편 |
+| [장표_작성법](장표_작성법.md) | 리포트 산출물 규율: Head/Body·MECE 축·**차트 선택표 8종**(Waterfall·Mekko 등) | 컨설팅 교육 docx |
+| [상대가치_계절성_LTM](상대가치_계절성_LTM.md) | ⏳상대가치 트랙 첫 챕터: 분·반기 평가 연환산 왜곡·계절성 peer 제외 원칙·**LTM 보정**·보고서 문구 3종 | polaris 블로그 |
 
 ## 온톨로지 + RAG 인덱스
 `ontology/` — 북을 자동 컴파일한 개념 그래프·RAG 검색 인덱스(SSOT→컴파일). 재생성:
