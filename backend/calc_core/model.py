@@ -36,18 +36,21 @@ class ModelConfig:
     terminal_discount_period: float | None = None
 
 
-def run_model(cfg: ModelConfig) -> DcfResult:
-    """가정 → 전체 DCF. 상류 모듈을 순서대로 조립."""
-    n = len(cfg.revenue)
+def build_spine(cfg: ModelConfig) -> DcfSpineInput:
+    """가정 → 상류 모듈 조립 → DcfSpineInput(dcf_run 입력). run_model 과 검증 계층 공용.
 
+    분리 이유: assemble 계층이 spine 을 얻어 dcf_run *전에* 검증 게이트(터미널성장·YoY
+    급변)를 걸고, *후에* 사후검사(TV비중·WC burn)를 하려면 spine 이 노출돼야 한다.
+    """
+    n = len(cfg.revenue)
     eb = ebit_mod.build_ebit_from_ratios(cfg.revenue, cfg.cogs_pct, cfg.sga_pct)
     fa_res = fa_mod.project_fixed_assets(cfg.asset_classes, cfg.new_capex_by_class)
     wc_res = wc_mod.project_working_capital(
         cfg.wc_items, cfg.wc_driver_by_item, cfg.base_net_working_capital
     )
     wacc_res = build_wacc(cfg.wacc_inputs)
-
-    spine = DcfSpineInput(
+    assert len(fa_res.dep_amort) == n and len(wc_res.delta_nwc_cash_adj) == n
+    return DcfSpineInput(
         wacc=wacc_res.wacc,
         terminal_growth=cfg.terminal_growth,
         revenue=eb.revenue,
@@ -62,5 +65,8 @@ def run_model(cfg: ModelConfig) -> DcfResult:
         mid_year_periods=cfg.mid_year_periods,
         terminal_discount_period=cfg.terminal_discount_period,
     )
-    assert len(fa_res.dep_amort) == n and len(wc_res.delta_nwc_cash_adj) == n
-    return dcf_run(spine)
+
+
+def run_model(cfg: ModelConfig) -> DcfResult:
+    """가정 → 전체 DCF. build_spine 조립 후 dcf_run."""
+    return dcf_run(build_spine(cfg))
