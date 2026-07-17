@@ -39,6 +39,10 @@
 | [모델링_워크플로우_기초](모델링_워크플로우_기초.md) | ⭐ **업무 프로세스 8단계(RFI→Skeleton→Projection→장표)**·모델 유형 3·엑셀 규율(단방향 참조·hard 1곳·컬러코딩 정본·Sanitizing) | 컨설팅 교육 docx 2편 |
 | [장표_작성법](장표_작성법.md) | 리포트 산출물 규율: Head/Body·MECE 축·**차트 선택표 8종**(Waterfall·Mekko 등) | 컨설팅 교육 docx |
 | [상대가치_계절성_LTM](상대가치_계절성_LTM.md) | ⏳상대가치 트랙 첫 챕터: 분·반기 평가 연환산 왜곡·계절성 peer 제외 원칙·**LTM 보정**·보고서 문구 3종 | polaris 블로그 |
+| [MnA_실사_가격구조_SPA](MnA_실사_가격구조_SPA.md) | ⭐ **딜 관점 정본**: 실사 4단계·QoE 조정 사다리·Net Debt/Debt-like·목표운전자본 함정 2종·SPA 7조항·가격조정 3방식+De Minimis/Basket/Cap | M&A ESSENCE(중기부·삼일 2020) |
+| [MnA_구조화_합병규제_세무](MnA_구조화_합병규제_세무.md) | Structuring 4유형·**합병가액 법제(기준시가 ±30%·본질가치 0.4/0.6)**·주식매수청구 가격·적격합병 요건 5·양도세 | M&A ESSENCE |
+| [MnA_사례집_유형별_시사점](MnA_사례집_유형별_시사점.md) | 10사례(SPAC·회생·PEF·U-turn 등) 구조·교훈 — 가격조정 75억 실측·SI/FI 가격차 | M&A CASEBOOK(2021) |
+| [앤트로픽_금융스킬_벤치마크](앤트로픽_금융스킬_벤치마크.md) | 공식 dcf/lbo/comps·audit-xls 원문 감사 — 채택 규약·DCF 버그 5종·서사 규격 | anthropics/financial-services |
 
 ## 온톨로지 + RAG 인덱스
 `ontology/` — 북을 자동 컴파일한 개념 그래프·RAG 검색 인덱스(SSOT→컴파일). 재생성:
