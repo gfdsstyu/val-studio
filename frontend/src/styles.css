@@ -1,70 +1,115 @@
-/* PwC Easy View 벤치마크 적용 (docs/benchmarks/samil_pwc_easy_view.md)
-   — 무채색 캔버스 + 브랜드 오렌지(#d04a02) 포인트, 직각(rounded-none), 고밀도 */
+/* Val-Studio 디자인 시스템 (docs/design_system.md §4 확정판)
+   버건디 #9f1239 + 웜 뉴트럴 틴트 · rounded-none · 1px 실선 · 고밀도 · 색 통제 95% */
 * { box-sizing: border-box; }
-:root { --brand: #d04a02; }
+:root {
+  --brand: #9f1239;        /* brand-800 Burgundy Wine */
+  --brand-hover: #b91c47;  /* brand-600 */
+  --brand-50: #fdf8f9;
+  --bg: #fcfbfb;           /* neutral-50 웜톤(순백 금지) */
+  --panel: #fffdfd;
+  --line: #e8e4e5;         /* neutral-200 */
+  --text: #362f31;         /* neutral-800(순흑 금지) */
+  --sub: #7a7173;          /* neutral-500 */
+  --lnb: #241f20;          /* neutral-900 */
+  --ok: #5b7c65;           /* Sage */
+  --warn: #c49b47;         /* Antique Gold */
+  --err: #cf3a36;          /* Burnt Rust — 면적 금지, 텍스트/보더만 */
+}
 body {
   margin: 0;
   font-family: "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
-  background: #f3f4f6;            /* gray-100 캔버스 */
-  color: #1f2937;                 /* gray-800 */
-  font-size: 13px;
-}
-.app { max-width: 1120px; margin: 0 auto; padding: 20px 16px 56px; }
-h1 { font-size: 19px; letter-spacing: -0.02em; margin: 0; font-weight: 700; }
-.topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.badge {
-  font-size: 11px; background: var(--brand); color: #fff;
-  padding: 3px 10px; font-weight: 600;            /* 직각 */
+  background: var(--bg); color: var(--text); font-size: 13px;
 }
 
-/* 패널: 순백 + 얇은 실선 + 직각, 헤더는 하단 실선 */
-.card {
-  background: #fff; border: 1px solid #e5e7eb; border-radius: 0;
-  box-shadow: 0 1px 2px rgba(0,0,0,.04); margin-bottom: 14px; padding: 0;
+/* ── 셸: 헤더 + 다크 LNB + 본문 + 하단 시트탭 ── */
+.shell { display: grid; grid-template-rows: 44px 1fr 34px; height: 100vh; }
+.header {
+  display: flex; align-items: center; gap: 12px; padding: 0 16px;
+  background: var(--panel); border-bottom: 1px solid var(--line);
 }
-.card > h2 {
-  font-size: 14px; margin: 0; padding: 10px 14px;
-  border-bottom: 1px solid #d1d5db; color: #1f2937; font-weight: 600;
-}
-.card > *:not(h2) { margin-left: 14px; margin-right: 14px; }
-.card > *:first-child + * { margin-top: 12px; }
-.card > *:last-child { margin-bottom: 14px; }
+.header .logo { font-weight: 800; font-size: 15px; letter-spacing: -0.02em; }
+.header .logo b { color: var(--brand); }
+.header .screen { color: var(--sub); font-size: 12px; border-left: 1px solid var(--line); padding-left: 12px; }
+.header .mode { margin-left: auto; font-size: 11px; color: var(--sub); }
 
+.body { display: grid; grid-template-columns: 176px 1fr; min-height: 0; }
+.lnb { background: var(--lnb); color: #b5adaf; overflow-y: auto; padding-top: 8px; }
+.lnb .group { font-size: 10px; letter-spacing: .08em; padding: 12px 14px 4px; color: #7a7173; }
+.lnb button {
+  display: block; width: 100%; text-align: left; background: none; border: 0;
+  border-left: 4px solid transparent; color: inherit; padding: 8px 14px;
+  font-size: 13px; cursor: pointer; border-radius: 0;
+}
+.lnb button:hover { color: #fff; background: rgba(255,255,255,.04); }
+.lnb button.active { color: #fff; border-left-color: var(--brand); background: rgba(159,18,57,.18); font-weight: 600; }
+.lnb button:disabled { color: #5c5456; cursor: default; }
+.lnb .soon { font-size: 10px; color: #5c5456; margin-left: 4px; }
+
+.main { overflow-y: auto; padding: 16px 18px 32px; }
+.main-inner { max-width: 1040px; }
+
+.sheettabs {
+  display: flex; align-items: stretch; background: var(--panel);
+  border-top: 1px solid var(--line); font-size: 12px; overflow-x: auto;
+}
+.sheettabs button {
+  background: none; border: 0; border-right: 1px solid var(--line); border-radius: 0;
+  padding: 0 16px; color: var(--sub); cursor: pointer;
+}
+.sheettabs button.active {
+  color: var(--brand); font-weight: 700; box-shadow: inset 0 2px 0 var(--brand);
+  background: var(--brand-50);
+}
+.sheettabs button:disabled { color: #c9c2c4; cursor: default; }
+
+/* ── 패널·폼 ── */
+h2 { font-size: 14px; margin: 0; font-weight: 600; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 0; margin-bottom: 14px; }
+.card > h2 { padding: 9px 14px; border-bottom: 1px solid var(--line); }
+.card .pad { padding: 12px 14px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
-label { display: block; font-size: 11px; color: #6b7280; margin-bottom: 2px; }
+label { display: block; font-size: 11px; color: var(--sub); margin-bottom: 2px; }
 input[type="text"], input[type="password"], input[type="number"] {
-  width: 100%; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 0;
-  font-size: 13px; background: #fff;
+  width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 0;
+  font-size: 13px; background: var(--panel); color: var(--text);
 }
 input:focus { outline: 2px solid var(--brand); outline-offset: -1px; border-color: transparent; }
 .row { margin-bottom: 8px; }
 
-button {
+button.primary {
   background: var(--brand); color: #fff; border: 0; border-radius: 0;
   padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
 }
-button:hover { filter: brightness(0.92); }
-button:disabled { background: #9ca3af; cursor: default; }
-button.ghost { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+button.primary:hover { background: var(--brand-hover); }
+button.primary:disabled { background: #a89fa1; cursor: default; }
+button.ghost {
+  background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 0; padding: 8px 14px; font-size: 13px; cursor: pointer;
+}
 
-/* KPI 위젯: 오렌지 배경 + 백색 텍스트 (Easy View 상단 KPI) */
+/* ── KPI: 핵심 결론 1개만 버건디, 나머지 무채색+버건디 수치 ── */
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
-.kpi { background: var(--brand); color: #fff; padding: 12px 14px; }
-.kpi .v { font-size: 20px; font-weight: 700; line-height: 1.2; }
-.kpi .k { font-size: 11px; opacity: .9; margin-top: 2px; }
+.kpi { border: 1px solid var(--line); padding: 12px 14px; background: var(--panel); }
+.kpi .v { font-size: 19px; font-weight: 700; color: var(--brand); line-height: 1.2; }
+.kpi .k { font-size: 11px; color: var(--sub); margin-top: 2px; }
+.kpi.hero { background: var(--brand); border-color: var(--brand); }
+.kpi.hero .v, .kpi.hero .k { color: #fff; }
+.kpi.hero .k { opacity: .85; }
 
-/* 고밀도 테이블: thead gray-50 + 오렌지 텍스트, 행 실선, 중심셀 orange-50 */
+/* ── 고밀도 테이블 ── */
 table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
-th, td { border: 1px solid #e5e7eb; padding: 4px 8px; text-align: right; }
-thead th { background: #f9fafb; color: var(--brand); font-weight: 600; }
-tbody th { background: #f9fafb; color: #374151; font-weight: 600; }
-td.center-cell { background: #ffedd5; font-weight: 700; }   /* orange-50 계열 */
+th, td { border: 1px solid var(--line); padding: 4px 8px; text-align: right; }
+thead th { background: #f6f3f4; color: var(--text); font-weight: 600; }
+tbody th { background: #f6f3f4; color: var(--text); font-weight: 600; }
+td.center-cell { background: var(--brand-50); color: var(--brand); font-weight: 700; }
 
-.finding { border-left: 4px solid #d1d5db; padding: 5px 10px; margin: 5px 0; background: #f9fafb; }
-.finding.warn { border-color: #eab308; }
-.finding.fail { border-color: #dc2626; }
-.finding.pass { border-color: #16a34a; color: #6b7280; }
-.muted { color: #6b7280; font-size: 12px; }
-.ok { color: #16a34a; font-weight: 600; }
-.bad { color: #dc2626; font-weight: 600; }
-.err { color: #dc2626; margin-top: 8px; white-space: pre-wrap; }
+/* ── 상태(muted 세트 — 면적 아닌 보더/텍스트) ── */
+.finding { border-left: 4px solid var(--line); padding: 5px 10px; margin: 5px 0; background: #f9f7f8; }
+.finding.warn { border-color: var(--warn); }
+.finding.fail { border-color: var(--err); }
+.finding.pass { border-color: var(--ok); color: var(--sub); }
+.muted { color: var(--sub); font-size: 12px; }
+.ok { color: var(--ok); font-weight: 600; }
+.bad { color: var(--err); font-weight: 600; }
+.err { color: var(--err); margin-top: 8px; white-space: pre-wrap; }
+.placeholder { color: var(--sub); padding: 40px 0; text-align: center; }

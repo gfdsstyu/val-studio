@@ -1,5 +1,8 @@
 import React, { useState } from "react";
 
+/* 셸 구조(docs/design_system.md §4): 헤더 + 다크 LNB(활성=버건디 좌측 실선)
+   + 본문 + 하단 시트탭. 색 통제: 브랜드는 액션 버튼·활성 표시·핵심 KPI 만. */
+
 /** BYOK: 키는 localStorage 에만 — 서버는 요청 헤더로 통과만 받는다. */
 const KEYS = { gemini: "byok_gemini_key", anthropic: "byok_anthropic_key" };
 const loadKey = (k) => localStorage.getItem(KEYS[k]) || "";
@@ -18,8 +21,7 @@ function ByokPanel() {
   };
 
   const validate = async () => {
-    setBusy(true);
-    setStatus(null);
+    setBusy(true); setStatus(null);
     try {
       const r = await fetch("/api/keys/validate", {
         method: "POST",
@@ -39,30 +41,30 @@ function ByokPanel() {
   return (
     <div className="card">
       <h2>BYOK — API 키 (클라이언트 보관, 서버 미저장)</h2>
-      <div className="grid2">
-        <div className="row">
-          <label>Gemini API Key (딥서치·임베딩)</label>
-          <input type="password" value={gemini} placeholder="AI Studio 키"
-            onChange={(e) => setGemini(e.target.value)} />
+      <div className="pad">
+        <div className="grid2">
+          <div className="row">
+            <label>Gemini API Key (딥서치·임베딩)</label>
+            <input type="password" value={gemini} placeholder="AI Studio 키"
+              onChange={(e) => setGemini(e.target.value)} />
+          </div>
+          <div className="row">
+            <label>Anthropic API Key (판단 보조 — 추후 배선)</label>
+            <input type="password" value={anthropic} placeholder="sk-ant-…"
+              onChange={(e) => setAnthropic(e.target.value)} />
+          </div>
         </div>
-        <div className="row">
-          <label>Anthropic API Key (판단 보조 — 추후 배선)</label>
-          <input type="password" value={anthropic} placeholder="sk-ant-…"
-            onChange={(e) => setAnthropic(e.target.value)} />
-        </div>
+        <button className="primary" onClick={save}>저장</button>{" "}
+        <button className="ghost" onClick={validate} disabled={busy || !gemini.trim()}>
+          {busy ? "검증 중…" : "Gemini 키 검증"}
+        </button>
+        {status && <div className={status.ok ? "ok" : "bad"} style={{ marginTop: 8 }}>{status.msg}</div>}
       </div>
-      <button onClick={save}>저장</button>{" "}
-      <button className="ghost" onClick={validate} disabled={busy || !gemini.trim()}>
-        {busy ? "검증 중…" : "Gemini 키 검증"}
-      </button>
-      {status && <div className={status.ok ? "ok" : "bad"} style={{ marginTop: 8 }}>{status.msg}</div>}
     </div>
   );
 }
 
-/** "1,2,3" | "1 2 3" → [1,2,3] */
-const parseSeries = (s) =>
-  s.split(/[\s,]+/).filter(Boolean).map(Number);
+const parseSeries = (s) => s.split(/[\s,]+/).filter(Boolean).map(Number);
 
 const DEMO = {
   wacc: "0.10", terminal_growth: "0.01",
@@ -159,80 +161,142 @@ function DcfCalculator() {
   return (
     <>
       <div className="card">
-        <h2>DCF 계산기 <span className="muted">— 결정론 엔진(calc_core), 모델 무관</span></h2>
-        <div className="grid2">
-          <div className="row"><label>WACC (소수, 예 0.10)</label>
-            <input type="text" value={form.wacc} onChange={set("wacc")} /></div>
-          <div className="row"><label>영구성장률 PGR (소수)</label>
-            <input type="text" value={form.terminal_growth} onChange={set("terminal_growth")} /></div>
-        </div>
-        {FIELD_LABELS.map(([k, label]) => (
-          <div className="row" key={k}>
-            <label>{label}</label>
-            <input type="text" value={form[k]} onChange={set(k)} />
+        <h2>DCF 입력 <span className="muted">— 결정론 엔진(calc_core)</span></h2>
+        <div className="pad">
+          <div className="grid2">
+            <div className="row"><label>WACC (소수, 예 0.10)</label>
+              <input type="text" value={form.wacc} onChange={set("wacc")} /></div>
+            <div className="row"><label>영구성장률 PGR (소수)</label>
+              <input type="text" value={form.terminal_growth} onChange={set("terminal_growth")} /></div>
           </div>
-        ))}
-        <div className="grid2">
-          <div className="row"><label>비영업자산 (백만원)</label>
-            <input type="text" value={form.non_operating_assets} onChange={set("non_operating_assets")} /></div>
-          <div className="row"><label>순차입부채 (백만원)</label>
-            <input type="text" value={form.net_debt} onChange={set("net_debt")} /></div>
-          <div className="row"><label>발행주식수 (주)</label>
-            <input type="text" value={form.shares_outstanding} onChange={set("shares_outstanding")} /></div>
-          <div className="row"><label>주장 주당가치 (선택 — 감사인 괴리 진단)</label>
-            <input type="text" value={form.claimed_per_share} onChange={set("claimed_per_share")}
-              placeholder="의견서 주장값(원)" /></div>
+          {FIELD_LABELS.map(([k, label]) => (
+            <div className="row" key={k}>
+              <label>{label}</label>
+              <input type="text" value={form[k]} onChange={set(k)} />
+            </div>
+          ))}
+          <div className="grid2">
+            <div className="row"><label>비영업자산 (백만원)</label>
+              <input type="text" value={form.non_operating_assets} onChange={set("non_operating_assets")} /></div>
+            <div className="row"><label>순차입부채 (백만원)</label>
+              <input type="text" value={form.net_debt} onChange={set("net_debt")} /></div>
+            <div className="row"><label>발행주식수 (주)</label>
+              <input type="text" value={form.shares_outstanding} onChange={set("shares_outstanding")} /></div>
+            <div className="row"><label>주장 주당가치 (선택 — 감사인 괴리 진단)</label>
+              <input type="text" value={form.claimed_per_share} onChange={set("claimed_per_share")}
+                placeholder="의견서 주장값(원)" /></div>
+          </div>
+          <button className="primary" onClick={runDcf} disabled={busy}>
+            {busy ? "계산 중…" : "DCF 계산"}
+          </button>
+          {err && <div className="err">{err}</div>}
         </div>
-        <button onClick={runDcf} disabled={busy}>{busy ? "계산 중…" : "DCF 계산"}</button>
-        {err && <div className="err">{err}</div>}
       </div>
 
       {res && (
         <div className="card">
           <h2>결과</h2>
-          <div className="kpis">
-            <div className="kpi"><div className="v">{fmt(res.per_share)} 원</div><div className="k">주당가치</div></div>
-            <div className="kpi"><div className="v">{fmt(res.enterprise_value)}</div><div className="k">EV (백만원)</div></div>
-            <div className="kpi"><div className="v">{fmt(res.equity_value)}</div><div className="k">지분가치 (백만원)</div></div>
-            <div className="kpi"><div className="v">{res.tv_weight != null ? (res.tv_weight * 100).toFixed(1) + "%" : "-"}</div><div className="k">TV 비중</div></div>
-          </div>
-
-          <h2 style={{ marginTop: 18 }}>가정 타당성 (audit)</h2>
-          {res.findings.filter((f) => f.severity !== "pass").length === 0 && (
-            <div className="finding pass">경고 없음 — 전 게이트 통과</div>
-          )}
-          {res.findings.filter((f) => f.severity !== "pass").map((f, i) => (
-            <div key={i} className={`finding ${f.severity}`}>
-              <b>[{f.severity.toUpperCase()}] {f.rule}</b> — {f.message}
+          <div className="pad">
+            <div className="kpis">
+              <div className="kpi hero"><div className="v">{fmt(res.per_share)} 원</div><div className="k">주당가치</div></div>
+              <div className="kpi"><div className="v">{fmt(res.enterprise_value)}</div><div className="k">EV (백만원)</div></div>
+              <div className="kpi"><div className="v">{fmt(res.equity_value)}</div><div className="k">지분가치 (백만원)</div></div>
+              <div className="kpi"><div className="v">{res.tv_weight != null ? (res.tv_weight * 100).toFixed(1) + "%" : "-"}</div><div className="k">TV 비중</div></div>
             </div>
-          ))}
 
-          {res.gap_diagnosis && (
-            <>
-              <h2 style={{ marginTop: 18 }}>괴리 구조버그 진단</h2>
-              <div className={`finding ${res.gap_diagnosis.severity}`}>{res.gap_diagnosis.message}</div>
-            </>
-          )}
+            <h2 style={{ marginTop: 18 }}>가정 타당성 (audit)</h2>
+            {res.findings.filter((f) => f.severity !== "pass").length === 0 && (
+              <div className="finding pass">경고 없음 — 전 게이트 통과</div>
+            )}
+            {res.findings.filter((f) => f.severity !== "pass").map((f, i) => (
+              <div key={i} className={`finding ${f.severity}`}>
+                <b>[{f.severity.toUpperCase()}] {f.rule}</b> — {f.message}
+              </div>
+            ))}
 
-          <h2 style={{ marginTop: 18 }}>민감도 (WACC × PGR) <span className="muted">— 파란 셀 = base</span></h2>
-          <SensitivityTable sens={res.sensitivity} />
+            {res.gap_diagnosis && (
+              <>
+                <h2 style={{ marginTop: 18 }}>괴리 구조버그 진단</h2>
+                <div className={`finding ${res.gap_diagnosis.severity}`}>{res.gap_diagnosis.message}</div>
+              </>
+            )}
+
+            <h2 style={{ marginTop: 18 }}>민감도 (WACC × PGR) <span className="muted">— 강조 셀 = base</span></h2>
+            <SensitivityTable sens={res.sensitivity} />
+          </div>
         </div>
       )}
     </>
   );
 }
 
+/* 워크플로우 네비 정의 — 준비중 화면은 disabled (단계↔화면 매핑) */
+const NAV = [
+  { group: "설정", items: [{ id: "byok", label: "API 키 (BYOK)" }] },
+  {
+    group: "평가 워크플로우",
+    items: [
+      { id: "brief", label: "0. Company Brief", soon: true },
+      { id: "peer", label: "3b. 유사회사 선정", soon: true },
+      { id: "dcf", label: "4. DCF 계산" },
+      { id: "scenario", label: "4b. 시나리오", soon: true },
+    ],
+  },
+  {
+    group: "감사인 트랙",
+    items: [{ id: "diff", label: "xlsx 왕복 diff", soon: true }],
+  },
+];
+
+const SCREENS = {
+  byok: { title: "API 키 (BYOK)", el: <ByokPanel /> },
+  dcf: { title: "DCF 계산", el: <DcfCalculator /> },
+};
+
 export default function App() {
+  const [page, setPage] = useState("dcf");
+  const flat = NAV.flatMap((g) => g.items);
+  const current = flat.find((i) => i.id === page);
+
   return (
-    <div className="app">
-      <div className="topbar">
-        <h1>val-studio</h1>
-        <span className="badge">LOCAL · BYOK</span>
+    <div className="shell">
+      <div className="header">
+        <span className="logo">val<b>·</b>studio</span>
+        <span className="screen">{current?.label}</span>
+        <span className="mode">LOCAL · BYOK · 판단은 유저, 계산은 엔진</span>
       </div>
-      <ByokPanel />
-      <DcfCalculator />
-      <div className="muted">
-        판단은 LLM(유저 보조)·계산은 결정론 엔진 — 모든 결과는 audit 게이트를 함께 표시합니다.
+
+      <div className="body">
+        <nav className="lnb">
+          {NAV.map((g) => (
+            <div key={g.group}>
+              <div className="group">{g.group}</div>
+              {g.items.map((it) => (
+                <button key={it.id} disabled={it.soon}
+                  className={page === it.id ? "active" : ""}
+                  onClick={() => setPage(it.id)}>
+                  {it.label}{it.soon && <span className="soon">준비중</span>}
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+
+        <main className="main">
+          <div className="main-inner">
+            {SCREENS[page]?.el ?? <div className="placeholder">준비중</div>}
+          </div>
+        </main>
+      </div>
+
+      <div className="sheettabs">
+        {flat.map((it) => (
+          <button key={it.id} disabled={it.soon}
+            className={page === it.id ? "active" : ""}
+            onClick={() => setPage(it.id)}>
+            {it.label}
+          </button>
+        ))}
       </div>
     </div>
   );
