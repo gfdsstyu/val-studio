@@ -27,8 +27,7 @@ body {
   display: flex; align-items: center; gap: 12px; padding: 0 16px;
   background: var(--panel); border-bottom: 1px solid var(--line);
 }
-.header .logo { font-weight: 800; font-size: 15px; letter-spacing: -0.02em; }
-.header .logo b { color: var(--brand); }
+.header .logo-img { height: 20px; display: block; }
 .header .screen { color: var(--sub); font-size: 12px; border-left: 1px solid var(--line); padding-left: 12px; }
 .header .mode { margin-left: auto; font-size: 11px; color: var(--sub); }
 

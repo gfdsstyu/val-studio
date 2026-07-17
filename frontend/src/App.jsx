@@ -261,7 +261,7 @@ export default function App() {
   return (
     <div className="shell">
       <div className="header">
-        <span className="logo">val<b>·</b>studio</span>
+        <img src="/logo@2x.png" alt="Val.Studio" className="logo-img" />
         <span className="screen">{current?.label}</span>
         <span className="mode">LOCAL · BYOK · 판단은 유저, 계산은 엔진</span>
       </div>
