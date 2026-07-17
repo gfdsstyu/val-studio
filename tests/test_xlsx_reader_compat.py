@@ -1,6 +1,6 @@
 """xlsx_reader 외부 파일 호환 테스트 — sharedStrings·수식 문자열 결과(t="str").
 
-버그 실측(2026-07-17): MSVALUE 리포트 예시의 `=CHOOSE(...)` 문자열 결과("Downside")를
+버그 실측(2026-07-17): 실무 리포트 xlsx 의 `=CHOOSE(...)` 문자열 결과("Downside")를
 숫자로 강제 변환하다 크래시. 합성 xlsx 로 회귀 고정 + 실파일 있으면 스모크.
 stdlib: `python tests/test_xlsx_reader_compat.py`
 """
@@ -73,10 +73,13 @@ def test_shared_and_formula_strings(tmp_dir: Path | None = None) -> None:
     assert s["F1"].value == "#DIV/0!"           # 에러 텍스트 보존
 
 
-def test_real_msvalue_report_smoke() -> None:
-    real = Path(r"D:\Valuation\DCF_비올\강의자료\(MSVALUE) 리포트 예시_기업가치평가연수 1기.xlsx")
-    if not real.exists():
-        print("  (실파일 없음 — skip)")
+def test_real_report_smoke() -> None:
+    """실무 리포트 xlsx 스모크 — 경로는 env VAL_REPORT_XLSX (미설정 시 skip)."""
+    import os
+    p = os.environ.get("VAL_REPORT_XLSX")
+    real = Path(p) if p else None
+    if real is None or not real.exists():
+        print("  (VAL_REPORT_XLSX 미설정/없음 — skip)")
         return
     wb = read_workbook(str(real))
     assert "6.시나리오" in wb
