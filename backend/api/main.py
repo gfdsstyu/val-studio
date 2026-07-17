@@ -119,6 +119,107 @@ def validate_key(x_gemini_key: str | None = Header(default=None)) -> dict:
         raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
 
 
+# ── 프로젝트 저장 (로컬 JSON 폴더 — ia_ux_architecture.md 권고안) ────────────
+# 프로젝트 = 밸류에이션 용역 1건(워크북 메타포). 모드는 생성 시 1회 속성 —
+# 전환 API 는 의도적으로 없다(감사인 독립성 = 데이터 격리).
+import json as _json  # noqa: E402
+import re as _re  # noqa: E402
+import uuid  # noqa: E402
+from datetime import datetime, timezone  # noqa: E402
+
+_PROJECTS_DIR = _ROOT / "var" / "projects"
+_MODES = {"appraiser", "auditor"}
+_ID_RE = _re.compile(r"^[0-9a-f]{12}$")
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _proj_path(pid: str) -> Path:
+    if not _ID_RE.fullmatch(pid):                       # 경로 탈출 방지
+        raise HTTPException(400, f"잘못된 프로젝트 id: {pid}")
+    return _PROJECTS_DIR / f"{pid}.json"
+
+
+def _load_project(pid: str) -> dict:
+    p = _proj_path(pid)
+    if not p.exists():
+        raise HTTPException(404, f"프로젝트 없음: {pid}")
+    return _json.loads(p.read_text(encoding="utf-8"))
+
+
+def _save_project(proj: dict) -> None:
+    _PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+    _proj_path(proj["id"]).write_text(
+        _json.dumps(proj, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+@app.get("/api/projects")
+def list_projects() -> list[dict]:
+    """목록(메타만) — 홈 화면. 수정시각 내림차순."""
+    out = []
+    if _PROJECTS_DIR.is_dir():
+        for f in _PROJECTS_DIR.glob("*.json"):
+            try:
+                p = _json.loads(f.read_text(encoding="utf-8"))
+                out.append({k: p.get(k) for k in
+                            ("id", "name", "mode", "company", "created_at", "updated_at")})
+            except (_json.JSONDecodeError, OSError):
+                continue
+    return sorted(out, key=lambda p: p.get("updated_at") or "", reverse=True)
+
+
+@app.post("/api/projects", status_code=201)
+async def create_project(request: Request) -> dict:
+    """{name, mode: appraiser|auditor, company?} → 새 프로젝트."""
+    d = await request.json()
+    name = (d.get("name") or "").strip()
+    mode = d.get("mode")
+    if not name:
+        raise HTTPException(422, "name 필수")
+    if mode not in _MODES:
+        raise HTTPException(422, f"mode 는 {sorted(_MODES)} 중 하나")
+    proj = {
+        "id": uuid.uuid4().hex[:12], "name": name, "mode": mode,
+        "company": (d.get("company") or "").strip(),
+        "created_at": _now(), "updated_at": _now(),
+        "data": {},                                     # 단계별 입력·산출물 저장소
+    }
+    _save_project(proj)
+    return proj
+
+
+@app.get("/api/projects/{pid}")
+def get_project(pid: str) -> dict:
+    return _load_project(pid)
+
+
+@app.patch("/api/projects/{pid}")
+async def update_project(pid: str, request: Request) -> dict:
+    """메타(name·company)·data 부분 갱신. mode 는 불변(전환 금지 원칙)."""
+    proj = _load_project(pid)
+    d = await request.json()
+    if "mode" in d and d["mode"] != proj["mode"]:
+        raise HTTPException(422, "mode 는 변경 불가 — 역할이 바뀌면 새 프로젝트를 생성")
+    for k in ("name", "company"):
+        if k in d:
+            proj[k] = str(d[k]).strip()
+    if isinstance(d.get("data"), dict):
+        proj["data"].update(d["data"])
+    proj["updated_at"] = _now()
+    _save_project(proj)
+    return proj
+
+
+@app.delete("/api/projects/{pid}", status_code=204)
+def delete_project(pid: str) -> None:
+    p = _proj_path(pid)
+    if not p.exists():
+        raise HTTPException(404, f"프로젝트 없음: {pid}")
+    p.unlink()
+
+
 # 프론트 빌드가 있으면 정적 서빙 (없으면 API 전용 — dev 는 Vite 5173 + 프록시)
 _DIST = _ROOT / "frontend" / "dist"
 if _DIST.is_dir():

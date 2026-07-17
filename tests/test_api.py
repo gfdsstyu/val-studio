@@ -84,6 +84,32 @@ def test_keys_validate_requires_header():
     assert r.status_code == 400
 
 
+# ── /api/projects — 로컬 JSON CRUD + 모드 불변 원칙 ─────────────────────────
+def test_projects_crud_roundtrip():
+    p = C.post("/api/projects",
+               json={"name": "테스트 평가", "mode": "appraiser", "company": "OO사"}).json()
+    pid = p["id"]
+    try:
+        assert p["mode"] == "appraiser" and p["data"] == {}
+        assert any(x["id"] == pid for x in C.get("/api/projects").json())
+        # data 부분 갱신 + 메타 수정
+        p2 = C.patch(f"/api/projects/{pid}",
+                     json={"company": "XX사", "data": {"dcf_input": {"wacc": "0.1"}}}).json()
+        assert p2["company"] == "XX사" and p2["data"]["dcf_input"]["wacc"] == "0.1"
+        # 모드 변경은 거부(역할 바뀌면 새 프로젝트 원칙)
+        r = C.patch(f"/api/projects/{pid}", json={"mode": "auditor"})
+        assert r.status_code == 422
+    finally:
+        assert C.delete(f"/api/projects/{pid}").status_code == 204
+    assert C.get(f"/api/projects/{pid}").status_code == 404
+
+
+def test_projects_validation():
+    assert C.post("/api/projects", json={"name": "", "mode": "appraiser"}).status_code == 422
+    assert C.post("/api/projects", json={"name": "x", "mode": "??"}).status_code == 422
+    assert C.get("/api/projects/../../etc").status_code in (400, 404)   # 경로 탈출 방어
+
+
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding="utf-8")

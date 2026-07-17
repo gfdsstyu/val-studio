@@ -108,6 +108,54 @@ td.center-cell { background: var(--brand-50); color: var(--brand); font-weight: 
 .finding.fail { border-color: var(--err); }
 .finding.pass { border-color: var(--ok); color: var(--sub); }
 .muted { color: var(--sub); font-size: 12px; }
+
+/* ── 홈(프로젝트 목록 — SharePoint 벤치마크: 세로선 無·헤더 생략·상대시간) ── */
+.home { max-width: 880px; margin: 0 auto; padding: 56px 24px; }
+.home-title { font-size: 28px; font-weight: 800; text-align: center; margin: 0 0 6px; }
+.home-sub { text-align: center; color: var(--sub); margin-bottom: 28px;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 10px 0; }
+.home-actions { text-align: center; margin-bottom: 24px; }
+.proj-list { margin-top: 8px; }
+.proj-row {
+  display: flex; align-items: center; gap: 14px; padding: 13px 8px;
+  border-bottom: 1px solid #f1edee; cursor: pointer;
+}
+.proj-row:hover { background: var(--brand-50); }
+.proj-name { font-weight: 600; flex: 1; }
+.proj-company { color: var(--sub); width: 180px; }
+.proj-time { color: var(--sub); font-size: 12px; width: 90px; text-align: right; }
+.proj-del { background: none; border: 0; color: var(--sub); font-size: 15px;
+  cursor: pointer; padding: 2px 8px; border-radius: 0; }
+.proj-del:hover { color: var(--err); }
+
+.mode-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; color: #fff; }
+.mode-badge.appraiser { background: var(--brand); }
+.mode-badge.auditor { background: var(--text); }
+
+.mode-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mode-pick button {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 0;
+  padding: 10px 12px; text-align: left; cursor: pointer; color: var(--text);
+}
+.mode-pick button span { display: block; font-size: 11px; color: var(--sub); margin-top: 3px; }
+.mode-pick button.picked { border-color: var(--brand); outline: 1px solid var(--brand); }
+.mode-pick button.picked b { color: var(--brand); }
+
+.linklike { background: none; border: 0; color: var(--sub); font-size: 12px;
+  cursor: pointer; padding: 0; border-radius: 0; }
+.linklike:hover { color: var(--brand); }
+
+/* ── 우측 컨텍스트 패널(접이식, 기본 접힘) ── */
+.body.with-panel { grid-template-columns: 176px 1fr 280px; }
+.context-panel { border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; }
+.context-panel h2 { padding: 9px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.context-panel .pad { padding: 12px 14px; }
+.panel-toggle {
+  position: fixed; right: 0; top: 50%; transform: translateY(-50%);
+  background: var(--panel); border: 1px solid var(--line); border-right: 0;
+  border-radius: 0; padding: 10px 4px; color: var(--sub); cursor: pointer; font-size: 12px;
+}
+.panel-toggle:hover { color: var(--brand); }
 .ok { color: var(--ok); font-weight: 600; }
 .bad { color: var(--err); font-weight: 600; }
 .err { color: var(--err); margin-top: 8px; white-space: pre-wrap; }

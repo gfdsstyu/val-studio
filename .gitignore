@@ -37,3 +37,6 @@ scratch/
 # frontend
 frontend/node_modules/
 frontend/dist/
+
+# 로컬 앱 데이터(프로젝트 JSON)
+var/
