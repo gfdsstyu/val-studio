@@ -358,6 +358,14 @@ CRP 다운로드. 모든 값은 provenance 태깅 — **자동(DART/ECOS)이든 
 게이트**, 복붙은 confidence=0.9(merge_confidence 약한고리로 파생 WACC 신뢰도 자동 하향) + 도메인
 범위 sanity(β 0~3·금리 0~30%·MRP 2~15%, hard=FAIL·soft=WARN).
 
+**✅ WACC 어셈블리(`backend/assemble/wacc_inputs.py`)** — 커넥터 원천값 → 검증된 WaccInputs →
+build_wacc 를 잇는 오케스트레이션 계층(calc_core 순수 엔진과 ingest 커넥터 사이의 다리).
+`assemble_wacc_inputs`: Rf(paste/ECOS)·MRP(paste)·βu(peers 무부채화, price_client β 또는 Bloomberg
+복붙)·Kd(BondYieldMatrix 등급×만기 룩업)·Size(Kroll decile, price_client 시총)를 모아 조립하되,
+**모든 커넥터 ValidationReport 를 하나로 fold** → FAIL 하나라도 있으면 blocked(조립 차단, result=None).
+checks 의 β provenance·β/ERP 시장정합 게이트도 통합. 실측 검증: Rf 3.45%+MRP 8%+peer βu+BBB 5Y Kd
+→ **WACC ≈11.1%(비올 골든 11.3% 대역 일치)**. 7테스트. calc_core/model.py(엔드투엔드)가 이 WaccInputs 를 소비.
+
 **vintage(look-ahead) 이중가드**(macro_client — 사용자 요청 "llm이 사용할 때 평가기준일 기준인지
 확인"의 결정론 구현): 거시값은 날짜가 둘 — ①참조기간 ②vintage(공표시점). (a) 실적인데 참조기간이
 기준일 이후 = FAIL(미확정 실적), (b) vintage 가 기준일 이후 = FAIL(나중 개정치), (c) staleness = WARN.
