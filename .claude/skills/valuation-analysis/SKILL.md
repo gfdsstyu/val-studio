@@ -85,7 +85,7 @@ python scripts/ingest.py <파일경로>
   (references/msvalue_리포트예시 §E — 클래시스 실측 83→11→9→6사). 도구 `peer.py`:
   | Step | 기준 | 담당 |
   |---|---|---|
-  | 1a 코드 확정 | rough 유사회사 시드 → 그들의 KSIC 역산(**2~3개 union**) | **판단**(Brief ⑦⑨ 시드) → `peer.py --seeds` |
+  | 1a 코드 확정 | rough 유사회사 시드 → 그들의 KSIC 역산(**2~3개 union**) | **판단**(Brief ⑦⑨ 시드) → `peer.py --seeds` + `ksic.py`(로컬 2,000코드 표 검색·계층) |
   | 1b 모집단 필터 | 확정 코드들로 상장사 풀 필터 | 결정론 |
   | 2 사업 유사성 | 사업보고서·홈페이지로 주요사업 유사 판단 | **LLM** ← Brief ⑤⑦⑧ 근거, **사유 필수**(무사유 판정은 도구가 거부) |
   | 3 매출 비중 | DART 매출비중 임계(예: 관련사업 70%) | 결정론(수치 비교) |
@@ -162,6 +162,8 @@ echo '{"risk_free":..,"equity_risk_premium":..,"unlevered_beta":..,"target_debt_
 - `audit.py` — 독립 재계산 + 주장값 차이 + 민감도(감사인 트랙·검증 에이전트용).
 - `ingest.py` — 파일 → 방식·유형 라우팅 + 프로파일.
 - `brief.py` — 0단계: XBRL → Company Brief 10섹션 골격(②④⑩ 기계 프리필 + LLM 슬롯).
+- `peer.py` — 3b-pre: 유사회사 4-step 퍼널(--seeds 코드역산 / --judgments 실행+감사리포트).
+- `ksic.py` — KSIC 로컬 조회: `"의료용 기기"` 키워드 검색 / `2719` 코드 계층(상위·하위).
 - 전환사채/RCPS 평가: `backend/calc_core/convertible.py`(이항+TF) 직접 호출 —
   `price_convertible(ConvertibleInputs(...))`. DCF와 별개 수학(옵션평가).
 
