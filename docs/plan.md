@@ -305,6 +305,22 @@ API가 없는 소스(Bloomberg 채권수익률 매트릭스·베타, 한공회 �
 |---|---|---|
 | Real GDP·CPI·명목임금 성장률 | **EIU**(비올 원본 출처) / 한국은행 ECOS API / IMF WEO / OECD | `macro_client.py` (EIU 구독無 시 ECOS 자동 or 복붙) |
 
+#### ⭐ 거시 데이터 = 프리페치 캐시 + vintage 가드 (사용자 착안 2026-07-18)
+거시 예측치는 느리게 변하고 프로젝트 간 공유 → **미리 받아 로컬 캐시**(var/macro/)에 저장.
+단 **"평가기준일 맞나?"를 프롬프트로만 확인하면 약함** — 우리 "판단은 LLM, 검증은 코드" 원칙대로
+**vintage 결정론 가드**로 승격:
+- **각 시리즈에 vintage(발표·as-of 일자) 태깅** 저장(예: IMF WEO 2024-04판, ECOS 조회일).
+  같은 GDP 전망도 4월판/10월판이 다르므로 값만이 아니라 vintage 가 provenance 의 일부.
+- **가드 규칙(`check_macro_vintage`)**:
+  - 🔴 **look-ahead**: vintage > 평가기준일 → FAIL(그 시점 없던 데이터 = 미래정보 유입,
+    소급평가·감사인 트랙에서 치명적).
+  - 🟡 **staleness**: vintage 가 평가기준일보다 과도히 이전(예: >12개월) → WARN.
+  - ✅ vintage 가 평가기준일 직전 최신판 → PASS(그 시점 이용가능 최신).
+- **LLM 프롬프트는 2차 레이어**(권고): "이 거시치는 {vintage} 기준 — 평가기준일 {date}에
+  적합한지 확인" 안내. 하지만 강제는 가드가, 프롬프트는 보조(판단보조 원칙과 동일).
+- 교육 정본의 "Rf 가정과 위험프리미엄 가정 일관성"([[msvalue_DCF_교육_정본]] §3.2)의 시간축 판.
+  → 거시뿐 아니라 Rf·MRP·베타 vintage 도 같은 평가기준일 창에 정렬돼야 함(확장 적용).
+
 ### WACC 입력 (할인율 서식 로직 — 교육자료 근거)
 | 입력 | 방법론(교육자료) | 출처 |
 |---|---|---|
@@ -316,6 +332,38 @@ API가 없는 소스(Bloomberg 채권수익률 매트릭스·베타, 한공회 �
 | **Kd 타인자본비용** | **신용등급×만기 회사채 수익률 매트릭스**; BBB-=최저투자등급; Moody's Baa proxy | KOFIABOND 등급별 민평수익률 / 신용등급=KIS·NICE·한기평, DART 사업보고서, **NICE-bizline(복붙)** |
 | **자본구조 D/E** | minority=현행 유지 / controlling=산업표준·최적 | peer 시총·부채 |
 > **검증(정합성)**: WARA ↔ IRR ↔ WACC reconciliation(PPA calibration, ±1% 이내) — Deloitte 교육자료 강조. 감사인 트랙 테스트 항목으로도 재사용.
+
+### ⭐ 외부 데이터 조달 갭·우선순위 (2026-07-18, MSVALUE DCF 교육 정본 대조)
+설계(macro_client·price_client·manual_paste)는 있으나 **커넥터는 아직 0개 구축**. 로컬 BYOK
+도구라 4대법인의 **Bloomberg(유료·API無)는 배제**, 무료 소스로 대체 — 교육 정본이 "평가인 직접
+계산 Daily beta(자산평가사·Local 법인)" 를 정당한 실무로 인정하므로 **β도 우리가 직접 계산 가능**.
+
+| 입력 | 우리 현실적 소스 | 조달 방식 | 지금 닫을 수 있나 | 현 상태 |
+|---|---|---|---|---|
+| 대상·peer 재무제표 | **OpenDART API** | 무료(키) | ✅ | dart_client 설계·부분 |
+| peer 주가·시총·**β 회귀** | **FinanceDataReader/pykrx** | 무료(Python) | ✅ **핵심 갭** | ⬜ price_client 미구축 |
+| Rf 국고채(10년) | **한국은행 ECOS API** / KOFIABOND | 무료(키) | ✅ | ⬜ |
+| 거시 GDP·CPI·임금 | **ECOS** / IMF WEO / OECD | 무료(키) | ✅ | ⬜ macro_client 미구축 |
+| **MRP(국내)** | **한공회 시장위험프리미엄 가이던스** | 무료 PDF(연간) | 🔶 수치 수기 | ⬜ 값 미확보 |
+| CRP·글로벌 ERP 교차검증 | **Damodaran**(stern.nyu.edu) | 무료 다운로드 | ✅ | ⬜ |
+| Size premium(CSRP) | **Kroll** deciles | 유료(연간표) | 🔶 2023 하드코딩 有 | ✅ wacc.py 테이블(갱신 필요) |
+| Kd 신용등급×만기 | **KOFIABOND 등급별 민평** + 신용등급(DART 사업보고서·KIS/NICE) | 반무료·수기 | 🔶 복붙 경로 | ⬜ manual_paste |
+| 산업 CAGR·시장규모 | **Gemini 검색 그라운딩**(구축됨) + 증권사 리포트 | BYOK | ✅ | ✅ 딥서치 |
+
+**결론**: WACC 트랙 데이터의 ~80%가 무료 Python(FinanceDataReader/pykrx)+ECOS+Damodaran 으로
+**지금 닫힌다**(Bloomberg 불요). 최우선 신규 커넥터 = **price_client(주가→β 회귀·peer 자본구조)**
+— β·D/E·시가총액을 한 번에 공급하는 최대 레버리지. 그 다음 ECOS(Rf·거시). 모든 값은 provenance
+태깅(자동 API vs 수기 복붙 신뢰수준 구분).
+
+#### ⭐ 조달 방식 2분기 — 자동 커넥터 vs 복붙 UX (사용자 확정 2026-07-18)
+- **자동 커넥터**(API/Python): DART·price_client(주가·β)·ECOS(Rf·거시)·Damodaran. 프리페치+
+  vintage 가드.
+- **복붙 UX**(무료 API 없음): **Bloomberg 베타·채권수익률, 한공회 베타·MRP** 등 4대법인이 유료
+  터미널로 받는 값 → **사용자가 화면에서 원본 표/수치를 붙여넣기** → 전처리·파싱·validators
+  검증게이트 → provenance("수기 @날짜/사용자", 신뢰수준 별도) → wacc.py 소비. 설계 = plan
+  §manual_paste. **UI 컴포넌트: PastePanel**(WACC 화면 내 — 붙여넣기→미리보기 파싱→검증 결과→
+  확정). 자동 소스가 있으면 커넥터 우선, 없거나 사용자가 Bloomberg 값을 신뢰하면 복붙으로 대체.
+- 원칙: **자동이든 복붙이든 동일 validators 게이트 통과**해야 엔진 투입(소스만 다르고 규율은 하나).
 
 ### 유사기업(peer) — WACC 정확도의 핵심 (사용자 강조)
 
