@@ -341,9 +341,9 @@ API가 없는 소스(Bloomberg 채권수익률 매트릭스·베타, 한공회 �
 | 입력 | 우리 현실적 소스 | 조달 방식 | 지금 닫을 수 있나 | 현 상태 |
 |---|---|---|---|---|
 | 대상·peer 재무제표 | **OpenDART API** | 무료(키) | ✅ | dart_client 설계·부분 |
-| peer 주가·시총·**β 회귀** | **FinanceDataReader/pykrx** | 무료(Python) | ✅ **핵심 갭** | 🔨 **price_client 구축**(β OLS·조정·시총·look-ahead 가드, 6테스트. fdr 커넥터=lazy) |
-| Rf 국고채(10년) | **한국은행 ECOS API** / KOFIABOND | 무료(키) | ✅ | ⬜ |
-| 거시 GDP·CPI·임금 | **ECOS** / IMF WEO / OECD | 무료(키) | ✅ | ⬜ macro_client 미구축 |
+| peer 주가·시총·**β 회귀** | **FinanceDataReader/pykrx** | 무료(Python) | ✅ **핵심 갭** | ✅ **price_client 구축**(β OLS·조정·시총·look-ahead 가드, 6테스트. fdr 커넥터=lazy) |
+| Rf 국고채(10년) | **한국은행 ECOS API** / KOFIABOND | 무료(키) | ✅ | 🔨 EcosProvider(macro_client) 배선됨, Rf 통계코드 매핑 잔여 |
+| 거시 GDP·CPI·임금 | **ECOS** / IMF WEO / OECD | 무료(키) | ✅ | ✅ **macro_client 구축**(vintage 이중가드·EIU 복붙·as-of 선택·EcosProvider, 9테스트) |
 | **MRP(국내)** | **한공회 시장위험프리미엄 가이던스** | 무료 PDF(연간) | 🔶 수치 수기 | ⬜ 값 미확보 |
 | CRP·글로벌 ERP 교차검증 | **Damodaran**(stern.nyu.edu) | 무료 다운로드 | ✅ | ⬜ |
 | Size premium(CSRP) | **Kroll** deciles | 유료(연간표) | 🔶 2023 하드코딩 有 | ✅ wacc.py 테이블(갱신 필요) |
@@ -351,9 +351,16 @@ API가 없는 소스(Bloomberg 채권수익률 매트릭스·베타, 한공회 �
 | 산업 CAGR·시장규모 | **Gemini 검색 그라운딩**(구축됨) + 증권사 리포트 | BYOK | ✅ | ✅ 딥서치 |
 
 **결론**: WACC 트랙 데이터의 ~80%가 무료 Python(FinanceDataReader/pykrx)+ECOS+Damodaran 으로
-**지금 닫힌다**(Bloomberg 불요). 최우선 신규 커넥터 = **price_client(주가→β 회귀·peer 자본구조)**
-— β·D/E·시가총액을 한 번에 공급하는 최대 레버리지. 그 다음 ECOS(Rf·거시). 모든 값은 provenance
-태깅(자동 API vs 수기 복붙 신뢰수준 구분).
+**지금 닫힌다**(Bloomberg 불요). ✅ price_client(주가→β 회귀·peer 자본구조)·✅ macro_client
+(거시 GDP·CPI·임금 + vintage 이중가드) 완료 — 두 커넥터가 WACC·Assumption 트랙의 최대
+레버리지 데이터를 공급한다. 잔여: Rf 통계코드 매핑(EcosProvider 배선 완료)·manual_paste
+(Kd 등급매트릭스·한공회 MRP 복붙 게이트). 모든 값은 provenance 태깅(자동 API vs 수기 복붙 신뢰수준 구분).
+
+**vintage(look-ahead) 이중가드**(macro_client — 사용자 요청 "llm이 사용할 때 평가기준일 기준인지
+확인"의 결정론 구현): 거시값은 날짜가 둘 — ①참조기간 ②vintage(공표시점). (a) 실적인데 참조기간이
+기준일 이후 = FAIL(미확정 실적), (b) vintage 가 기준일 이후 = FAIL(나중 개정치), (c) staleness = WARN.
+⚠️ ECOS 는 최신 개정치만 주므로(as-of 아님) 예측치·최근연도는 **EIU 복붙 스냅샷**(parse_paste_table,
+vintage 고정)으로 받는 게 규칙. price_client 의 주가 look-ahead 가드와 동일 원칙의 거시판.
 
 #### ⭐ 조달 방식 2분기 — 자동 커넥터 vs 복붙 UX (사용자 확정 2026-07-18)
 - **자동 커넥터**(API/Python): DART·price_client(주가·β)·ECOS(Rf·거시)·Damodaran. 프리페치+

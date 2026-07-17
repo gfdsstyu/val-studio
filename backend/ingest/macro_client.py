@@ -1,0 +1,320 @@
+"""거시경제 커넥터 — GDP·CPI·명목임금 성장률 + vintage(look-ahead) 가드.
+
+Assumption 시트 상단(거시가정)의 공급원. price_client 와 같은 패턴:
+**정규화·가드 로직은 stdlib(테스트 가능)·네트워크 공급자는 pluggable**.
+ECOS(한국은행)는 lazy urllib(stdlib) — 미설치 의존 없음. EIU 는 구독제라 복붙 경로.
+
+⭐ vintage(look-ahead) 가드 — 주가 가드보다 한 겹 미묘:
+  거시값엔 날짜가 둘이다. ① 참조기간(값이 설명하는 시점) ② vintage(공표 시점).
+  - 예측치(forecast)는 정당하게 기준일 이후를 본다(EIU 미래 GDP 예측 = 정상 입력).
+  - 금지: 기준일 이후 공표된 **실적/개정치**를 과거 밸류에이션에 주입(= 사후정보).
+  → 이중 가드: (a) 실적인데 참조기간이 기준일 이후 = FAIL,
+              (b) vintage 가 기준일 이후(나중 개정판) = FAIL, (c) staleness = WARN.
+
+  ⚠️ ECOS API 는 항상 *최신 개정치*만 반환 → vintage 를 알 수 없다(효과적 vintage=조회시점).
+  따라서 엄격한 as-of 규율에서 **예측치는 ECOS 가 아니라 EIU 복붙 스냅샷**으로 받아야
+  한다(그 시점 값이 그대로 보존됨). ECOS 는 기준일 훨씬 이전의 확정 실적에만 안전.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Protocol
+
+from ingest.validators import Finding, Severity, ValidationReport, parse_number
+
+# 표준 거시 지표 키(Assumption 스키마와 정합). 값은 연율(비율, 0.024 = 2.4%).
+REAL_GDP_GROWTH = "real_gdp_growth"
+CPI_INFLATION = "cpi_inflation"
+NOMINAL_WAGE_GROWTH = "nominal_wage_growth"
+
+# staleness 경고 임계: 최신 usable vintage 와 평가기준일 간격(일). 거시 예측은 통상 분기
+# 갱신 → 6개월(180일) 초과 시 오래된 전망 사용 경고.
+STALENESS_WARN_DAYS = 180
+
+
+@dataclass(frozen=True)
+class MacroObservation:
+    """단일 거시 관측치. period(참조기간)와 vintage(공표시점)를 분리 보존한다.
+
+    period 포맷: 'YYYY'(연) | 'YYYY-Qn'(분기) | 'YYYY-MM'(월).
+    vintage: 이 값이 공표/확정된 날짜(YYYY-MM-DD). 예측치 스냅샷의 발행일. 미상이면 None.
+    is_forecast: 참조기간 시점의 예측치(True) vs 확정 실적(False).
+    """
+    indicator: str
+    period: str
+    value: float
+    vintage: str | None = None
+    source: str = ""
+    is_forecast: bool = False
+
+
+@dataclass(frozen=True)
+class MacroSeries:
+    indicator: str
+    unit: str                                   # '%' | 'ratio' | 'index'
+    observations: tuple[MacroObservation, ...] = ()
+
+
+class MacroProvider(Protocol):
+    name: str
+    def fetch(self, indicator: str, start: str, end: str) -> MacroSeries:
+        """지표 시계열 조회. start/end 는 참조기간 경계(YYYY 또는 YYYY-MM-DD)."""
+        ...
+
+
+# ── 참조기간 → 종료일(그 기간의 마지막 날) ─────────────────────────────────────
+def period_end(period: str) -> str:
+    """참조기간 문자열의 마지막 날짜(YYYY-MM-DD). look-ahead 판정 기준.
+
+    'YYYY' → 12-31, 'YYYY-Qn' → 분기말, 'YYYY-MM' → 월말. stdlib 만.
+    """
+    import calendar
+    import datetime
+    p = period.strip().upper()
+    if "-Q" in p:
+        y, q = p.split("-Q")
+        month = int(q) * 3
+    elif "-" in p:                              # YYYY-MM
+        y, m = p.split("-", 1)
+        month = int(m)
+    else:                                       # YYYY
+        y, month = p, 12
+    year = int(y)
+    last = calendar.monthrange(year, month)[1]
+    return datetime.date(year, month, last).isoformat()
+
+
+# ── vintage(look-ahead) 가드 — 결정론 게이트 ───────────────────────────────────
+def check_macro_vintage(
+    series: MacroSeries,
+    base_date: str,
+    *,
+    staleness_warn_days: int = STALENESS_WARN_DAYS,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """거시 시계열의 look-ahead 위반 감지 — 평가기준일 as-of 규율 강제.
+
+    (a) 실적(is_forecast=False)인데 참조기간 종료 > 기준일  → FAIL(미래 실적)
+    (b) vintage 가 기준일 이후                              → FAIL(나중 개정치)
+    (c) usable 관측 최신 vintage 가 기준일보다 staleness 초과 → WARN(오래된 전망)
+    (d) usable 관측 0                                        → WARN(as-of 데이터 없음)
+    각 위반을 개별 Finding 으로 방출(감사인이 어느 관측이 문제인지 추적).
+    """
+    out: list[Finding] = []
+    lookahead_actual, future_vintage = [], []
+    usable_vintages: list[str] = []
+
+    for ob in series.observations:
+        pe = period_end(ob.period)
+        # (b) 나중 공표된 개정치 — 예측이든 실적이든 그 시점 없던 데이터
+        if ob.vintage is not None and ob.vintage > base_date:
+            future_vintage.append(ob)
+            continue
+        # (a) 확정 실적인데 참조기간이 기준일 이후 → 미래를 확정으로 앎(vintage 미상이어도 잡힘)
+        if (not ob.is_forecast) and pe > base_date:
+            lookahead_actual.append(ob)
+            continue
+        if ob.vintage is not None:
+            usable_vintages.append(ob.vintage)
+
+    if lookahead_actual:
+        worst = max(lookahead_actual, key=lambda o: period_end(o.period))
+        out.append(Finding(
+            "macro_lookahead", Severity.FAIL,
+            f"{series.indicator}: 기준일({base_date}) 이후 확정실적 {len(lookahead_actual)}건 "
+            f"(최신 참조 {worst.period}) — 사후정보 유입, 당시 예측치로 대체 필요",
+            {"count": len(lookahead_actual), "worst_period": worst.period,
+             "base_date": base_date}))
+    for ob in future_vintage:
+        out.append(Finding(
+            "macro_vintage", Severity.FAIL,
+            f"{series.indicator}: vintage {ob.vintage} > 기준일 {base_date} "
+            f"(참조 {ob.period}) — 나중 공표된 개정치, as-of 스냅샷 사용 필요",
+            {"period": ob.period, "vintage": ob.vintage, "base_date": base_date}))
+
+    if not usable_vintages and not any(
+        (not o.is_forecast) and period_end(o.period) <= base_date
+        for o in series.observations
+    ):
+        out.append(Finding(
+            "macro_staleness", Severity.WARN,
+            f"{series.indicator}: 기준일 이전 사용가능 관측 없음 — 거시 입력 확보 필요",
+            {"base_date": base_date}))
+    elif usable_vintages:
+        import datetime
+        latest = max(usable_vintages)
+        gap = (datetime.date.fromisoformat(base_date)
+               - datetime.date.fromisoformat(latest)).days
+        if gap > staleness_warn_days:
+            out.append(Finding(
+                "macro_staleness", Severity.WARN,
+                f"{series.indicator}: 최신 vintage {latest} 가 기준일 {base_date} 대비 "
+                f"{gap}일 경과(>{staleness_warn_days}일) — 갱신된 전망 확인",
+                {"latest_vintage": latest, "gap_days": gap, "base_date": base_date}))
+
+    if not out:
+        out.append(Finding("macro_vintage", Severity.PASS,
+                           f"{series.indicator}: as-of 규율 통과({base_date})",
+                           {"base_date": base_date, "n": len(series.observations)}))
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out
+
+
+def usable_as_of(series: MacroSeries, base_date: str) -> MacroSeries:
+    """평가기준일에 실제로 쓸 수 있는 관측만 남긴 시계열.
+
+    가드 (a)(b) 를 통과하는 관측만 유지하고, 같은 참조기간에 여러 vintage 가 있으면
+    기준일 이하 **최신 vintage**(그 시점 최선의 추정)만 남긴다. 예측치는 참조기간이
+    기준일 이후여도 vintage 만 정당하면 유지(전망은 미래를 보는 게 정상).
+    """
+    kept: dict[str, MacroObservation] = {}
+    for ob in series.observations:
+        if ob.vintage is not None and ob.vintage > base_date:
+            continue
+        if (not ob.is_forecast) and period_end(ob.period) > base_date:
+            continue
+        prev = kept.get(ob.period)
+        # 같은 period 중복 시: vintage 최신 우선(None 은 미상 → 후순위)
+        if prev is None or (ob.vintage or "") > (prev.vintage or ""):
+            kept[ob.period] = ob
+    ordered = tuple(sorted(kept.values(), key=lambda o: o.period))
+    return MacroSeries(series.indicator, series.unit, ordered)
+
+
+# ── EIU 등 복붙 경로 (구독제 as-of 스냅샷) ────────────────────────────────────
+def parse_paste_table(
+    text: str,
+    indicator: str,
+    *,
+    vintage: str,
+    is_forecast_from: str | None = None,
+    source: str = "EIU(paste)",
+    unit: str = "%",
+    report: ValidationReport | None = None,
+) -> MacroSeries:
+    """복붙한 '기간<TAB/공백>값' 표 → MacroSeries. 값은 validators 로 정규화.
+
+    vintage: 이 스냅샷을 붙여넣은/발행된 날짜(그 시점 전망으로 고정 보존).
+    is_forecast_from: 이 참조연도(YYYY) 이상은 예측치로 태깅(예 기준일 이후 연도).
+    % 값은 비율로(2.4% → 0.024). 파싱 실패 행은 validators 가 fail 기록 후 스킵.
+    """
+    obs: list[MacroObservation] = []
+    for line in text.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.replace("\t", " ").split()
+        if len(parts) < 2:
+            continue
+        period, raw = parts[0], parts[-1]
+        val = parse_number(raw if raw.endswith("%") else raw + "%",
+                           report=report, field_name=f"{indicator}:{period}")
+        if val is None:
+            continue
+        year = int(period[:4]) if period[:4].isdigit() else None
+        is_fc = (is_forecast_from is not None and year is not None
+                 and year >= int(is_forecast_from[:4]))
+        obs.append(MacroObservation(indicator, period, float(val),
+                                    vintage=vintage, source=source, is_forecast=is_fc))
+    return MacroSeries(indicator, unit, tuple(obs))
+
+
+# ── 공급자 구현 ──────────────────────────────────────────────────────────────
+@dataclass
+class SyntheticMacroProvider:
+    """테스트·데모 — {indicator: MacroSeries} 미리 주입. 네트워크 불요."""
+    data: dict[str, MacroSeries]
+    name: str = "synthetic"
+
+    def fetch(self, indicator: str, start: str, end: str) -> MacroSeries:
+        s = self.data.get(indicator, MacroSeries(indicator, "%"))
+        lo, hi = start[:4], end[:4]
+        obs = tuple(o for o in s.observations if lo <= o.period[:4] <= hi)
+        return MacroSeries(s.indicator, s.unit, obs)
+
+
+# ECOS 통계표코드(주요). 실제 코드/아이템은 조회 시 확정(ECOS OpenAPI 문서).
+_ECOS_STATS = {
+    REAL_GDP_GROWTH: ("200Y102", "A"),          # 국민계정 연간, 실질 성장률
+    CPI_INFLATION: ("901Y009", "M"),            # 소비자물가지수 월
+}
+
+
+@dataclass
+class EcosProvider:
+    """한국은행 ECOS OpenAPI — lazy urllib(stdlib). BYOK 키.
+
+    ⚠️ ECOS 는 **최신 개정치**만 반환(당시 as-of 아님) → 모든 관측 is_forecast=False,
+    vintage=None(효과적으로 조회시점). check_macro_vintage 의 (a) 실적 look-ahead 가
+    참조기간 기준으로 걸러주지만, **과거 개정** 위험은 못 잡는다. 예측치·최근연도는
+    ECOS 대신 EIU 복붙(parse_paste_table)을 쓰라는 것이 설계 규칙.
+    """
+    api_key: str
+    name: str = "ecos"
+
+    def fetch(self, indicator: str, start: str, end: str) -> MacroSeries:
+        import json
+        import urllib.request
+        stat = _ECOS_STATS.get(indicator)
+        if stat is None:
+            raise ValueError(f"ECOS 통계코드 미매핑 지표: {indicator} (복붙 경로 사용)")
+        stat_code, cycle = stat
+        s = start[:4] if cycle == "A" else start[:4] + start[5:7]
+        e = end[:4] if cycle == "A" else end[:4] + end[5:7]
+        url = (f"https://ecos.bok.or.kr/api/StatisticSearch/{self.api_key}/json/kr/"
+               f"1/1000/{stat_code}/{cycle}/{s}/{e}")
+        with urllib.request.urlopen(url, timeout=30) as resp:      # noqa: S310
+            payload = json.loads(resp.read().decode("utf-8"))
+        rows = payload.get("StatisticSearch", {}).get("row", [])
+        obs: list[MacroObservation] = []
+        for r in rows:
+            t = str(r.get("TIME", ""))
+            period = t if cycle == "A" else f"{t[:4]}-{t[4:6]}"
+            try:
+                v = float(r.get("DATA_VALUE"))
+            except (TypeError, ValueError):
+                continue
+            obs.append(MacroObservation(indicator, period, v / 100.0,
+                                        vintage=None, source="ECOS", is_forecast=False))
+        return MacroSeries(indicator, "%", tuple(obs))
+
+
+# ── Assumption 번들 (calc_core 소비) ──────────────────────────────────────────
+@dataclass
+class MacroAssumptions:
+    """DCF Assumption 시트 거시 블록 — 가드 통과 후 확정된 as-of 값 묶음.
+
+    각 필드는 (value, vintage, source) 로 provenance 를 달고 다닌다(감사추적).
+    """
+    base_date: str
+    real_gdp_growth: MacroObservation | None = None
+    cpi_inflation: MacroObservation | None = None
+    nominal_wage_growth: MacroObservation | None = None
+    findings: list[Finding] = field(default_factory=list)
+
+
+def build_macro_assumptions(
+    providers: dict[str, MacroProvider],
+    base_date: str,
+    *,
+    horizon_year: str | None = None,
+) -> MacroAssumptions:
+    """지표별 공급자에서 조회 → vintage 가드 → 기준일 최신 usable 값으로 번들 구성.
+
+    horizon_year(YYYY) 주면 그 연도 예측치를 선택(추정 첫 해 거시 전망), 없으면 기준일
+    직전 최신 관측. fail 이 있으면 findings 에 남기되 값은 채우지 않는다(게이트).
+    """
+    result = MacroAssumptions(base_date=base_date)
+    target = horizon_year or base_date[:4]
+    for indicator, provider in providers.items():
+        series = provider.fetch(indicator, f"{int(target)-6}", target)
+        result.findings.extend(check_macro_vintage(series, base_date))
+        usable = usable_as_of(series, base_date)
+        pick = next((o for o in usable.observations if o.period[:4] == target), None)
+        if pick is None and usable.observations:
+            pick = usable.observations[-1]          # 기준일 직전 최신
+        if pick is not None:
+            setattr(result, indicator, pick)
+    return result
