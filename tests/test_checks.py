@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 from calc_core.checks import (  # noqa: E402
     audit_dcf, check_beta_erp_consistency, check_beta_provenance,
     check_projection_smoothness, check_terminal_growth, check_terminal_value_weight,
+    check_wara_irr_wacc,
 )
 from calc_core.models import DcfResult, DcfSpineInput  # noqa: E402
 from calc_core.wacc import WaccInputs, kroll_size_decile, kroll_size_premium  # noqa: E402
@@ -166,6 +167,18 @@ def test_audit_dcf_includes_smoothness():
     rep = audit_dcf(inp, _result(25.0, 75.0))
     assert any(f.rule == "projection_smoothness" and f.severity is Severity.WARN
                for f in rep.findings)
+
+
+# ── WARA↔IRR↔WACC reconciliation (deloitte 체크리스트 승격) ─────────────────
+def test_wara_recon_within_tolerance_passes():
+    f = check_wara_irr_wacc(wara=0.095, irr=0.10, wacc=0.092)
+    assert f.severity is Severity.PASS
+
+
+def test_wara_recon_flags_worst_pair():
+    f = check_wara_irr_wacc(wara=0.13, irr=0.10, wacc=0.095)
+    assert f.severity is Severity.WARN
+    assert "WARA-WACC" in f.message                # 최대 괴리쌍 3.5%p 지목
 
 
 # ── 종합 audit_dcf ──────────────────────────────────────────────────────────

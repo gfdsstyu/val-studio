@@ -218,6 +218,81 @@ def check_projection_smoothness(
     return f
 
 
+# WARA↔IRR↔WACC 정합 허용폭(±1%p). 근거: deloitte_감사인검토 — PPA calibration 에서
+# 세 수익률의 reconciliation 은 감사인 검토 체크리스트 항목.
+WARA_RECON_TOL = 0.01
+
+
+def check_wara_irr_wacc(
+    wara: float,
+    irr: float,
+    wacc: float,
+    *,
+    tol: float = WARA_RECON_TOL,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """WARA ↔ 거래 IRR ↔ WACC ±1%p reconciliation (감사인 체크리스트 승격).
+
+    세 수익률이 벌어지면 무형자산 배분(WARA)·거래가격(IRR)·할인율(WACC) 중 하나가
+    비정합 — Apple-to-Apple 위반 신호. WARA 산출 자체는 PPA 트랙(⏳), 이 검사는
+    세 값이 주어지면 언제든 작동한다.
+    """
+    pairs = {"WARA-IRR": wara - irr, "IRR-WACC": irr - wacc, "WARA-WACC": wara - wacc}
+    offenders = {k: d for k, d in pairs.items() if abs(d) > tol}
+    detail = {"wara": wara, "irr": irr, "wacc": wacc, "tol": tol,
+              "diffs": {k: round(d, 6) for k, d in pairs.items()}}
+    if offenders:
+        worst = max(offenders.items(), key=lambda kv: abs(kv[1]))
+        f = Finding("wara_irr_wacc", Severity.WARN,
+                    f"수익률 비정합 {worst[0]} {worst[1]:+.2%} (> ±{tol:.0%}) — "
+                    f"무형배분/거래가/할인율 중 하나 재검토(Apple-to-Apple)",
+                    detail)
+    else:
+        f = Finding("wara_irr_wacc", Severity.PASS,
+                    f"WARA({wara:.2%})≈IRR({irr:.2%})≈WACC({wacc:.2%}) ±{tol:.0%} 내",
+                    detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
+# 계절성 경고 임계: 최대 분기 비중 ≥40% (상대가치_계절성_LTM 보고서 문구 예시 기준).
+SEASONALITY_WARN_SHARE = 0.40
+
+
+def check_peer_seasonality(
+    quarterly: list[float],
+    *,
+    name: str = "peer",
+    threshold: float = SEASONALITY_WARN_SHARE,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """유사회사 분기 실적 계절성 검사 — 연환산(분기×4) 사용 가능 여부 게이트.
+
+    최대 분기 비중 ≥ 임계(기본 40%) → WARN: 연환산 왜곡 위험, LTM 보정 또는
+    peer 제외 권고. 합≤0(적자 등)이면 판정 불가 → WARN(유저 판단 큐 — LLM
+    판단보조 원칙과 동일하게 자동 통과시키지 않는다).
+    """
+    from .relative import max_quarter_share
+    share = max_quarter_share(quarterly)
+    detail = {"peer": name, "max_quarter_share": share, "threshold": threshold,
+              "last4": quarterly[-4:]}
+    if share != share:                          # nan — 합≤0
+        f = Finding("peer_seasonality", Severity.WARN,
+                    f"{name}: 분기 합 ≤ 0 — 계절성 판정 불가(유저 확인 필요)", detail)
+    elif share >= threshold:
+        f = Finding("peer_seasonality", Severity.WARN,
+                    f"{name}: 최대 분기 비중 {share:.0%} ≥ {threshold:.0%} — 계절성 강함, "
+                    f"연환산(×4) 금지·LTM 보정 또는 peer 제외 검토", detail)
+    else:
+        f = Finding("peer_seasonality", Severity.PASS,
+                    f"{name}: 최대 분기 비중 {share:.0%} < {threshold:.0%} — 연환산 허용",
+                    detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
 def audit_dcf(
     inp: DcfSpineInput,
     result: DcfResult,
