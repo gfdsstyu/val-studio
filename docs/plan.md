@@ -342,19 +342,21 @@ API가 없는 소스(Bloomberg 채권수익률 매트릭스·베타, 한공회 �
 |---|---|---|---|---|
 | 대상·peer 재무제표 | **OpenDART API** | 무료(키) | ✅ | dart_client 설계·부분 |
 | peer 주가·시총·**β 회귀** | **FinanceDataReader/pykrx** | 무료(Python) | ✅ **핵심 갭** | ✅ **price_client 구축**(β OLS·조정·시총·look-ahead 가드, 6테스트. fdr 커넥터=lazy) |
-| Rf 국고채(10년) | **한국은행 ECOS API** / KOFIABOND | 무료(키) | ✅ | 🔨 EcosProvider(macro_client) 배선됨, Rf 통계코드 매핑 잔여 |
-| 거시 GDP·CPI·임금 | **ECOS** / IMF WEO / OECD | 무료(키) | ✅ | ✅ **macro_client 구축**(vintage 이중가드·EIU 복붙·as-of 선택·EcosProvider, 9테스트) |
-| **MRP(국내)** | **한공회 시장위험프리미엄 가이던스** | 무료 PDF(연간) | 🔶 수치 수기 | ⬜ 값 미확보 |
+| Rf 국고채(10년) | **한국은행 ECOS API** / KOFIABOND | 무료(키) | ✅ | ✅ EcosProvider(817Y002/D/item)+일별 look-ahead 가드. **잔여: item코드 ECOS 확정**(관용후보 배선) |
+| 거시 GDP·CPI·임금 | **ECOS** / IMF WEO / OECD | 무료(키) | ✅ | ✅ **macro_client 구축**(vintage 이중가드·EIU 복붙·as-of 선택·EcosProvider, 12테스트) |
+| **MRP(국내)** | **한공회 시장위험프리미엄 가이던스** | 무료 PDF(연간) | 🔶 수치 수기 | ✅ paste_mrp(복붙→2~15% sanity게이트·provenance). 값 확보=유저 복붙 |
 | CRP·글로벌 ERP 교차검증 | **Damodaran**(stern.nyu.edu) | 무료 다운로드 | ✅ | ⬜ |
 | Size premium(CSRP) | **Kroll** deciles | 유료(연간표) | 🔶 2023 하드코딩 有 | ✅ wacc.py 테이블(갱신 필요) |
-| Kd 신용등급×만기 | **KOFIABOND 등급별 민평** + 신용등급(DART 사업보고서·KIS/NICE) | 반무료·수기 | 🔶 복붙 경로 | ⬜ manual_paste |
+| Kd 신용등급×만기 | **KOFIABOND 등급별 민평** + 신용등급(DART 사업보고서·KIS/NICE) | 반무료·수기 | 🔶 복붙 경로 | ✅ **manual_paste 구축**(parse_bond_matrix→BondYieldMatrix·셀별 range게이트, 9테스트) |
 | 산업 CAGR·시장규모 | **Gemini 검색 그라운딩**(구축됨) + 증권사 리포트 | BYOK | ✅ | ✅ 딥서치 |
 
 **결론**: WACC 트랙 데이터의 ~80%가 무료 Python(FinanceDataReader/pykrx)+ECOS+Damodaran 으로
-**지금 닫힌다**(Bloomberg 불요). ✅ price_client(주가→β 회귀·peer 자본구조)·✅ macro_client
-(거시 GDP·CPI·임금 + vintage 이중가드) 완료 — 두 커넥터가 WACC·Assumption 트랙의 최대
-레버리지 데이터를 공급한다. 잔여: Rf 통계코드 매핑(EcosProvider 배선 완료)·manual_paste
-(Kd 등급매트릭스·한공회 MRP 복붙 게이트). 모든 값은 provenance 태깅(자동 API vs 수기 복붙 신뢰수준 구분).
+**지금 닫힌다**(Bloomberg 불요). ✅ price_client(주가→β 회귀)·✅ macro_client(거시 + vintage
+이중가드 + Rf ECOS)·✅ manual_paste(Kd 매트릭스·MRP·β 복붙 게이트) 완료 — WACC·Assumption
+트랙 데이터 조달 커넥터 3종 완비. 잔여: Rf ECOS item코드 실확정(관용후보 배선됨)·Damodaran
+CRP 다운로드. 모든 값은 provenance 태깅 — **자동(DART/ECOS)이든 수동(복붙)이든 동일 validators
+게이트**, 복붙은 confidence=0.9(merge_confidence 약한고리로 파생 WACC 신뢰도 자동 하향) + 도메인
+범위 sanity(β 0~3·금리 0~30%·MRP 2~15%, hard=FAIL·soft=WARN).
 
 **vintage(look-ahead) 이중가드**(macro_client — 사용자 요청 "llm이 사용할 때 평가기준일 기준인지
 확인"의 결정론 구현): 거시값은 날짜가 둘 — ①참조기간 ②vintage(공표시점). (a) 실적인데 참조기간이

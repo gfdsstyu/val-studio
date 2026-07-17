@@ -11,7 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from ingest.macro_client import (  # noqa: E402
-    REAL_GDP_GROWTH, MacroObservation, MacroSeries, SyntheticMacroProvider,
+    REAL_GDP_GROWTH, RISK_FREE_10Y, MacroObservation, MacroSeries,
+    SyntheticMacroProvider, _ecos_period, _ecos_time_to_period,
     build_macro_assumptions, check_macro_vintage, parse_paste_table,
     period_end, usable_as_of,
 )
@@ -27,6 +28,7 @@ def test_period_end():
     assert period_end("2024-Q1") == "2024-03-31"
     assert period_end("2024-Q4") == "2024-12-31"
     assert period_end("2024-02") == "2024-02-29"      # 윤년
+    assert period_end("2023-06-29") == "2023-06-29"   # 일별 — 그날이 종료일
 
 
 def test_actual_from_future_fails():
@@ -112,6 +114,28 @@ def test_actual_full_year_before_base_ok():
                           vintage="2024-02-01", is_forecast_from=None)
     fs = check_macro_vintage(s, "2024-06-30")
     assert not any(f.severity is Severity.FAIL for f in fs)
+
+
+def test_ecos_period_formatting():
+    assert _ecos_period("2020", "A") == "2020"
+    assert _ecos_period("2023-06-30", "M") == "202306"
+    assert _ecos_period("2023-06-30", "D") == "20230630"
+    assert _ecos_time_to_period("2023", "A") == "2023"
+    assert _ecos_time_to_period("202306", "M") == "2023-06"
+    assert _ecos_time_to_period("20230630", "D") == "2023-06-30"
+
+
+def test_daily_risk_free_lookahead_guard():
+    # 일별 Rf: 기준일 이후 날짜의 국고채 수익률 = look-ahead(그날 아직 안 옴) → FAIL
+    s = MacroSeries(RISK_FREE_10Y, "%", (
+        MacroObservation(RISK_FREE_10Y, "2023-06-29", 0.0345, is_forecast=False),
+        MacroObservation(RISK_FREE_10Y, "2023-07-05", 0.0360, is_forecast=False),  # 미래일
+    ))
+    fs = check_macro_vintage(s, "2023-06-30")
+    assert Severity.FAIL in _sev(fs, "macro_lookahead")
+    # usable 은 기준일 이하 최신(6-29)만
+    u = usable_as_of(s, "2023-06-30")
+    assert len(u.observations) == 1 and u.observations[0].period == "2023-06-29"
 
 
 if __name__ == "__main__":

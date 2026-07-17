@@ -26,6 +26,7 @@ from ingest.validators import Finding, Severity, ValidationReport, parse_number
 REAL_GDP_GROWTH = "real_gdp_growth"
 CPI_INFLATION = "cpi_inflation"
 NOMINAL_WAGE_GROWTH = "nominal_wage_growth"
+RISK_FREE_10Y = "risk_free_10y"                 # 국고채 10년 무위험이자율(Rf)
 
 # staleness 경고 임계: 최신 usable vintage 와 평가기준일 간격(일). 거시 예측은 통상 분기
 # 갱신 → 6개월(180일) 초과 시 오래된 전망 사용 경고.
@@ -66,11 +67,13 @@ class MacroProvider(Protocol):
 def period_end(period: str) -> str:
     """참조기간 문자열의 마지막 날짜(YYYY-MM-DD). look-ahead 판정 기준.
 
-    'YYYY' → 12-31, 'YYYY-Qn' → 분기말, 'YYYY-MM' → 월말. stdlib 만.
+    'YYYY' → 12-31, 'YYYY-Qn' → 분기말, 'YYYY-MM' → 월말, 'YYYY-MM-DD' → 그날. stdlib 만.
     """
     import calendar
     import datetime
     p = period.strip().upper()
+    if p.count("-") == 2:                        # YYYY-MM-DD (일별 — 그날이 종료일)
+        return datetime.date.fromisoformat(p).isoformat()
     if "-Q" in p:
         y, q = p.split("-Q")
         month = int(q) * 3
@@ -235,10 +238,13 @@ class SyntheticMacroProvider:
         return MacroSeries(s.indicator, s.unit, obs)
 
 
-# ECOS 통계표코드(주요). 실제 코드/아이템은 조회 시 확정(ECOS OpenAPI 문서).
+# ECOS 통계표코드 (stat_code, cycle[, item_code]). 3번째=만기물/세부항목 필터.
+# ⚠️ 아이템 코드는 ECOS '통계코드검색'으로 확정 필요(계정별 상이) — 아래는 관용 후보.
 _ECOS_STATS = {
     REAL_GDP_GROWTH: ("200Y102", "A"),          # 국민계정 연간, 실질 성장률
     CPI_INFLATION: ("901Y009", "M"),            # 소비자물가지수 월
+    # 국고채 10년(일별). item 미지정 시 통계표 전 항목이 섞여 나오므로 만기물 코드 필수.
+    RISK_FREE_10Y: ("817Y002", "D", "010210000"),   # 시장금리 일별 / 국고채 10년
 }
 
 
@@ -260,18 +266,19 @@ class EcosProvider:
         stat = _ECOS_STATS.get(indicator)
         if stat is None:
             raise ValueError(f"ECOS 통계코드 미매핑 지표: {indicator} (복붙 경로 사용)")
-        stat_code, cycle = stat
-        s = start[:4] if cycle == "A" else start[:4] + start[5:7]
-        e = end[:4] if cycle == "A" else end[:4] + end[5:7]
+        stat_code, cycle = stat[0], stat[1]
+        item_code = stat[2] if len(stat) > 2 else None
+        s, e = _ecos_period(start, cycle), _ecos_period(end, cycle)
         url = (f"https://ecos.bok.or.kr/api/StatisticSearch/{self.api_key}/json/kr/"
                f"1/1000/{stat_code}/{cycle}/{s}/{e}")
+        if item_code:                                    # 만기물/세부항목 필터(END 뒤)
+            url += f"/{item_code}"
         with urllib.request.urlopen(url, timeout=30) as resp:      # noqa: S310
             payload = json.loads(resp.read().decode("utf-8"))
         rows = payload.get("StatisticSearch", {}).get("row", [])
         obs: list[MacroObservation] = []
         for r in rows:
-            t = str(r.get("TIME", ""))
-            period = t if cycle == "A" else f"{t[:4]}-{t[4:6]}"
+            period = _ecos_time_to_period(str(r.get("TIME", "")), cycle)
             try:
                 v = float(r.get("DATA_VALUE"))
             except (TypeError, ValueError):
@@ -279,6 +286,25 @@ class EcosProvider:
             obs.append(MacroObservation(indicator, period, v / 100.0,
                                         vintage=None, source="ECOS", is_forecast=False))
         return MacroSeries(indicator, "%", tuple(obs))
+
+
+def _ecos_period(date_str: str, cycle: str) -> str:
+    """조회 경계(YYYY 또는 YYYY-MM-DD) → ECOS 주기별 포맷(A=YYYY, M=YYYYMM, D=YYYYMMDD)."""
+    digits = date_str.replace("-", "")
+    if cycle == "A":
+        return digits[:4]
+    if cycle == "M":
+        return (digits[:6] if len(digits) >= 6 else digits[:4] + "01")
+    return (digits[:8] if len(digits) >= 8 else digits[:6].ljust(6, "0") + "01")
+
+
+def _ecos_time_to_period(t: str, cycle: str) -> str:
+    """ECOS TIME(YYYY/YYYYMM/YYYYMMDD) → MacroObservation.period(YYYY/YYYY-MM/YYYY-MM-DD)."""
+    if cycle == "A":
+        return t[:4]
+    if cycle == "M":
+        return f"{t[:4]}-{t[4:6]}"
+    return f"{t[:4]}-{t[4:6]}-{t[6:8]}"
 
 
 # ── Assumption 번들 (calc_core 소비) ──────────────────────────────────────────
