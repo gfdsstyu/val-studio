@@ -1,6 +1,6 @@
 # 밸류에이션 북 — 개념·트랙 색인 (자동생성, build.py)
 
-챕터 24 · 개념 312 · 링크 32
+챕터 25 · 개념 326 · 링크 32
 
 ## 위계 트리 (root → foundation → methodology/infrastructure → practice)
 - 🌳 **밸류에이션_스코프_로드맵** (root) — 밸류에이션 플랫폼 스코프 지도 — 대상×목적별 평가 트랙과 방법론
@@ -22,6 +22,7 @@
   - 📐 **상대가치_계절성_LTM** (methodology) — 상대가치법(CCA) 분·반기 평가 — 계절성 유사회사 처리와 LTM 보정
   - 📐 **손상검사_impairment** (methodology) — 손상검사(Impairment Test) — CGU·회수가능액·사용가치 DCF
   - 📐 **합병_주식교환_방법론** (methodology) — 합병·주식교환 평가방법 (상장=기준주가 / 비상장=본질가치)
+  - 🔩 **앤트로픽_금융스킬_벤치마크** (infrastructure) — Anthropic 공식 금융 스킬(dcf-model·audit-xls·comps·lbo·finance 플러그
   - 🔩 **파서_아키텍처_매트릭스** (infrastructure) — 파서 아키텍처 — 불러오기 방식 × 자료유형 매트릭스
     - 🔩 **xDCF_계정분류_모델아키텍처** (infrastructure) — DCF 계정분류·추정방법 taxonomy + 자동화 모델 아키텍처
     - 🛠 **외부평가의견서_활용** (practice) — 외부평가의견서 활용 — 방법론 taxonomy·감사인 트랙·리포트 정형문구
@@ -43,6 +44,7 @@
 ### 검증·감사인
 - **Deloitte 외부평가보고서 검토 유의사항 + WACC 방법론 (감사인 트랙 정본)** ([deloitte_감사인검토_WACC방법론](deloitte_감사인검토_WACC방법론.md)) — 감사인 관점 WACC 방법론·검토 체크리스트 (Modified CAPM·Kroll size premium)
 - **엔진 검증 — 클래시스 DCF (2차 실사례)** ([검증_클래시스_DCF](검증_클래시스_DCF.md)) — 엔진 검증 사례 — 클래시스 DCF 재현 + 세금주입·터미널정규화
+- **Anthropic 공식 금융 스킬 벤치마크 (2026-07-17 원문 감사)** ([앤트로픽_금융스킬_벤치마크](앤트로픽_금융스킬_벤치마크.md)) — Anthropic 공식 금융 스킬(dcf-model·audit-xls·comps·lbo·finance 플러그인) 벤치마크 — 채택 규약과 우리 대비
 - **외부평가의견서 고정 양식 — 고정부 vs 가변부** ([외부평가의견서_고정양식_구조](외부평가의견서_고정양식_구조.md)) — 외부평가의견서 고정 양식 — 고정부(skeleton) vs 가변부(slot) 구조
 
 ### 기타

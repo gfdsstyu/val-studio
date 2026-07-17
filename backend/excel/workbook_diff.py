@@ -155,6 +155,34 @@ def diff_workbooks(
     return d
 
 
+# 수식 내 무해한 숫자(구조 상수): 0/1(=B5*(1+g) 류)·소계 배수·달력 상수·단위 환산.
+_BENIGN_LITERALS = {"0", "1", "2", "-1", "10", "12", "100", "365", "1000", "0.5", "1000000"}
+_QUOTED = re.compile(r'"[^"]*"')
+_NUMBER = re.compile(r"(?<![A-Za-z0-9_.$])(\d+\.?\d*)")
+
+
+def check_formula_hardcodes(wb: dict[str, dict]) -> list[str]:
+    """수식 안에 박힌 숫자 리터럴 감지 — `=A1*1.05` 의 1.05 는 가정 셀로 빼야 한다.
+
+    audit-xls 정본: "하드코딩 오버라이드가 조용한 버그 1위 — 공격적으로 수색".
+    셀참조·따옴표 문자열 제거 후 남은 숫자 중 구조 상수(_BENIGN_LITERALS) 제외를 경고.
+    """
+    warnings: list[str] = []
+    for sheet, cells in wb.items():
+        for ref, c in cells.items():
+            if not c.formula:
+                continue
+            body = _QUOTED.sub("", _REF.sub("", c.formula))
+            bad = [n for n in _NUMBER.findall(body)
+                   if n.rstrip("0").rstrip(".") not in _BENIGN_LITERALS
+                   and n not in _BENIGN_LITERALS]
+            if bad:
+                warnings.append(
+                    f"{sheet}!{ref}: 수식 내 하드코딩 {bad} — 가정 셀 분리 권장"
+                    f" (`={c.formula[:60]}`)")
+    return warnings
+
+
 def check_row_uniformity(wb: dict[str, dict], *, min_run: int = 3) -> list[str]:
     """행 내 연속 수식 셀의 R1C1 패턴 균일성 — '외딴 편집' 감지.
 

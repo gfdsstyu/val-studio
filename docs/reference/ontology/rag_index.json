@@ -589,6 +589,40 @@
       "has_frontmatter": true
     },
     {
+      "id": "앤트로픽_금융스킬_벤치마크",
+      "path": "docs/reference/앤트로픽_금융스킬_벤치마크.md",
+      "title": "Anthropic 공식 금융 스킬 벤치마크 (2026-07-17 원문 감사)",
+      "topic": "Anthropic 공식 금융 스킬(dcf-model·audit-xls·comps·lbo·finance 플러그인) 벤치마크 — 채택 규약과 우리 대비",
+      "track": "검증·감사인",
+      "layer": "infrastructure",
+      "parent": "밸류에이션_스코프_로드맵",
+      "doc_type": "knowledge",
+      "keywords": [
+        "Anthropic",
+        "financial-services",
+        "dcf-model 스킬",
+        "audit-xls",
+        "comps-analysis",
+        "LBO",
+        "모델 감사",
+        "민감도 중심셀",
+        "하드코딩 감지",
+        "BS balance",
+        "cash tie-out",
+        "variance narrative",
+        "reconciliation 분류",
+        "벤치마크"
+      ],
+      "canonical_questions": [
+        "앤트로픽 공식 DCF/LBO 스킬은 무엇을 하고 우리와 뭐가 다른가?",
+        "모델 감사(audit) 체크리스트 표준은?",
+        "민감도 테이블 검증은 어떻게 하나?",
+        "variance 설명 서사는 어떻게 쓰나?"
+      ],
+      "links": [],
+      "has_frontmatter": true
+    },
+    {
       "id": "영구성장률_PGR_적합성",
       "path": "docs/reference/영구성장률_PGR_적합성.md",
       "title": "영구성장률(Perpetual/Terminal Growth Rate) 적합성",

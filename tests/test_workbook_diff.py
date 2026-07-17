@@ -10,7 +10,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from excel.workbook_diff import check_row_uniformity, diff_workbooks, to_r1c1  # noqa: E402
+from excel.workbook_diff import (  # noqa: E402
+    check_formula_hardcodes, check_row_uniformity, diff_workbooks, to_r1c1,
+)
 from excel.xlsx_reader import RCell  # noqa: E402
 
 
@@ -87,6 +89,17 @@ def test_lone_edit_mid_row_detected():
     })
     warns = check_row_uniformity(wb)
     assert len(warns) == 1 and "E9" in warns[0]
+
+
+def test_formula_hardcode_detected():
+    wb = _wb(S={
+        "D5": RCell(value=1.0, formula="C5*1.05"),          # 성장률 하드코딩!
+        "E5": RCell(value=1.0, formula="D5*(1+$B$6)"),      # 정상(가정 셀 참조)
+        "F5": RCell(value=1.0, formula="SUM(C5:E5)/1000"),  # 단위 환산 — 무해
+        "G5": RCell(value=1.0, formula='IF(A1="x",B1,C1)'), # 문자열 — 무해
+    })
+    warns = check_formula_hardcodes(wb)
+    assert len(warns) == 1 and "D5" in warns[0] and "1.05" in warns[0]
 
 
 def test_uniform_row_no_warning():
