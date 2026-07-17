@@ -94,6 +94,7 @@ class WaccInputs:
     beta_source: str | None = None   # 'bloomberg' | 'kicpa'
     beta_market: str | None = None   # 'SP500' | 'KOSPI' | 'KOSDAQ'
     beta_adjusted: bool | None = None  # Bloomberg Adjusted(0.67·raw+0.33) 여부
+    # ↑ 조정베타 계산 헬퍼·주가 회귀는 ingest/price_client.py(β 회귀가 있는 곳이 canonical).
     # ERP provenance — β 와 MRP 는 같은 시장에서 와야 한다(KICPA β ↔ KICPA MRP).
     erp_source: str | None = None    # 'kicpa' | 'damodaran' | 'deloitte_fas' ...
     erp_market: str | None = None    # 'SP500' | 'KOSPI' — beta_market 와 일치해야 함

@@ -341,7 +341,7 @@ API가 없는 소스(Bloomberg 채권수익률 매트릭스·베타, 한공회 �
 | 입력 | 우리 현실적 소스 | 조달 방식 | 지금 닫을 수 있나 | 현 상태 |
 |---|---|---|---|---|
 | 대상·peer 재무제표 | **OpenDART API** | 무료(키) | ✅ | dart_client 설계·부분 |
-| peer 주가·시총·**β 회귀** | **FinanceDataReader/pykrx** | 무료(Python) | ✅ **핵심 갭** | ⬜ price_client 미구축 |
+| peer 주가·시총·**β 회귀** | **FinanceDataReader/pykrx** | 무료(Python) | ✅ **핵심 갭** | 🔨 **price_client 구축**(β OLS·조정·시총·look-ahead 가드, 6테스트. fdr 커넥터=lazy) |
 | Rf 국고채(10년) | **한국은행 ECOS API** / KOFIABOND | 무료(키) | ✅ | ⬜ |
 | 거시 GDP·CPI·임금 | **ECOS** / IMF WEO / OECD | 무료(키) | ✅ | ⬜ macro_client 미구축 |
 | **MRP(국내)** | **한공회 시장위험프리미엄 가이던스** | 무료 PDF(연간) | 🔶 수치 수기 | ⬜ 값 미확보 |
