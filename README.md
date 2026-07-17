@@ -46,3 +46,4 @@ docs/                   계획·참고자료 색인
 ## 문서
 - `docs/engine_spec.md` — **임의 회사 DCF 재현 명세**(입력 규격·단위·컨벤션·데이터출처·단계별 절차·검증 체크리스트).
 - `docs/plan.md` — 전체 계획(투트랙·인제스트·주석검증·RAG·감사인 트랙·배포).
+- `docs/prd_excel_addin.md` — **Excel Office Add-in MVP PRD**(로컬 HTML → 웹 Excel/MS Excel 연동·범위·일정·검증).

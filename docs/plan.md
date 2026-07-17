@@ -364,6 +364,9 @@ Skill 도구 `scripts/peer.py`(--seeds 역산 / --judgments 퍼널 실행).
 3-코퍼스(기초/경영진자료/지식원천Big4) 분리 벡터DB. 챗이 매출추정·마진·WACC 가정을 제안하고, 부족 시 "경영진으로부터 ~자료 필요" 발화 → 답을 넣으면 **경영진 코퍼스에 별도 저장**(신뢰수준 태깅). Big4 의견서(로컬 13건: CJ·아모레퍼시픽·다산네트웍스·롯데케미칼…)에서 산업별 방법론·가정 선례 검색. 모든 가정에 **provenance 태그**.
 
 ## Phase 4 — Reporting + 웹↔엑셀 양방향 동기화
+
+> **Excel Add-in MVP 상세 PRD:** [prd_excel_addin.md](prd_excel_addin.md) — Level 1(Task Pane) Must/Should,
+> manifest·HTTPS 배포·Office.js v1.2·일정·DoD.
 - 웹 인터랙티브 결과 + 살아있는 xlsx export + 평가의견서 초안 렌더.
 - **중간엑셀 왕복(사용자 요청)**: 웹에서 export → 사용자가 엑셀에서 손봄 → **재업로드 시 웹 자동반영**. `template_schema.py` 고정 셀맵/named range로 `xlsx_reader.py`가 입력셀을 역방향 파싱 → `validators.py` 재검증 → calc_core 재계산 → 웹 상태 갱신. 템플릿 **버전 태그**로 구조 변경 감지(불일치 시 사용자에 경고). 난이도 中(입력셀 스키마만 고정하면 견고).
 - **✅ 왕복 diff 엔진 구현됨**(`excel/workbook_diff.py`, 사용자 설계): 재업로드 시 블랙박스
