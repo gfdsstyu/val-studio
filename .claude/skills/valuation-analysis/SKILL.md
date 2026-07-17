@@ -31,7 +31,9 @@ description: 기업가치평가(DCF) 수행·검증·해석. 재무제표/사업
 | CB·RCPS 평가 | `convertible.py` 직호출 | **복합금융상품_평가** (TF·강제전환·Level3) + 채권_기간구조 |
 | 손상(VIU) | `dcf.py`(TV=0) | **손상검사_impairment** (VIU vs FV·CGU·자사주제외) |
 | PPA 무형자산 | (LLM, 코어 미구현) | PPA_무형자산평가 (MEEM·RFRM·TAB) |
-| 합병·주식교환 | (LLM) | 합병_주식교환_방법론 (기준주가·본질가치) |
+| 합병·주식교환 | `calc_core.merger` 직호출(vwap·기준주가·본질가치·교환비율) | 합병_주식교환_방법론 (두산 골든) |
+| 시나리오 분석 | `calc_core.scenario.run_scenarios` (구성=LLM/유저·가중치=유저 승인) | msvalue_리포트예시 (3-시나리오 구조) |
+| 상대가치 실적 정규화 | `calc_core.relative`(ltm)·`checks.check_peer_seasonality` | **상대가치_계절성_LTM** (연환산 왜곡·40% 임계) |
 | 트랙 선택 헷갈림 | — | 밸류에이션_스코프_로드맵 (루트 지도) |
 | 비정형 질문 | `book_search.py` | (검색 폴백) |
 
