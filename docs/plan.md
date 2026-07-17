@@ -347,6 +347,33 @@ Skill 도구 `scripts/peer.py`(--seeds 역산 / --judgments 퍼널 실행).
 ## Phase 4 — Reporting + 웹↔엑셀 양방향 동기화
 - 웹 인터랙티브 결과 + 살아있는 xlsx export + 평가의견서 초안 렌더.
 - **중간엑셀 왕복(사용자 요청)**: 웹에서 export → 사용자가 엑셀에서 손봄 → **재업로드 시 웹 자동반영**. `template_schema.py` 고정 셀맵/named range로 `xlsx_reader.py`가 입력셀을 역방향 파싱 → `validators.py` 재검증 → calc_core 재계산 → 웹 상태 갱신. 템플릿 **버전 태그**로 구조 변경 감지(불일치 시 사용자에 경고). 난이도 中(입력셀 스키마만 고정하면 견고).
+- **✅ 왕복 diff 엔진 구현됨**(`excel/workbook_diff.py`, 사용자 설계): 재업로드 시 블랙박스
+  변화를 셀 단위 3버킷 분류 — ①입력 변경(수식無 셀 값, 정상·자동 반영) ②수식 변경(로직
+  변경, 리뷰) ③구조 변경(시트 추가삭제·앵커 고정셀 이동, 위험). R1C1 상대 정규화로
+  **행 내 수식 균일성 검사**(외딴 편집 감지), 같은 수식의 캐시값 차이는 무시(재계산 몫).
+  `safe` 판정이 자동반영/리뷰 분기 게이트.
+
+### 공식 anthropics/skills xlsx 규약 채택 (2026-07-17 원문 감사)
+"dcf-model" 독립 스킬은 공식 레포에 없음(skills 17종·finance 플러그인 전수 확인) —
+실재하는 정본은 **xlsx 스킬의 Financial models 절**. 채택 목록:
+- **색상 5색**(우리 북 3색의 슈퍼셋): blue=hard 입력·시나리오 lever / black=수식 /
+  green=타시트 링크 / **red=타파일 링크 / yellow fill=핵심가정·유저 입력칸**.
+- **recalc 검증 게이트**: LibreOffice headless 재계산 → `errors_found` JSON, 0 에러
+  전까지 출고 금지. pycel(GPL) 대신 **1차 검증기로 채택**(pycel 은 외부 CI 보조).
+  단 "green recalc ≠ 옳은 숫자" — 골든 셀 대조(우리 기존 방식)와 병행.
+- **함수 화이트리스트**: Excel-2007 세대(SUMIFS·INDEX/MATCH·IFERROR·SUMPRODUCT) 우선,
+  post-2007 6종은 `_xlfn.` 접두 필수, XLOOKUP/FILTER/SORT 계열 금지(스필 메타 없음).
+  → export 수식 생성 규칙.
+- **외부링크 함정**: `[1]` 참조는 별도 파일 — 재저장 시 캐시값 소실→#NAME?(우리 2차
+  리포트 externalLinks 8개 끊김 실측과 동일 이슈). import 시 외부참조 감지+경고 규칙.
+- **서식**: % 는 fraction 저장(0.15→15.0%), 연도는 텍스트, 0 → '-', 음수 괄호, 배수 0.0x.
+- **편집 원칙**: 기존 파일의 규약이 모든 지침에 우선 — 입력셀(색으로 표시된)만 쓰고
+  기존 수식 불가침. 가정은 셀 분리+참조(=B5*(1+$B$6), 하드코딩 금지)·출처 주석.
+> 유저 제공 "dcf-model 스킬 기능 목록" 판정: 색상코드·서식·수식원칙·오류검증 = 공식
+> 규약과 일치(단 5색 중 3색만 언급). 4시트 구조·TV 이중계산·5×5 {=TABLE}·mid-year
+> 토글·WACC 순환참조 격리 = 공식 스킬 명세에 **없음**(IB 관행 서술로 추정 — 특히
+> {=TABLE} 데이터테이블은 openpyxl 미지원이라 공식 방식과 상충). Check Row 도 명세엔
+> 없으나 우리 checks/validators 가 이미 상회.
 
 ## Phase 5 — 감사인 트랙
 제공된 의견서 파싱 → 유의적 가정/방법/데이터를 FS·calc_core·주석검증리포트와 대조 테스트, 또는 독립적 점/범위 추정(감사인 자체 가정으로 calc_core 재실행 → 차이 리포트). Phase 2의 tie-out 엔진을 그대로 감사 절차로 재사용.
