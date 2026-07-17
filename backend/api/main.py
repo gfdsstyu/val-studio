@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 from calc_core import DcfSpineInput, run  # noqa: E402
 from calc_core.checks import audit_dcf, diagnose_dcf_gap  # noqa: E402
+from calc_core.method_selector import DEAL_TYPES, PURPOSES, recommend_method  # noqa: E402
 from calc_core.scenario import run_scenarios  # noqa: E402
 
 app = FastAPI(title="val-studio local", docs_url="/api/docs", openapi_url="/api/openapi.json")
@@ -99,6 +100,29 @@ async def scenario_endpoint(request: Request) -> dict:
         raise HTTPException(422, str(e)) from e
     return {"rows": a.to_rows(), "spread": a.spread,
             "weighted_per_share": a.weighted_per_share}
+
+
+@app.get("/api/method/options")
+def method_options() -> dict:
+    """위저드 선택지 — 목적·거래유형 카탈로그(프론트 하드코딩 방지, SSOT=백엔드)."""
+    return {"purposes": PURPOSES, "deal_types": DEAL_TYPES}
+
+
+@app.post("/api/method/recommend")
+async def method_recommend(request: Request) -> dict:
+    """{purpose, deal_type?, target_listed?, counterparty_listed?} → 방법론 추천.
+
+    결정론 법제 매핑(북 정본) — 추천이지 강제 아님. 규칙 없는 조합은 uncertain.
+    """
+    d = await request.json()
+    if d.get("purpose") not in PURPOSES:
+        raise HTTPException(422, f"purpose 는 {sorted(PURPOSES)} 중 하나")
+    r = recommend_method(
+        d["purpose"], d.get("deal_type"),
+        target_listed=d.get("target_listed"),
+        counterparty_listed=d.get("counterparty_listed"),
+    )
+    return r.to_dict()
 
 
 @app.post("/api/keys/validate")
@@ -183,6 +207,8 @@ async def create_project(request: Request) -> dict:
     proj = {
         "id": uuid.uuid4().hex[:12], "name": name, "mode": mode,
         "company": (d.get("company") or "").strip(),
+        # 평가 설계(셋업 위저드 확정값): 목적·거래유형·상장여부·기준일·추정기간·확정 방법론
+        "setup": d.get("setup") if isinstance(d.get("setup"), dict) else {},
         "created_at": _now(), "updated_at": _now(),
         "data": {},                                     # 단계별 입력·산출물 저장소
     }

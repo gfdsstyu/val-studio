@@ -11,21 +11,51 @@ import DcfSheet from "./pages/appraiser/DcfSheet.jsx";
 
 function CoverSheet({ project }) {
   const s = project?.data?.dcf_result_summary;
+  const setup = project?.setup || {};
+  const rec = setup.method_recommendation;
+  const methodLabel = rec
+    ? [...(rec.primary || []), ...(rec.secondary || [])]
+        .find((m) => m.id === setup.method)?.label ?? setup.method
+    : setup.method;
   return (
-    <div className="card">
-      <h2>상태 요약</h2>
-      <div className="pad">
-        <div className="kpis">
-          <div className="kpi"><div className="v">{MODE_LABEL[project.mode]}</div><div className="k">모드</div></div>
-          <div className="kpi"><div className="v">{project.company || "-"}</div><div className="k">대상회사</div></div>
-          <div className="kpi"><div className="v">{s ? Math.round(s.per_share).toLocaleString("ko-KR") + " 원" : "-"}</div><div className="k">최근 주당가치</div></div>
-          <div className="kpi"><div className="v">{s ? s.warn : "-"}</div><div className="k">audit 경고</div></div>
-        </div>
-        <div className="muted" style={{ marginTop: 12 }}>
-          다음 할 일: {s ? "가정 근거 보강 후 시나리오·리포트로" : "4. 밸류에이션 > DCF 에서 첫 계산을 실행하세요"}
+    <>
+      <div className="card">
+        <h2>상태 요약</h2>
+        <div className="pad">
+          <div className="kpis">
+            <div className="kpi"><div className="v">{MODE_LABEL[project.mode]}</div><div className="k">모드</div></div>
+            <div className="kpi"><div className="v">{project.company || "-"}</div><div className="k">대상회사</div></div>
+            <div className="kpi"><div className="v">{s ? Math.round(s.per_share).toLocaleString("ko-KR") + " 원" : "-"}</div><div className="k">최근 주당가치</div></div>
+            <div className="kpi"><div className="v">{s ? s.warn : "-"}</div><div className="k">audit 경고</div></div>
+          </div>
+          <div className="muted" style={{ marginTop: 12 }}>
+            다음 할 일: {s ? "가정 근거 보강 후 시나리오·리포트로" : "4. 밸류에이션 > DCF 에서 첫 계산을 실행하세요"}
+          </div>
         </div>
       </div>
-    </div>
+
+      {setup.method && (
+        <div className="card">
+          <h2>평가 설계 <span className="muted">— 셋업 위저드 확정값</span></h2>
+          <div className="pad">
+            <table>
+              <tbody>
+                <tr><th style={{ width: 140, textAlign: "left" }}>확정 방법론</th>
+                  <td style={{ textAlign: "left" }}><b>{methodLabel}</b></td></tr>
+                <tr><th style={{ textAlign: "left" }}>평가기준일</th>
+                  <td style={{ textAlign: "left" }}>{setup.valuation_date || "미정"}</td></tr>
+                <tr><th style={{ textAlign: "left" }}>추정기간</th>
+                  <td style={{ textAlign: "left" }}>{setup.horizon_years}년</td></tr>
+                {rec?.legal_basis && (
+                  <tr><th style={{ textAlign: "left" }}>선정 근거</th>
+                    <td style={{ textAlign: "left" }} className="muted">{rec.legal_basis}</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

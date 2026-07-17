@@ -145,6 +145,26 @@ td.center-cell { background: var(--brand-50); color: var(--brand); font-weight: 
   cursor: pointer; padding: 0; border-radius: 0; }
 .linklike:hover { color: var(--brand); }
 
+select {
+  width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 0;
+  font-size: 13px; background: var(--panel); color: var(--text);
+}
+select:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
+
+/* ── 방법론 추천 카드 ── */
+.rec-box { border: 1px solid var(--line); padding: 10px 12px; margin-top: 10px; }
+.method-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.method-card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 0;
+  padding: 9px 11px; text-align: left; cursor: pointer; color: var(--text);
+}
+.method-card b { display: block; font-size: 13px; }
+.method-card span { display: block; font-size: 11px; margin-top: 2px; }
+.method-card .avail { color: var(--ok); font-weight: 600; }
+.method-card .unavail { color: var(--warn); font-weight: 600; }
+.method-card.picked { border-color: var(--brand); outline: 1px solid var(--brand); }
+.method-card.picked b { color: var(--brand); }
+
 /* ── 우측 컨텍스트 패널(접이식, 기본 접힘) ── */
 .body.with-panel { grid-template-columns: 176px 1fr 280px; }
 .context-panel { border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; }
