@@ -1,6 +1,6 @@
 # 밸류에이션 북 — 개념·트랙 색인 (자동생성, build.py)
 
-챕터 24 · 개념 312 · 링크 30
+챕터 24 · 개념 312 · 링크 32
 
 ## 위계 트리 (root → foundation → methodology/infrastructure → practice)
 - 🌳 **밸류에이션_스코프_로드맵** (root) — 밸류에이션 플랫폼 스코프 지도 — 대상×목적별 평가 트랙과 방법론
