@@ -21,10 +21,16 @@ from fastapi import FastAPI, Header, HTTPException, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
+from assemble.dcf_inputs import assemble_dcf_inputs  # noqa: E402
+from assemble.wacc_inputs import PeerBeta, WaccAssembly, assemble_wacc_inputs  # noqa: E402
 from calc_core import DcfSpineInput, run  # noqa: E402
+from calc_core import fa as _fa, wc as _wc  # noqa: E402
 from calc_core.checks import audit_dcf, diagnose_dcf_gap  # noqa: E402
 from calc_core.method_selector import DEAL_TYPES, PURPOSES, recommend_method  # noqa: E402
 from calc_core.scenario import run_scenarios  # noqa: E402
+from ingest.manual_paste import (  # noqa: E402
+    PasteParser, paste_mrp, paste_risk_free,
+)
 
 app = FastAPI(title="val-studio local", docs_url="/api/docs", openapi_url="/api/openapi.json")
 app.add_middleware(
@@ -100,6 +106,150 @@ async def scenario_endpoint(request: Request) -> dict:
         raise HTTPException(422, str(e)) from e
     return {"rows": a.to_rows(), "spread": a.spread,
             "weighted_per_share": a.weighted_per_share}
+
+
+# ── 어셈블리 (커넥터 원천값 → 검증된 엔진입력 → 결과) ────────────────────────
+# 복붙 값(문자열)은 서버가 커넥터로 통과시켜 range/게이트를 서버사이드에서 건다.
+# _pull 이 ParseResult(복붙)·float(직접) 둘 다 받으므로 API 는 얇은 어댑터로 남는다.
+def _findings(rep) -> list[dict]:
+    return [{"rule": f.rule, "severity": f.severity.value, "message": f.message}
+            for f in rep.findings]
+
+
+def _rf_or_mrp(val, kind: str, pasted_at: str, user: str | None):
+    """숫자면 그대로(검증 완료 값), 문자열이면 복붙 커넥터로 통과(range 게이트)."""
+    if isinstance(val, str):
+        src = "paste"
+        return (paste_risk_free if kind == "rate" else paste_mrp)(
+            val, source_id=src, pasted_at=pasted_at, user=user)
+    return val
+
+
+def _wacc_from_json(d: dict) -> WaccAssembly:
+    pasted_at = d.get("pasted_at") or _now()[:10]
+    user = d.get("user")
+    try:
+        peers = [PeerBeta(ticker=p.get("ticker", "?"),
+                          levered_beta=float(p["levered_beta"]),
+                          debt_to_equity=float(p["debt_to_equity"]),
+                          tax_rate=float(p["tax_rate"]))
+                 for p in (d.get("peers") or [])]
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"peers 형식 오류: {e}") from e
+
+    kd_matrix = None
+    if d.get("kd_matrix_text"):
+        kd_matrix = PasteParser("paste", pasted_at=pasted_at, user=user).parse_bond_matrix(
+            str(d["kd_matrix_text"]))
+    try:
+        return assemble_wacc_inputs(
+            risk_free=_rf_or_mrp(d.get("risk_free"), "rate", pasted_at, user),
+            mrp=_rf_or_mrp(d.get("mrp"), "mrp", pasted_at, user),
+            peers=peers,
+            target_debt_to_equity=float(d.get("target_debt_to_equity", 0.0)),
+            tax_rate=float(d.get("tax_rate", 0.0)),
+            kd_matrix=kd_matrix, kd_grade=d.get("kd_grade"), kd_tenor=d.get("kd_tenor"),
+            pre_tax_cost_of_debt=d.get("pre_tax_cost_of_debt"),
+            market_cap_musd=d.get("market_cap_musd"),
+            size_premium=d.get("size_premium"),
+            country_risk_premium=float(d.get("country_risk_premium", 0.0)),
+            company_specific_risk=float(d.get("company_specific_risk", 0.0)),
+            beta_source=d.get("beta_source"), beta_market=d.get("beta_market"),
+            beta_adjusted=d.get("beta_adjusted"),
+            erp_source=d.get("erp_source"), erp_market=d.get("erp_market"),
+        )
+    except (TypeError, ValueError) as e:
+        raise HTTPException(422, f"WACC 입력 오류: {e}") from e
+
+
+def _serialize_wacc(a: WaccAssembly) -> dict:
+    r = a.result
+    return {
+        "blocked": a.blocked,
+        "wacc": r.wacc if r else None,
+        "cost_of_equity": r.cost_of_equity if r else None,
+        "after_tax_cost_of_debt": r.after_tax_cost_of_debt if r else None,
+        "relevered_beta": r.relevered_beta if r else None,
+        "equity_weight": r.equity_weight if r else None,
+        "debt_weight": r.debt_weight if r else None,
+        "inputs": (dataclasses.asdict(a.inputs) if a.inputs else None),
+        "provenance": a.provenance,
+        "findings": _findings(a.report),
+    }
+
+
+@app.post("/api/wacc/assemble")
+async def wacc_assemble_endpoint(request: Request) -> dict:
+    """커넥터 원천값(복붙 문자열 or 숫자) → 검증된 WACC. blocked 면 게이트 FAIL 사유 동봉."""
+    d = await request.json()
+    return _serialize_wacc(_wacc_from_json(d))
+
+
+def _asset_classes(items: list) -> list:
+    try:
+        return [_fa.AssetClass(name=a["name"], opening_net_book=float(a["opening_net_book"]),
+                               remaining_life=int(a["remaining_life"]),
+                               useful_life=int(a["useful_life"])) for a in items]
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"asset_classes 형식 오류: {e}") from e
+
+
+def _wc_items(items: list) -> list:
+    try:
+        return [_wc.WcItem(name=w["name"], base_balance=float(w["base_balance"]),
+                           base_driver=float(w["base_driver"]),
+                           is_asset=bool(w.get("is_asset", True))) for w in items]
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"wc_items 형식 오류: {e}") from e
+
+
+@app.post("/api/dcf/assemble")
+async def dcf_assemble_endpoint(request: Request) -> dict:
+    """WACC(커넥터) + 운영가정 → 검증된 주당가치. 실행 순서 게이트(PGR≥WACC 등) 반영.
+
+    body: {"wacc": {...WACC 원천...}, "ops": {revenue·cogs_pct·sga_pct·asset_classes·
+    new_capex_by_class·wc_items·wc_driver_by_item·base_net_working_capital·terminal_growth·
+    non_operating_assets·net_debt·shares_outstanding·...}}
+    """
+    d = await request.json()
+    wacc = _wacc_from_json(d.get("wacc") or {})
+    ops = d.get("ops") or {}
+    try:
+        a = assemble_dcf_inputs(
+            wacc=wacc,
+            revenue=[float(x) for x in ops.get("revenue", [])],
+            cogs_pct=[float(x) for x in ops.get("cogs_pct", [])],
+            sga_pct=[float(x) for x in ops.get("sga_pct", [])],
+            asset_classes=_asset_classes(ops.get("asset_classes") or []),
+            new_capex_by_class={k: [float(x) for x in v]
+                                for k, v in (ops.get("new_capex_by_class") or {}).items()},
+            wc_items=_wc_items(ops.get("wc_items") or []),
+            wc_driver_by_item={k: [float(x) for x in v]
+                               for k, v in (ops.get("wc_driver_by_item") or {}).items()},
+            base_net_working_capital=float(ops.get("base_net_working_capital", 0.0)),
+            terminal_growth=float(ops.get("terminal_growth", 0.02)),
+            non_operating_assets=float(ops.get("non_operating_assets", 0.0)),
+            net_debt=float(ops.get("net_debt", 0.0)),
+            shares_outstanding=int(ops.get("shares_outstanding", 1)),
+            mid_year_periods=ops.get("mid_year_periods"),
+            terminal_discount_period=ops.get("terminal_discount_period"),
+        )
+    except (TypeError, ValueError) as e:
+        raise HTTPException(422, f"운영가정 오류: {e}") from e
+    r, s = a.result, a.spine
+    return {
+        "blocked": a.blocked,
+        "per_share": r.per_share if r else None,
+        "enterprise_value": r.enterprise_value if r else None,
+        "equity_value": r.equity_value if r else None,
+        "pv_explicit_sum": r.pv_explicit_sum if r else None,
+        "terminal_value_pv": r.terminal_value_pv if r else None,
+        "tv_weight": (r.terminal_value_pv / r.enterprise_value
+                      if r and r.enterprise_value else None),
+        "wacc": s.wacc if s else None,
+        "provenance": a.provenance,
+        "findings": _findings(a.report),
+    }
 
 
 @app.get("/api/method/options")

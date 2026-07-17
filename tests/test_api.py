@@ -110,6 +110,67 @@ def test_projects_validation():
     assert C.get("/api/projects/../../etc").status_code in (400, 404)   # 경로 탈출 방어
 
 
+# ── 어셈블리 엔드포인트 스모크 (커넥터 원천 → 검증엔진입력 → 결과) ──────────
+_WACC_BODY = {
+    "risk_free": "3.45%",                    # 문자열 → 서버가 복붙 커넥터로 range 게이트
+    "mrp": "8",
+    "peers": [
+        {"ticker": "A", "levered_beta": 1.20, "debt_to_equity": 0.5, "tax_rate": 0.22},
+        {"ticker": "B", "levered_beta": 1.05, "debt_to_equity": 0.3, "tax_rate": 0.22},
+    ],
+    "target_debt_to_equity": 0.4, "tax_rate": 0.22,
+    "kd_matrix_text": "등급 3Y 5Y\nAAA 3.21 3.48\nBBB 5.40 5.80\n",
+    "kd_grade": "BBB", "kd_tenor": "5Y", "market_cap_musd": 1500.0,
+    "beta_source": "bloomberg", "beta_market": "KOSPI",
+    "erp_source": "kicpa", "erp_market": "KOSPI",
+    "pasted_at": "2023-06-30", "user": "jjb",
+}
+_OPS_BODY = {
+    "revenue": [1000, 1100, 1210], "cogs_pct": [0.6, 0.6, 0.6], "sga_pct": [0.2, 0.2, 0.2],
+    "asset_classes": [{"name": "설비", "opening_net_book": 300,
+                       "remaining_life": 3, "useful_life": 10}],
+    "new_capex_by_class": {"설비": [50, 50, 50]},
+    "wc_items": [{"name": "AR", "base_balance": 100, "base_driver": 1000, "is_asset": True}],
+    "wc_driver_by_item": {"AR": [1000, 1100, 1210]},
+    "base_net_working_capital": 100.0, "terminal_growth": 0.02,
+    "non_operating_assets": 100.0, "net_debt": 50.0, "shares_outstanding": 1_000_000,
+}
+
+
+def test_wacc_assemble_from_paste():
+    r = C.post("/api/wacc/assemble", json=_WACC_BODY)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert not d["blocked"]
+    assert 0.08 < d["wacc"] < 0.16               # 커넥터 조립 WACC ≈11%대(골든 대역)
+    assert "risk_free" in d["provenance"]
+    assert "BBB×5Y" in d["provenance"]["pre_tax_cost_of_debt"]
+    assert d["inputs"]["pre_tax_cost_of_debt"] == 0.058
+
+
+def test_wacc_assemble_bad_paste_blocks():
+    bad = {**_WACC_BODY, "risk_free": "350"}      # 350% → range FAIL, 서버 게이트 차단
+    d = C.post("/api/wacc/assemble", json=bad).json()
+    assert d["blocked"] and d["wacc"] is None
+    assert any(f["rule"] == "range" and f["severity"] == "fail" for f in d["findings"])
+
+
+def test_dcf_assemble_end_to_end():
+    r = C.post("/api/dcf/assemble", json={"wacc": _WACC_BODY, "ops": _OPS_BODY})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert not d["blocked"]
+    assert d["per_share"] > 0 and d["enterprise_value"] > 0
+    assert any(f["rule"] == "tv_weight" for f in d["findings"])
+
+
+def test_dcf_assemble_pgr_ge_wacc_blocks():
+    body = {"wacc": _WACC_BODY, "ops": {**_OPS_BODY, "terminal_growth": 0.20}}
+    d = C.post("/api/dcf/assemble", json=body).json()
+    assert d["blocked"] and d["per_share"] is None
+    assert any(f["rule"] == "pgr_vs_wacc" and f["severity"] == "fail" for f in d["findings"])
+
+
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
