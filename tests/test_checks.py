@@ -14,8 +14,9 @@ sys.path.insert(0, str(ROOT / "backend"))
 from calc_core.checks import (  # noqa: E402
     audit_dcf, check_beta_erp_consistency, check_beta_provenance,
     check_projection_smoothness, check_terminal_growth, check_terminal_value_weight,
-    check_wara_irr_wacc,
+    check_wara_irr_wacc, diagnose_dcf_gap,
 )
+from calc_core.dcf import run  # noqa: E402
 from calc_core.models import DcfResult, DcfSpineInput  # noqa: E402
 from calc_core.wacc import WaccInputs, kroll_size_decile, kroll_size_premium  # noqa: E402
 from ingest.validators import Severity  # noqa: E402
@@ -167,6 +168,44 @@ def test_audit_dcf_includes_smoothness():
     rep = audit_dcf(inp, _result(25.0, 75.0))
     assert any(f.rule == "projection_smoothness" and f.severity is Severity.WARN
                for f in rep.findings)
+
+
+# ── 괴리 구조버그 가설 진단 (anthropic audit-xls DCF 버그목록 승격) ──────────
+def _diag_base():
+    inp = DcfSpineInput(
+        wacc=0.10, terminal_growth=0.01,
+        revenue=[100.0, 110.0, 121.0, 133.1, 146.4],
+        cogs=[40.0] * 5, sga=[20.0] * 5, dep_amort=[5.0] * 5, capex=[5.0] * 5,
+        delta_nwc_cash_adj=[0.0] * 5,
+        non_operating_assets=50.0, net_debt=30.0, shares_outstanding=100.0,
+    )
+    return inp, run(inp)
+
+
+def test_diagnosis_pass_when_matching():
+    inp, res = _diag_base()
+    f = diagnose_dcf_gap(inp, res, res.per_share)
+    assert f.severity is Severity.PASS
+
+
+def test_diagnosis_names_end_year_bug():
+    inp, res = _diag_base()
+    claimed = ((res.enterprise_value / 1.10 ** 0.5) + 50.0 - 30.0) / 100.0
+    f = diagnose_dcf_gap(inp, res, claimed)
+    assert f.severity is Severity.WARN and "end_year_discounting" in f.message
+
+
+def test_diagnosis_names_netdebt_ignored():
+    inp, res = _diag_base()
+    claimed = (res.enterprise_value + 50.0) / 100.0     # 순차입 미차감
+    f = diagnose_dcf_gap(inp, res, claimed)
+    assert "netdebt_ignored" in f.message
+
+
+def test_diagnosis_assumption_gap_when_no_match():
+    inp, res = _diag_base()
+    f = diagnose_dcf_gap(inp, res, res.per_share * 1.9)  # 어떤 구조가설과도 무관
+    assert f.severity is Severity.WARN and "가정 차이" in f.message
 
 
 # ── WARA↔IRR↔WACC reconciliation (deloitte 체크리스트 승격) ─────────────────

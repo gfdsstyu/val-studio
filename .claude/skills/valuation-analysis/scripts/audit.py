@@ -26,7 +26,7 @@ def _find_backend() -> Path:
 sys.path.insert(0, str(_find_backend()))
 
 from calc_core import DcfSpineInput, run  # noqa: E402
-from calc_core.checks import audit_dcf  # noqa: E402
+from calc_core.checks import audit_dcf, diagnose_dcf_gap  # noqa: E402
 
 _FIELDS = {f.name for f in dataclasses.fields(DcfSpineInput)}
 
@@ -63,6 +63,11 @@ def main() -> None:
         out["difference_pct"] = round(diff / claimed * 100, 2) if claimed else None
         out["verdict"] = ("일치(±2%)" if abs(diff / claimed) <= 0.02
                           else "괴리 — 가정 재검토 필요") if claimed else None
+        # 괴리 시 구조버그 가설 진단(mid-year 미적용·TV 미할인/누락·nonop·netdebt)
+        diag = diagnose_dcf_gap(inp, res, claimed)
+        out["gap_diagnosis"] = {"severity": diag.severity.value,
+                                "message": diag.message,
+                                "hypotheses": diag.detail.get("hypotheses")}
     print(json.dumps(out, ensure_ascii=False, indent=2))
 
 

@@ -24,8 +24,9 @@ from .wacc import WaccInputs
 
 # 장기 실질 경제성장 전망(한국 성숙경제 관행치). 글로벌·고성장국이면 상위에서 조정.
 DEFAULT_LONG_TERM_GDP = 0.02
-# TV(영구가치) 비중 관행 상단. 초과 시 과대평가 편중 경고(문서상 최빈 ~75%).
-TV_WEIGHT_WARN = 0.90
+# TV(영구가치) 비중 관행 상단. 관행 최빈 ~75%, anthropic audit-xls 도 75% yellow flag
+# → 0.90 에서 하향(2026-07-17, 벤치마크 채택).
+TV_WEIGHT_WARN = 0.75
 # 재투자 모델 없이(D&A=CAPEX, ΔNWC=0) 이 값을 넘는 PGR 은 TV 과대계상 위험.
 # 근거: FCFF_T = NOPLAT_T·(1−g/ROIC) 이나 엔진은 재투자율 0 가정 → g 클수록 왜곡↑.
 REINVESTMENT_FREE_PGR = 0.02
@@ -172,6 +173,71 @@ def check_beta_erp_consistency(
     else:
         f = Finding("beta_erp_consistency", Severity.PASS,
                     f"β/ERP 시장 일치({bm})", {"beta_market": bm, "erp_market": em})
+    if report is not None:
+        report.add(f)
+    return f
+
+
+def diagnose_dcf_gap(
+    inp: DcfSpineInput,
+    result: DcfResult,
+    claimed_per_share: float,
+    *,
+    tol: float = 0.01,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """주장 주당가치와의 괴리를 **구조 버그 가설**로 진단 (audit-xls DCF 버그목록 승격).
+
+    독립 재계산값과 주장값이 다를 때, 흔한 구조 오류 각각을 가정해 재계산해보고
+    주장값이 어느 가설과 맞아떨어지는지 지목한다([[앤트로픽_금융스킬_벤치마크]] §2):
+      end_year_discounting — mid-year 미적용(전 기간 0.5년 과다할인)
+      tv_undiscounted      — 터미널가치를 현재가치로 안 끌어옴
+      tv_missing           — 터미널가치 누락(명시기간만)
+      nonop_missing        — 비영업자산 누락
+      netdebt_ignored      — 순차입부채 미차감
+    어느 가설도 안 맞으면 구조가 아닌 **가정 차이** → 민감도로 추적하라는 신호.
+    """
+    w, n = inp.wacc, len(inp.revenue)
+    shares = inp.shares_outstanding or 1.0
+    ev, pv_exp, pv_tv = (result.enterprise_value, result.pv_explicit_sum,
+                         result.terminal_value_pv)
+
+    def ps(ev_h: float, nonop: float | None = None, debt: float | None = None) -> float:
+        nonop = inp.non_operating_assets if nonop is None else nonop
+        debt = inp.net_debt if debt is None else debt
+        return (ev_h + nonop - debt) / shares
+
+    tv_undisc = pv_tv * (1.0 + w) ** (n - 0.5)      # mid-year 최종기간 역산
+    hypotheses = {
+        "end_year_discounting": ps(ev / (1.0 + w) ** 0.5),
+        "tv_undiscounted": ps(pv_exp + tv_undisc),
+        "tv_missing": ps(pv_exp),
+        "nonop_missing": ps(ev, nonop=0.0),
+        "netdebt_ignored": ps(ev, debt=0.0),
+    }
+    base = result.per_share
+    detail = {"claimed": claimed_per_share, "independent": base,
+              "hypotheses": {k: round(v, 4) for k, v in hypotheses.items()}}
+
+    if claimed_per_share and abs(base - claimed_per_share) / abs(claimed_per_share) <= tol:
+        f = Finding("dcf_gap_diagnosis", Severity.PASS,
+                    f"주장 {claimed_per_share:,.0f} ≈ 독립 {base:,.0f} (±{tol:.0%}) — 구조 일치",
+                    detail)
+    else:
+        matches = {k: v for k, v in hypotheses.items()
+                   if claimed_per_share and abs(v - claimed_per_share) / abs(claimed_per_share) <= tol}
+        if matches:
+            best = min(matches.items(),
+                       key=lambda kv: abs(kv[1] - claimed_per_share))
+            f = Finding("dcf_gap_diagnosis", Severity.WARN,
+                        f"주장 {claimed_per_share:,.0f} 이 구조버그 가설 '{best[0]}' "
+                        f"재계산({best[1]:,.0f})과 ±{tol:.0%} 일치 — 해당 구조 오류 의심",
+                        {**detail, "matched": sorted(matches)})
+        else:
+            f = Finding("dcf_gap_diagnosis", Severity.WARN,
+                        f"주장 {claimed_per_share:,.0f} vs 독립 {base:,.0f} — 구조 가설"
+                        f" 전부 불일치 → 가정 차이(WACC·PGR·매출), 민감도로 추적",
+                        detail)
     if report is not None:
         report.add(f)
     return f

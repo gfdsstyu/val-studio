@@ -76,9 +76,23 @@ class PeerSelectionResult:
         """⚖️ 애매 — 생존했지만 유저 판단이 필요한 후보들."""
         return [t for t in self.traces if t.dropped_at is None and t.review_reason]
 
+    def size_note(self) -> str | None:
+        """5-10 Rule(anthropic comps 정본·우리 4-step 실측 6사 정합): 확정 peer 가
+        5개 미만이면 통계 취약(평균·중앙값 불안정), 10개 초과면 유사성 희석."""
+        n = len(self.selected)
+        if n < 5:
+            return f"⚠️ 확정 peer {n}개 < 5 — 통계 취약(기준 완화 또는 애매 후보 재검토)"
+        if n > 10:
+            return f"⚠️ 확정 peer {n}개 > 10 — 유사성 희석(기준 강화 검토)"
+        return None
+
     def to_markdown(self) -> str:
         """감사 방어용 리포트 — 퍼널 + 최종 peer + 회사별 탈락 사유 전량."""
         lines = ["## 유사회사 선정 결과 (4-step)", ""]
+        note = self.size_note()
+        if note:
+            lines.append(note)
+            lines.append("")
         lines.append("| 단계 | 생존 |")
         lines.append("|---|--:|")
         for step, n in self.funnel.items():
