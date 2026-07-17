@@ -41,6 +41,14 @@
       "doc_type": "knowledge"
     },
     {
+      "id": "msvalue_DCF_교육_정본",
+      "title": "MSVALUE DCF 교육 정본 — 도식 중심 정리",
+      "track": "손상·FV",
+      "layer": "methodology",
+      "parent": "모델링_실무_2강4강",
+      "doc_type": "knowledge"
+    },
+    {
       "id": "msvalue_리포트예시_클래시스",
       "title": "MSVALUE 리포트 예시 (클래시스) — 최종 리포트 양식 정본 명세",
       "track": "거래평가·DCF",
@@ -292,6 +300,51 @@
       "resolved": true
     },
     {
+      "from": "msvalue_DCF_교육_정본",
+      "to": "MnA_실사_가격구조_SPA",
+      "resolved": true
+    },
+    {
+      "from": "msvalue_DCF_교육_정본",
+      "to": "deloitte_감사인검토_WACC방법론",
+      "resolved": true
+    },
+    {
+      "from": "msvalue_DCF_교육_정본",
+      "to": "msvalue_리포트예시_클래시스",
+      "resolved": true
+    },
+    {
+      "from": "msvalue_DCF_교육_정본",
+      "to": "검증_클래시스_DCF",
+      "resolved": true
+    },
+    {
+      "from": "msvalue_DCF_교육_정본",
+      "to": "모델링_실무_2강4강",
+      "resolved": true
+    },
+    {
+      "from": "msvalue_DCF_교육_정본",
+      "to": "밸류에이션_스코프_로드맵",
+      "resolved": true
+    },
+    {
+      "from": "msvalue_DCF_교육_정본",
+      "to": "베타_Bloomberg_vs_KICPA",
+      "resolved": true
+    },
+    {
+      "from": "msvalue_DCF_교육_정본",
+      "to": "손상검사_impairment",
+      "resolved": true
+    },
+    {
+      "from": "msvalue_DCF_교육_정본",
+      "to": "영구성장률_PGR_적합성",
+      "resolved": true
+    },
+    {
       "from": "msvalue_리포트예시_클래시스",
       "to": "모델링_워크플로우_기초",
       "resolved": true
@@ -353,7 +406,17 @@
     },
     {
       "from": "밸류에이션_스코프_로드맵",
+      "to": "MnA_구조화_합병규제_세무",
+      "resolved": true
+    },
+    {
+      "from": "밸류에이션_스코프_로드맵",
       "to": "deloitte_감사인검토_WACC방법론",
+      "resolved": true
+    },
+    {
+      "from": "밸류에이션_스코프_로드맵",
+      "to": "msvalue_DCF_교육_정본",
       "resolved": true
     },
     {
@@ -448,6 +511,7 @@
     "MnA_구조화_합병규제_세무": "합병_주식교환_방법론",
     "MnA_사례집_유형별_시사점": "MnA_실사_가격구조_SPA",
     "MnA_실사_가격구조_SPA": "FDD_재무실사_정상화",
+    "msvalue_DCF_교육_정본": "모델링_실무_2강4강",
     "msvalue_리포트예시_클래시스": "모델링_실무_2강4강",
     "peer_dcf_클래시스_솔루엠": "모델링_실무_2강4강",
     "PPA_무형자산평가": "밸류에이션_스코프_로드맵",
@@ -518,7 +582,11 @@
     "CAC": [
       "PPA_무형자산평가"
     ],
+    "CAPEX": [
+      "msvalue_DCF_교육_정본"
+    ],
     "CAPM": [
+      "msvalue_DCF_교육_정본",
       "msvalue_리포트예시_클래시스",
       "peer_dcf_클래시스_솔루엠"
     ],
@@ -575,6 +643,9 @@
     "DART API": [
       "파서_아키텍처_매트릭스"
     ],
+    "DCF": [
+      "msvalue_DCF_교육_정본"
+    ],
     "DCF 자동화": [
       "xDCF_계정분류_모델아키텍처"
     ],
@@ -583,6 +654,9 @@
     ],
     "DCF법": [
       "외부평가의견서_활용"
+    ],
+    "DDM": [
+      "msvalue_DCF_교육_정본"
     ],
     "Deal Breaker": [
       "MnA_실사_가격구조_SPA"
@@ -600,7 +674,11 @@
       "MnA_실사_가격구조_SPA"
     ],
     "Duff Phelps": [
-      "deloitte_감사인검토_WACC방법론"
+      "deloitte_감사인검토_WACC방법론",
+      "msvalue_DCF_교육_정본"
+    ],
+    "EBIT": [
+      "msvalue_DCF_교육_정본"
     ],
     "EBIT율": [
       "peer_dcf_클래시스_솔루엠"
@@ -617,11 +695,20 @@
     "Earn-out": [
       "MnA_실사_가격구조_SPA"
     ],
+    "Enterprise Value": [
+      "msvalue_DCF_교육_정본"
+    ],
     "Exit": [
       "MnA_사례집_유형별_시사점"
     ],
     "FA": [
       "xDCF_계정분류_모델아키텍처"
+    ],
+    "FCFE": [
+      "msvalue_DCF_교육_정본"
+    ],
+    "FCFF": [
+      "msvalue_DCF_교육_정본"
     ],
     "FDD": [
       "FDD_재무실사_정상화"
@@ -635,13 +722,20 @@
     "GDP": [
       "영구성장률_PGR_적합성"
     ],
+    "GPC": [
+      "msvalue_DCF_교육_정본"
+    ],
     "GP율": [
       "peer_dcf_클래시스_솔루엠"
+    ],
+    "GTC": [
+      "msvalue_DCF_교육_정본"
     ],
     "Gordon": [
       "영구성장률_PGR_적합성"
     ],
     "Hamada": [
+      "msvalue_DCF_교육_정본",
       "wacc_할인율서식",
       "외부평가의견서_고정양식_구조"
     ],
@@ -664,11 +758,23 @@
     "IRR": [
       "deloitte_감사인검토_WACC방법론"
     ],
+    "Invested Capital": [
+      "msvalue_DCF_교육_정본"
+    ],
+    "K-IFRS 1036": [
+      "msvalue_DCF_교육_정본"
+    ],
     "KICPA": [
       "베타_Bloomberg_vs_KICPA"
     ],
     "KOSPI": [
       "베타_Bloomberg_vs_KICPA"
+    ],
+    "Kd": [
+      "msvalue_DCF_교육_정본"
+    ],
+    "Ke": [
+      "msvalue_DCF_교육_정본"
     ],
     "Kroll": [
       "deloitte_감사인검토_WACC방법론"
@@ -709,10 +815,14 @@
       "PPA_무형자산평가"
     ],
     "MRP": [
+      "msvalue_DCF_교육_정본",
       "베타_Bloomberg_vs_KICPA"
     ],
     "Market Model": [
       "모델링_워크플로우_기초"
+    ],
+    "Marshall Blume": [
+      "msvalue_DCF_교육_정본"
     ],
     "Mekko": [
       "장표_작성법"
@@ -726,17 +836,26 @@
     "NOA": [
       "xDCF_계정분류_모델아키텍처"
     ],
+    "NOPLAT": [
+      "msvalue_DCF_교육_정본"
+    ],
     "NWC": [
       "FDD_재무실사_정상화"
     ],
     "NWC peg": [
       "FDD_재무실사_정상화"
     ],
+    "Net Borrowing": [
+      "msvalue_DCF_교육_정본"
+    ],
     "Net Debt": [
       "MnA_실사_가격구조_SPA"
     ],
     "Non-binding 예비입찰": [
       "MnA_사례집_유형별_시사점"
+    ],
+    "Normalized CF": [
+      "msvalue_DCF_교육_정본"
     ],
     "OAL": [
       "xDCF_계정분류_모델아키텍처"
@@ -750,6 +869,9 @@
     "OPM": [
       "밸류에이션_스코프_로드맵",
       "복합금융상품_평가"
+    ],
+    "Operating Net Fixed Assets": [
+      "msvalue_DCF_교육_정본"
     ],
     "PDF": [
       "파서_아키텍처_매트릭스"
@@ -804,7 +926,11 @@
     "Reader Friendliness": [
       "모델링_워크플로우_기초"
     ],
+    "Reinvestment": [
+      "msvalue_DCF_교육_정본"
+    ],
     "Rf": [
+      "msvalue_DCF_교육_정본",
       "채권_기간구조_할인율기초"
     ],
     "S&P500": [
@@ -834,6 +960,9 @@
     "Seasonality": [
       "상대가치_계절성_LTM"
     ],
+    "Size Premium": [
+      "msvalue_DCF_교육_정본"
+    ],
     "Skeleton": [
       "모델링_워크플로우_기초"
     ],
@@ -859,13 +988,20 @@
     "Target Working Capital": [
       "MnA_실사_가격구조_SPA"
     ],
+    "Terminal Value": [
+      "msvalue_DCF_교육_정본"
+    ],
     "Tsiveriotis-Fernandes": [
       "복합금융상품_평가"
     ],
     "VDD": [
       "MnA_실사_가격구조_SPA"
     ],
+    "VIU": [
+      "msvalue_DCF_교육_정본"
+    ],
     "Value Chain": [
+      "msvalue_DCF_교육_정본",
       "기업리서치_양식"
     ],
     "Value-up": [
@@ -875,6 +1011,7 @@
       "복합금융상품_평가"
     ],
     "WACC": [
+      "msvalue_DCF_교육_정본",
       "wacc_할인율서식"
     ],
     "WACC 섹션": [
@@ -892,6 +1029,9 @@
     ],
     "Waterfall": [
       "장표_작성법"
+    ],
+    "Working Capital": [
+      "msvalue_DCF_교육_정본"
     ],
     "XBRL": [
       "파서_아키텍처_매트릭스"
@@ -1025,6 +1165,9 @@
     ],
     "간이합병": [
       "MnA_구조화_합병규제_세무"
+    ],
+    "감가상각 절세효과": [
+      "msvalue_DCF_교육_정본"
     ],
     "감사인": [
       "외부평가의견서_활용"
@@ -1272,6 +1415,9 @@
     "분할": [
       "MnA_구조화_합병규제_세무"
     ],
+    "비영업자산": [
+      "msvalue_DCF_교육_정본"
+    ],
     "비올": [
       "msvalue_리포트예시_클래시스"
     ],
@@ -1297,6 +1443,7 @@
       "기업리서치_양식"
     ],
     "사용가치": [
+      "msvalue_DCF_교육_정본",
       "손상검사_impairment"
     ],
     "산업 CAGR": [
@@ -1381,7 +1528,11 @@
       "손상검사_impairment"
     ],
     "순운전자본": [
-      "FDD_재무실사_정상화"
+      "FDD_재무실사_정상화",
+      "msvalue_DCF_교육_정본"
+    ],
+    "순차입자본": [
+      "msvalue_DCF_교육_정본"
     ],
     "스타트업 M&A": [
       "MnA_사례집_유형별_시사점"
@@ -1410,8 +1561,14 @@
     "시장분할이론": [
       "채권_기간구조_할인율기초"
     ],
+    "시장위험프리미엄": [
+      "msvalue_DCF_교육_정본"
+    ],
     "시장점유율": [
       "xDCF_계정분류_모델아키텍처"
+    ],
+    "시장접근법": [
+      "msvalue_DCF_교육_정본"
     ],
     "시트 구성": [
       "모델링_워크플로우_기초"
@@ -1444,8 +1601,12 @@
       "상대가치_계절성_LTM"
     ],
     "영구성장률": [
+      "msvalue_DCF_교육_정본",
       "영구성장률_PGR_적합성",
       "외부평가의견서_고정양식_구조"
+    ],
+    "영업가치": [
+      "msvalue_DCF_교육_정본"
     ],
     "영업권": [
       "손상검사_impairment"
@@ -1506,6 +1667,9 @@
     "이익의 질": [
       "FDD_재무실사_정상화"
     ],
+    "이익접근법": [
+      "msvalue_DCF_교육_정본"
+    ],
     "이자율모형": [
       "복합금융상품_평가"
     ],
@@ -1538,11 +1702,20 @@
       "MnA_구조화_합병규제_세무",
       "외부평가의견서_활용"
     ],
+    "자산접근법": [
+      "msvalue_DCF_교육_정본"
+    ],
     "장표": [
       "장표_작성법"
     ],
     "재무실사": [
       "FDD_재무실사_정상화"
+    ],
+    "재무제표 재분류": [
+      "msvalue_DCF_교육_정본"
+    ],
+    "재투자": [
+      "msvalue_DCF_교육_정본"
     ],
     "적격합병": [
       "MnA_구조화_합병규제_세무"
@@ -1580,6 +1753,12 @@
     ],
     "제품별 매출": [
       "기업리서치_양식"
+    ],
+    "조정베타": [
+      "msvalue_DCF_교육_정본"
+    ],
+    "조정순자산법": [
+      "msvalue_DCF_교육_정본"
     ],
     "종속회사": [
       "기업리서치_양식"
@@ -1668,6 +1847,9 @@
     "하이로닉": [
       "msvalue_리포트예시_클래시스"
     ],
+    "한공회": [
+      "msvalue_DCF_교육_정본"
+    ],
     "한스바이오메드": [
       "msvalue_리포트예시_클래시스"
     ],
@@ -1707,6 +1889,9 @@
     ],
     "회수가능액": [
       "손상검사_impairment"
+    ],
+    "흑자도산": [
+      "msvalue_DCF_교육_정본"
     ]
   }
 }

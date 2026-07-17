@@ -1,6 +1,6 @@
 # 밸류에이션 북 — 개념·트랙 색인 (자동생성, build.py)
 
-챕터 28 · 개념 402 · 링크 43
+챕터 29 · 개념 439 · 링크 54
 
 ## 위계 트리 (root → foundation → methodology/infrastructure → practice)
 - 🌳 **밸류에이션_스코프_로드맵** (root) — 밸류에이션 플랫폼 스코프 지도 — 대상×목적별 평가 트랙과 방법론
@@ -15,6 +15,7 @@
   - 📐 **wacc_할인율서식** (methodology) — WACC 할인율 서식의 셀 수식 논리 (Hamada·규모별세율·베타옵션)
   - 📐 **기업리서치_양식** (methodology) — 기업 리서치 정본 양식 — Company Brief 10섹션 (0단계 기업·산업 이해 산출물)
   - 📐 **모델링_실무_2강4강** (methodology) — DCF 매출추정 P×Q 사업유형 + Finalize 체크리스트
+    - 📐 **msvalue_DCF_교육_정본** (methodology) — MSVALUE DCF 교육 정본 — 평가접근법·FCFF/FCFE·재무제표 재분류·FCFF 산출·WACC·영구
     - 📐 **모델링_워크플로우_기초** (methodology) — 모델링 워크플로우 기초 — 업무 프로세스 8단계·모델러 역할·엑셀 규율(가독성/무결성)
       - 📐 **장표_작성법** (methodology) — 장표(슬라이드) 작성법 — 메시지 우선·MECE 축·차트 선택 정본 (리포트 단계 산출물 규율)
     - 🛠 **msvalue_리포트예시_클래시스** (practice) — 밸류에이션 리포트 양식 + 미용의료기기 peer + 상세 추정가정
@@ -64,6 +65,7 @@
 - **복합금융상품 평가 (CB·RCPS·BW) — ⏳ 미래 트랙** ([복합금융상품_평가](복합금융상품_평가.md)) — 복합금융상품 평가 — 전환사채(CB)·RCPS·신주인수권(BW) 옵션평가
 
 ### 손상·FV
+- **MSVALUE DCF 교육 정본 — 도식 중심 정리** ([msvalue_DCF_교육_정본](msvalue_DCF_교육_정본.md)) — MSVALUE DCF 교육 정본 — 평가접근법·FCFF/FCFE·재무제표 재분류·FCFF 산출·WACC·영구가치(도식 포함)
 - **PPA 무형자산 평가 (MEEM·RFRM) — ⏳ 미래 트랙** ([PPA_무형자산평가](PPA_무형자산평가.md)) — PPA(매수가격배분) 무형자산 평가 — MEEM·RFRM·TAB
 - **손상검사 (Impairment Test)** ([손상검사_impairment](손상검사_impairment.md)) — 손상검사(Impairment Test) — CGU·회수가능액·사용가치 DCF
 
@@ -78,19 +80,27 @@
 
 ## 다중 챕터 개념(교차 주제)
 - **본질가치**: MnA_구조화_합병규제_세무, 밸류에이션_스코프_로드맵, 합병_주식교환_방법론
+- **CAPM**: msvalue_DCF_교육_정본, msvalue_리포트예시_클래시스, peer_dcf_클래시스_솔루엠
+- **Hamada**: msvalue_DCF_교육_정본, wacc_할인율서식, 외부평가의견서_고정양식_구조
+- **영구성장률**: msvalue_DCF_교육_정본, 영구성장률_PGR_적합성, 외부평가의견서_고정양식_구조
 - **클래시스**: msvalue_리포트예시_클래시스, peer_dcf_클래시스_솔루엠, 검증_클래시스_DCF
 - **베타**: peer_dcf_클래시스_솔루엠, wacc_할인율서식, 베타_Bloomberg_vs_KICPA
 - **외부평가의견서**: 외부평가의견서_고정양식_구조, 외부평가의견서_활용, 파서_아키텍처_매트릭스
+- **Duff Phelps**: deloitte_감사인검토_WACC방법론, msvalue_DCF_교육_정본
 - **CSRP**: deloitte_감사인검토_WACC방법론, 베타_Bloomberg_vs_KICPA
 - **WARA**: PPA_무형자산평가, deloitte_감사인검토_WACC방법론
 - **normalization**: FDD_재무실사_정상화, 상대가치_계절성_LTM
+- **순운전자본**: FDD_재무실사_정상화, msvalue_DCF_교육_정본
 - **M&A**: MnA_구조화_합병규제_세무, MnA_실사_가격구조_SPA
 - **자산양수도**: MnA_구조화_합병규제_세무, 외부평가의견서_활용
 - **합병**: MnA_구조화_합병규제_세무, 합병_주식교환_방법론
 - **주식교환**: MnA_구조화_합병규제_세무, 합병_주식교환_방법론
-- **CAPM**: msvalue_리포트예시_클래시스, peer_dcf_클래시스_솔루엠
+- **Value Chain**: msvalue_DCF_교육_정본, 기업리서치_양식
+- **WACC**: msvalue_DCF_교육_정본, wacc_할인율서식
+- **Rf**: msvalue_DCF_교육_정본, 채권_기간구조_할인율기초
+- **MRP**: msvalue_DCF_교육_정본, 베타_Bloomberg_vs_KICPA
+- **사용가치**: msvalue_DCF_교육_정본, 손상검사_impairment
 - **PPA**: PPA_무형자산평가, 밸류에이션_스코프_로드맵
-- **Hamada**: wacc_할인율서식, 외부평가의견서_고정양식_구조
 - **모델링**: 모델링_실무_2강4강, 모델링_워크플로우_기초
 - **Leveling**: 모델링_워크플로우_기초, 장표_작성법
 - **복합금융상품**: 밸류에이션_스코프_로드맵, 복합금융상품_평가
@@ -100,5 +110,4 @@
 - **TF모형**: 밸류에이션_스코프_로드맵, 복합금융상품_평가
 - **이항모형**: 밸류에이션_스코프_로드맵, 복합금융상품_평가
 - **OPM**: 밸류에이션_스코프_로드맵, 복합금융상품_평가
-- **영구성장률**: 영구성장률_PGR_적합성, 외부평가의견서_고정양식_구조
 - **IR**: 참고보고서_활용, 파서_아키텍처_매트릭스

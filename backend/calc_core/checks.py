@@ -359,6 +359,43 @@ def check_peer_seasonality(
     return f
 
 
+# 운전자본 현금유출이 매출 대비 이 비중을 넘고 계속 악화하면 흑자도산 신호.
+# 근거: msvalue_DCF_교육_정본 §2.4 — 매출 성장에도 회전기일 악화로 FCFF 마이너스 전환.
+WC_BURN_WARN_SHARE = 0.05
+
+
+def check_working_capital_burn(
+    revenue: list[float],
+    delta_nwc_cash_adj: list[float],
+    *,
+    warn_share: float = WC_BURN_WARN_SHARE,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """운전자본 급증(흑자도산) 감지 — 매출은 성장하나 운전자본이 현금을 잠식하는 패턴.
+
+    delta_nwc_cash_adj 는 FCFF 에 더해지는 현금조정(음수 = 운전자본 증가 = 현금유출).
+    각 연도 drag[i] = −ΔNWC/매출 (양수 = 매출 대비 현금유출 비중). drag 가 매 연도
+    악화(단조 증가)하고 최근값이 임계 초과면 WARN(회전기일 악화·분식·흑자도산 검토).
+    매출 ≤ 0 구간은 건너뛴다.
+    """
+    drags = [(-delta_nwc_cash_adj[i] / revenue[i])
+             for i in range(min(len(revenue), len(delta_nwc_cash_adj)))
+             if revenue[i] > 0]
+    detail = {"wc_drag": [round(d, 4) for d in drags], "warn_share": warn_share}
+    worsening = len(drags) >= 2 and all(drags[i] > drags[i - 1] for i in range(1, len(drags)))
+    if drags and worsening and drags[-1] > warn_share:
+        f = Finding("working_capital_burn", Severity.WARN,
+                    f"운전자본 현금유출 비중이 매 연도 악화({drags[0]:.1%}→{drags[-1]:.1%}, "
+                    f"임계 {warn_share:.0%} 초과) — 회전기일 악화·흑자도산 신호, 회전율 가정 재검토",
+                    detail)
+    else:
+        f = Finding("working_capital_burn", Severity.PASS,
+                    "운전자본 현금유출 지속 악화 없음", detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
 def audit_dcf(
     inp: DcfSpineInput,
     result: DcfResult,
@@ -376,6 +413,7 @@ def audit_dcf(
                           long_term_gdp=long_term_gdp, report=report)
     check_terminal_value_weight(result, report=report)
     check_projection_smoothness(list(inp.revenue), name="revenue", report=report)
+    check_working_capital_burn(list(inp.revenue), list(inp.delta_nwc_cash_adj), report=report)
     if wacc_inputs is not None:
         check_beta_provenance(wacc_inputs, report=report)
         check_beta_erp_consistency(wacc_inputs, report=report)

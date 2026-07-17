@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 from calc_core.checks import (  # noqa: E402
     audit_dcf, check_beta_erp_consistency, check_beta_provenance,
     check_projection_smoothness, check_terminal_growth, check_terminal_value_weight,
-    check_wara_irr_wacc, diagnose_dcf_gap,
+    check_wara_irr_wacc, check_working_capital_burn, diagnose_dcf_gap,
 )
 from calc_core.dcf import run  # noqa: E402
 from calc_core.models import DcfResult, DcfSpineInput  # noqa: E402
@@ -206,6 +206,29 @@ def test_diagnosis_assumption_gap_when_no_match():
     inp, res = _diag_base()
     f = diagnose_dcf_gap(inp, res, res.per_share * 1.9)  # 어떤 구조가설과도 무관
     assert f.severity is Severity.WARN and "가정 차이" in f.message
+
+
+# ── 흑자도산: 운전자본 급증 (msvalue 교육 §2.4 승격) ─────────────────────────
+def test_wc_burn_warns_when_worsening():
+    # 매출 성장에도 운전자본 현금유출 비중이 매년 악화 → 흑자도산 WARN (교육 예시 패턴)
+    rev = [1000.0, 1200.0, 1440.0, 1728.0, 2074.0]
+    dnwc = [-56.0, -87.0, -136.0, -213.0, -332.0]   # 음수=현금유출, 매출 대비 심화
+    f = check_working_capital_burn(rev, dnwc)
+    assert f.severity is Severity.WARN and "흑자도산" in f.message
+
+
+def test_wc_burn_pass_when_stable():
+    rev = [1000.0, 1100.0, 1210.0]
+    dnwc = [-20.0, -22.0, -24.2]                      # 매출 대비 2% 유지 → 악화 아님
+    f = check_working_capital_burn(rev, dnwc)
+    assert f.severity is Severity.PASS
+
+
+def test_wc_burn_needs_both_worsening_and_threshold():
+    # 매년 악화하나 임계(5%) 미만 → PASS
+    rev = [1000.0, 1000.0, 1000.0]
+    dnwc = [-10.0, -20.0, -30.0]                      # 1%→2%→3%, 악화지만 5% 미만
+    assert check_working_capital_burn(rev, dnwc).severity is Severity.PASS
 
 
 # ── WARA↔IRR↔WACC reconciliation (deloitte 체크리스트 승격) ─────────────────
