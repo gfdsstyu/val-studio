@@ -1,0 +1,100 @@
+"""로컬 모드 API 스모크 — FastAPI TestClient(서버 기동 불요).
+
+실행: `py -3.12 tests/test_api.py` (fastapi/httpx 는 3.12 환경에 설치됨 —
+3.14 는 pydantic-core 휠 부재로 미지원, 미설치 환경이면 전체 skip)
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "backend"))
+
+try:
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+except ImportError:                                   # 3.14 등 미설치 환경
+    print("fastapi 미설치 — skip (py -3.12 로 실행)")
+    sys.exit(0)
+
+C = TestClient(app)
+
+BODY = {
+    "wacc": 0.10, "terminal_growth": 0.01,
+    "revenue": [100000, 115000, 132000, 149000, 165000],
+    "cogs": [40000, 46000, 52800, 59600, 66000],
+    "sga": [20000, 23000, 26400, 29800, 33000],
+    "dep_amort": [5000] * 5, "capex": [5000] * 5, "delta_nwc_cash_adj": [0] * 5,
+    "non_operating_assets": 20000, "net_debt": 10000,
+    "shares_outstanding": 10_000_000,
+}
+
+
+def test_health():
+    r = C.get("/api/health")
+    assert r.status_code == 200 and r.json()["mode"] == "local-byok"
+
+
+def test_dcf_endpoint_matches_engine():
+    from calc_core import DcfSpineInput, run
+    import dataclasses
+    r = C.post("/api/dcf", json=BODY)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    fields = {f.name for f in dataclasses.fields(DcfSpineInput)}
+    direct = run(DcfSpineInput(**{k: v for k, v in BODY.items() if k in fields}))
+    assert abs(d["per_share"] - direct.per_share) < 1e-9      # API=엔진 무가공
+    # 민감도 중심셀 = base (벤치마크 채택 검증)
+    assert abs(d["sensitivity"]["per_share"][1][1] - d["per_share"]) < 1e-9
+    assert any(f["rule"] == "tv_weight" for f in d["findings"])
+
+
+def test_dcf_claimed_triggers_diagnosis():
+    r = C.post("/api/dcf", json={**BODY, "claimed_per_share": 1000.0})
+    d = r.json()
+    assert "gap_diagnosis" in d and d["gap_diagnosis"]["severity"] in ("warn", "pass")
+
+
+def test_dcf_bad_input_422():
+    r = C.post("/api/dcf", json={"wacc": 0.1})            # 필수 필드 누락
+    assert r.status_code == 422
+
+
+def test_scenario_endpoint():
+    up = {**BODY, "revenue": [x * 1.1 for x in BODY["revenue"]]}
+    r = C.post("/api/scenario", json={
+        "cases": {"base": BODY, "up": up},
+        "weights": {"base": 0.6, "up": 0.4},
+    })
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert len(d["rows"]) == 2 and d["weighted_per_share"] is not None
+    assert d["spread"][0] <= d["weighted_per_share"] <= d["spread"][1]
+
+
+def test_scenario_bad_weights_422():
+    r = C.post("/api/scenario", json={"cases": {"base": BODY}, "weights": {"base": 0.5}})
+    assert r.status_code == 422
+
+
+def test_keys_validate_requires_header():
+    r = C.post("/api/keys/validate")
+    assert r.status_code == 400
+
+
+if __name__ == "__main__":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+    import traceback
+    fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
+    ok = 0
+    for fn in fns:
+        try:
+            fn(); ok += 1; print(f"  ok  {fn.__name__}")
+        except Exception:
+            print(f"  FAIL {fn.__name__}"); traceback.print_exc()
+    print(f"\n{ok}/{len(fns)} passed")

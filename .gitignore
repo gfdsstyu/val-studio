@@ -33,3 +33,7 @@ data/source/
 node_modules/
 dist/
 scratch/
+
+# frontend
+frontend/node_modules/
+frontend/dist/
