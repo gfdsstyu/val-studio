@@ -43,6 +43,9 @@ function KsicLookup() {
 export default function PeerSheet({ project, onSave }) {
   const [cands, setCands] = useState(project?.data?.peer_candidates || DEMO);
   const [codes, setCodes] = useState(project?.data?.peer_codes || "2710");
+  // Step1a: rough 유사회사(Research ⑦⑨ 경쟁사)에서 KSIC 역산 → 모집단 코드
+  const [seedMode, setSeedMode] = useState(false);
+  const [seeds, setSeeds] = useState(project?.data?.peer_seeds || [{ ticker: "", name: "", industry_code: "" }]);
   const [useJudg, setUseJudg] = useState(true);
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
@@ -57,6 +60,14 @@ export default function PeerSheet({ project, onSave }) {
     revenue_share_related: "", listed_years: "", suspended: false, judg: "", reason: "" }]);
   const rmRow = (i) => setCands(cands.filter((_, j) => j !== i));
 
+  const setSeed = (i, k) => (e) => {
+    const next = seeds.slice();
+    next[i] = { ...next[i], [k]: e.target.value };
+    setSeeds(next);
+  };
+  const addSeed = () => setSeeds([...seeds, { ticker: "", name: "", industry_code: "" }]);
+  const rmSeed = (i) => setSeeds(seeds.filter((_, j) => j !== i));
+
   const run = async () => {
     setBusy(true); setErr(null); setRes(null);
     const numOrNull = (v) => (String(v).trim() === "" ? null : Number(v));
@@ -67,8 +78,14 @@ export default function PeerSheet({ project, onSave }) {
         revenue_share_related: numOrNull(c.revenue_share_related),
         listed_years: numOrNull(c.listed_years), suspended: !!c.suspended,
       })),
-      target_industry_codes: codes.split(/[\s,]+/).filter(Boolean),
     };
+    if (seedMode) {                          // Step1a: seed → 서버가 KSIC 역산
+      body.seed_peers = seeds
+        .filter((s) => s.ticker.trim())
+        .map((s) => ({ ticker: s.ticker, name: s.name || s.ticker, industry_code: s.industry_code || null }));
+    } else {
+      body.target_industry_codes = codes.split(/[\s,]+/).filter(Boolean);
+    }
     if (useJudg) {
       body.judgments = cands
         .filter((c) => c.ticker.trim() && c.reason.trim() && c.judg)
@@ -77,7 +94,7 @@ export default function PeerSheet({ project, onSave }) {
     try {
       const d = await api.peerSelect(body);
       setRes(d);
-      onSave?.({ peer_candidates: cands, peer_codes: codes,
+      onSave?.({ peer_candidates: cands, peer_codes: codes, peer_seeds: seeds,
         peer_selected: d.selected, peer_needs_review: d.needs_review });
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
@@ -87,10 +104,34 @@ export default function PeerSheet({ project, onSave }) {
       <div className="card">
         <h2>유사회사 4-step <span className="muted">— 결정론 퍼널 + 사업유사성 판정</span></h2>
         <div className="pad">
-          <div className="row" style={{ maxWidth: 320 }}>
-            <label>모집단 산업코드 (KSIC, 콤마 구분)</label>
-            <input type="text" value={codes} onChange={(e) => setCodes(e.target.value)} />
-          </div>
+          <label style={{ marginBottom: 6 }}>
+            <input type="checkbox" checked={seedMode} onChange={(e) => setSeedMode(e.target.checked)} />
+            {" "}Step1a 역산 — rough 유사회사(Research ⑦⑨ 경쟁사)의 KSIC 로 모집단 코드 산출
+          </label>
+          {!seedMode ? (
+            <div className="row" style={{ maxWidth: 320 }}>
+              <label>모집단 산업코드 (KSIC, 콤마 구분)</label>
+              <input type="text" value={codes} onChange={(e) => setCodes(e.target.value)} />
+            </div>
+          ) : (
+            <div style={{ marginBottom: 8 }}>
+              <label>rough 유사회사 시드 (Ticker·회사·KSIC) → 코드 역산(union)</label>
+              <table style={{ maxWidth: 420 }}>
+                <thead><tr><th>Ticker</th><th>회사</th><th>KSIC</th><th></th></tr></thead>
+                <tbody>
+                  {seeds.map((s, i) => (
+                    <tr key={i}>
+                      <td><input type="text" value={s.ticker} onChange={setSeed(i, "ticker")} style={{ width: 64 }} /></td>
+                      <td><input type="text" value={s.name} onChange={setSeed(i, "name")} style={{ width: 96 }} /></td>
+                      <td><input type="text" value={s.industry_code} onChange={setSeed(i, "industry_code")} style={{ width: 64 }} /></td>
+                      <td><button className="ghost xs" onClick={() => rmSeed(i)}>✕</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button className="ghost" onClick={addSeed} style={{ marginTop: 4 }}>+ 시드 추가</button>
+            </div>
+          )}
           <label style={{ marginTop: 8 }}>
             <input type="checkbox" checked={useJudg} onChange={(e) => setUseJudg(e.target.checked)} />
             {" "}사업유사성 판정 포함(끄면 결정론 필터 1·3·4단계만)
@@ -136,6 +177,11 @@ export default function PeerSheet({ project, onSave }) {
           <h2>선정 결과</h2>
           <div className="pad">
             {res.size_note && <div className="finding warn">{res.size_note}</div>}
+            {res.codes_used && res.codes_used.length > 0 && (
+              <div className="muted" style={{ marginBottom: 8 }}>
+                모집단 코드: {res.codes_used.join(", ")}{seedMode ? " (Step1a 역산)" : ""}
+              </div>
+            )}
             <table style={{ marginBottom: 12 }}>
               <thead><tr><th style={{ textAlign: "left" }}>단계</th><th>생존</th></tr></thead>
               <tbody>{Object.entries(res.funnel).map(([k, n]) => (

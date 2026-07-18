@@ -396,7 +396,9 @@ async def peer_select(request: Request) -> dict:
     suspended?}], target_industry_codes?:[...], judgments?:[{ticker,similar,reason,uncertain?}],
     revenue_share_threshold?, min_listed_years?}. Step2 무근거 판정은 422(검증 게이트).
     """
-    from ingest.peer_selection import PeerCandidate, Step2Judgment, select_peers
+    from ingest.peer_selection import (
+        PeerCandidate, Step2Judgment, codes_from_seed_peers, select_peers,
+    )
     d = await request.json()
     try:
         cands = [PeerCandidate(
@@ -411,7 +413,13 @@ async def peer_select(request: Request) -> dict:
         ) for j in (d.get("judgments") or [])] or None
     except (KeyError, TypeError) as e:
         raise HTTPException(422, f"candidates/judgments 형식 오류: {e}") from e
-    codes = set(d.get("target_industry_codes") or []) or None
+    # Step1 코드: 직접 지정 우선, 없으면 seed_peers(rough 유사회사)로 KSIC 역산(Step1a)
+    codes = set(d.get("target_industry_codes") or [])
+    if not codes and d.get("seed_peers"):
+        codes = codes_from_seed_peers([PeerCandidate(
+            ticker=s.get("ticker", "?"), name=s.get("name", ""),
+            industry_code=s.get("industry_code")) for s in d["seed_peers"]])
+    codes = codes or None
     kw = {}
     if "revenue_share_threshold" in d:
         kw["revenue_share_threshold"] = float(d["revenue_share_threshold"])
@@ -432,6 +440,7 @@ async def peer_select(request: Request) -> dict:
         "warnings": [f"{t.candidate.name}: {w}" for t in res.traces for w in t.warnings],
         "size_note": res.size_note(),
         "markdown": res.to_markdown(),
+        "codes_used": sorted(codes or []),      # Step1a 역산 결과(감사 추적)
     }
 
 

@@ -171,6 +171,29 @@ def test_dcf_assemble_pgr_ge_wacc_blocks():
     assert any(f["rule"] == "pgr_vs_wacc" and f["severity"] == "fail" for f in d["findings"])
 
 
+def test_peer_select_seed_peers_ksic_reverse():
+    """③ 웹 패리티: seed_peers(rough 유사회사) → KSIC 역산(codes_used)으로 모집단 필터."""
+    body = {
+        "candidates": [
+            {"ticker": "A", "name": "동종A", "industry_code": "2710", "revenue_share_related": 0.9, "listed_years": 5},
+            {"ticker": "B", "name": "무관B", "industry_code": "5811", "revenue_share_related": 0.9, "listed_years": 5},
+        ],
+        "seed_peers": [{"ticker": "S1", "industry_code": "2710"}, {"ticker": "S2", "industry_code": "2711"}],
+    }
+    d = C.post("/api/peer/select", json=body).json()
+    assert set(d["codes_used"]) == {"2710", "2711"}          # 역산 코드
+    assert [c["ticker"] for c in d["selected"]] == ["A"]     # B는 코드 불일치 탈락
+
+
+def test_peer_select_no_reason_422():
+    """Step2 무근거 판정 → 422(검증 게이트)."""
+    body = {"candidates": [{"ticker": "A", "name": "A", "industry_code": "2710",
+                            "revenue_share_related": 0.9, "listed_years": 5}],
+            "target_industry_codes": ["2710"],
+            "judgments": [{"ticker": "A", "similar": True, "reason": " "}]}
+    assert C.post("/api/peer/select", json=body).status_code == 422
+
+
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
