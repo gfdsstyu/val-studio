@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { api } from "../../api.js";
 
 /* 1.계정분류 — pl(손익)·bs(BS NOA/IBD). 계정 → 밸류에이션 버킷 수동 매핑.
    자동 분류(LLM)는 후속 — v1 은 유저 수동(정확성 우선, xDCF 자동분류 Sales 오분류 약점 회피).
@@ -18,9 +19,30 @@ export default function MappingSheet({ project, sheet, onSave }) {
   const [rows, setRows] = useState(project?.data?.[key] || [
     { account: "", amount: "", bucket: buckets[0] },
   ]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
 
   const setRow = (i, k) => (e) => {
-    const next = rows.slice(); next[i] = { ...next[i], [k]: e.target.value }; setRows(next);
+    const next = rows.slice(); next[i] = { ...next[i], [k]: e.target.value, _sug: undefined }; setRows(next);
+  };
+
+  // 자동 분류 제안 — 결정론 규칙(서버). 매칭분만 버킷 채우고, uncertain/저신뢰는 배지로 표기.
+  const autoClassify = async () => {
+    const named = rows.map((r, i) => [i, (r.account || "").trim()]).filter(([, a]) => a);
+    if (!named.length) { setErr("계정과목을 먼저 입력하세요."); return; }
+    setBusy(true); setErr(null);
+    try {
+      const { classifications } = await api.fsClassify({
+        statement: isBs ? "BS" : "PL", accounts: named.map(([, a]) => a) });
+      const next = rows.slice();
+      named.forEach(([i], k) => {
+        const c = classifications[k];
+        next[i] = { ...next[i],
+          bucket: c.bucket || next[i].bucket,   // uncertain 이면 기존 유지
+          _sug: { bucket: c.bucket, conf: c.confidence, uncertain: c.uncertain, note: c.note } };
+      });
+      setRows(next);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
   const add = () => setRows([...rows, { account: "", amount: "", bucket: buckets[0] }]);
   const rm = (i) => setRows(rows.filter((_, j) => j !== i));
@@ -57,18 +79,31 @@ export default function MappingSheet({ project, sheet, onSave }) {
               ? "재무상태표 계정을 버킷으로 분류합니다. NOA(비영업자산)·IBD(이자부부채)는 EV→지분가치 브리지에 직결됩니다."
               : "손익계산서 계정을 Sales/COGS/SGA/영업외로 분류합니다. 원가·판관비 가정의 기초."}</div>
           <table>
-            <thead><tr><th>계정과목</th><th>금액(백만원)</th><th>버킷</th><th></th></tr></thead>
+            <thead><tr><th>계정과목</th><th>금액(백만원)</th><th>버킷</th><th>제안</th><th></th></tr></thead>
             <tbody>{rows.map((r, i) => (
               <tr key={i}>
                 <td><input type="text" value={r.account} onChange={setRow(i, "account")} style={{ width: 160 }} /></td>
                 <td><input type="text" value={r.amount} onChange={setRow(i, "amount")} style={{ width: 100, textAlign: "right" }} /></td>
                 <td><select value={r.bucket} onChange={setRow(i, "bucket")} style={{ fontSize: 12 }}>
                   {buckets.map((b) => <option key={b} value={b}>{b}</option>)}</select></td>
+                <td style={{ fontSize: 11 }}>
+                  {r._sug && (r._sug.uncertain
+                    ? <span className="muted" title="규칙 무매칭 — 유저 분류">⚖️ 미상</span>
+                    : <span className={r._sug.conf < 0.7 ? "" : "muted"}
+                        style={r._sug.conf < 0.7 ? { color: "var(--warn)" } : {}}
+                        title={r._sug.note || `신뢰도 ${(r._sug.conf * 100).toFixed(0)}%`}>
+                        {(r._sug.conf * 100).toFixed(0)}%{r._sug.note ? " ⚠" : ""}</span>)}
+                </td>
                 <td><button className="ghost xs" onClick={() => rm(i)}>✕</button></td>
               </tr>))}</tbody>
           </table>
           <button className="ghost" onClick={add} style={{ marginTop: 6 }}>+ 계정 추가</button>{" "}
+          <button className="ghost" onClick={autoClassify} disabled={busy}>
+            {busy ? "분류 중…" : "자동 분류 제안"}</button>{" "}
           <button className="primary" onClick={save}>저장</button>
+          {err && <div className="err">{err}</div>}
+          <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+            자동 분류는 <b>제안</b>입니다 — ⚖️ 미상·⚠ 저신뢰(현금 등)는 직접 확인하세요.</div>
         </div>
       </div>
 

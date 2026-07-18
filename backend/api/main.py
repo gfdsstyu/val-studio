@@ -484,6 +484,68 @@ async def assumptions_build(request: Request) -> dict:
     return out
 
 
+# ── FS 계정 자동 분류 (NOA/IBD 등 버킷 제안) ─────────────────────────────────
+@app.post("/api/fs/classify")
+async def fs_classify(request: Request) -> dict:
+    """계정명 리스트 → 버킷 제안(결정론 규칙). 무매칭 = uncertain(유저 분류 필요).
+
+    body: {statement: "PL"|"BS", accounts: ["매출원가", "단기차입금", ...]}.
+    반환은 **제안**일 뿐 — 최종은 유저 승인(판단 보조 원칙).
+    """
+    from ingest.fs_mapper import classify_all
+    d = await request.json()
+    stmt = str(d.get("statement", "")).upper()
+    if stmt not in ("PL", "BS"):
+        raise HTTPException(422, "statement 는 'PL'|'BS'")
+    try:
+        cls = classify_all([str(a) for a in (d.get("accounts") or [])], stmt)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    return {"classifications": [
+        {"account": c.account, "bucket": c.bucket, "confidence": c.confidence,
+         "rule": c.rule, "uncertain": c.uncertain, "note": c.note} for c in cls]}
+
+
+# ── Company Brief — DART 원문 XBRL → 프리필 + 마크다운 골격 ───────────────────
+@app.post("/api/brief/from_xbrl")
+async def brief_from_xbrl(request: Request) -> dict:
+    """{xbrl_b64, company_hint?} → 재무·세그먼트·주식수 프리필 + Brief 마크다운(10섹션).
+
+    DART 원문 XBRL instance(.xbrl)를 업로드하면 결정론 추출. label 링크베이스가 함께
+    있으면(형제 *_lab-ko.xml) 세그먼트 한글명까지, 없으면 축코드로 degrade.
+    """
+    from ingest.parsers.xbrl import XbrlParser
+    from ingest.profiles.research_brief import extract_research_brief, render_brief_md
+    d = await request.json()
+    if "xbrl_b64" not in d:
+        raise HTTPException(422, "xbrl_b64 필요")
+    raw = _decode_xlsx(d["xbrl_b64"])                 # base64 디코드 재사용
+    fd, path = tempfile.mkstemp(suffix=".xbrl")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(raw)
+        p = XbrlParser("brief-upload")
+        try:
+            p.extract(path)
+        except Exception as e:                        # noqa: BLE001 — 파싱 실패 안내
+            raise HTTPException(422, f"XBRL 파싱 실패(원문 instance 아님?): {e}") from e
+        pre = extract_research_brief(p)
+        md = render_brief_md(pre, company_hint=d.get("company_hint", ""))
+    finally:
+        os.unlink(path)
+    def _seg(s):
+        return {"label": s.label, "period": s.period, "revenue": s.revenue}
+    return {
+        "company": pre.company, "homepage": pre.homepage, "doc_period": pre.doc_period,
+        "financials": pre.financials,
+        "segments": [_seg(s) for s in pre.segments],
+        "regions": [_seg(s) for s in pre.regions],
+        "issued_shares": pre.issued_shares, "treasury_shares": pre.treasury_shares,
+        "floating_ratio": pre.floating_ratio(),
+        "periods": sorted(pre.financials), "markdown": md,
+    }
+
+
 @app.get("/api/method/options")
 def method_options() -> dict:
     """위저드 선택지 — 목적·거래유형 카탈로그(프론트 하드코딩 방지, SSOT=백엔드)."""
