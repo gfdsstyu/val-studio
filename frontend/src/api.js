@@ -32,6 +32,10 @@ export const api = {
     j("POST", "/api/dart/validate", undefined, { "X-Dart-Key": key }),
   dartFinancials: (key, body) =>
     j("POST", "/api/dart/financials", body, { "X-Dart-Key": key }),
+  dartCorpSearch: (key, q, listedOnly) =>
+    j("POST", "/api/dart/corp-search", { q, listed_only: !!listedOnly }, { "X-Dart-Key": key }),
+  dartFilings: (key, body) =>
+    j("POST", "/api/dart/filings", body, { "X-Dart-Key": key }),
   projects: {
     list: () => j("GET", "/api/projects"),
     create: (body) => j("POST", "/api/projects", body),

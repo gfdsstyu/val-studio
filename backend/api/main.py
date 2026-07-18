@@ -599,6 +599,89 @@ async def dart_financials(request: Request,
             "corp_code": corp, "year": year}
 
 
+# ── DART 기업코드 검색(캐시) · 공시목록 · 원본 zip ───────────────────────────
+# corpCode.xml(~10만사)은 최초 1회 다운로드해 서버 캐시(var/), 이후 인메모리 검색.
+_CORP_CACHE = _ROOT / "var" / "dart_corpcode.json"
+_corp_index: list[dict] | None = None
+
+
+def _load_corp_index(api_key: str) -> list[dict]:
+    """캐시 있으면 로드, 없으면 DART 에서 1회 다운로드 후 캐시."""
+    global _corp_index
+    if _corp_index is not None:
+        return _corp_index
+    if _CORP_CACHE.exists():
+        _corp_index = _json.loads(_CORP_CACHE.read_text(encoding="utf-8"))
+        return _corp_index
+    from ingest.dart_corp import fetch_corp_index
+    idx = fetch_corp_index(api_key)
+    _CORP_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    _CORP_CACHE.write_text(_json.dumps(idx, ensure_ascii=False), encoding="utf-8")
+    _corp_index = idx
+    return idx
+
+
+@app.post("/api/dart/corp-search")
+async def dart_corp_search(request: Request,
+                           x_dart_key: str | None = Header(default=None)) -> dict:
+    """{q, listed_only?} + X-Dart-Key → 회사명 → corp_code 후보. 최초 1회만 키로 다운로드."""
+    from ingest.dart_corp import search_corp_index
+    d = await request.json()
+    q = str(d.get("q", "")).strip()
+    if not q:
+        raise HTTPException(422, "q(회사명) 필요")
+    if _corp_index is None and not _CORP_CACHE.exists() and not x_dart_key:
+        raise HTTPException(400, "최초 기업코드 다운로드에 X-Dart-Key 필요(이후 캐시)")
+    try:
+        idx = _load_corp_index(x_dart_key or "")
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"corpCode 다운로드 실패: {e.reason}") from e
+    hits = search_corp_index(idx, q, listed_only=bool(d.get("listed_only")))
+    return {"results": hits, "cached": _CORP_CACHE.exists(), "total": len(idx)}
+
+
+@app.post("/api/dart/filings")
+async def dart_filings(request: Request,
+                       x_dart_key: str | None = Header(default=None)) -> dict:
+    """{corp_code, bgn_de, end_de?, pblntf_ty?} + X-Dart-Key → 공시목록(rcept_no 등)."""
+    if not x_dart_key:
+        raise HTTPException(400, "X-Dart-Key 헤더 없음")
+    from ingest.dart_corp import list_filings
+    d = await request.json()
+    corp = str(d.get("corp_code", "")).strip()
+    bgn = str(d.get("bgn_de", "")).strip()
+    if not (corp and bgn):
+        raise HTTPException(422, "corp_code, bgn_de(YYYYMMDD) 필요")
+    try:
+        rows = list_filings(x_dart_key, corp, bgn_de=bgn, end_de=d.get("end_de"),
+                            pblntf_ty=d.get("pblntf_ty"))
+    except RuntimeError as e:
+        raise HTTPException(422, str(e)) from e
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
+    return {"filings": rows, "count": len(rows)}
+
+
+@app.post("/api/dart/document")
+async def dart_document(request: Request,
+                        x_dart_key: str | None = Header(default=None)) -> Response:
+    """{rcept_no} + X-Dart-Key → 원본 공시 zip(document.xml) 다운로드."""
+    if not x_dart_key:
+        raise HTTPException(400, "X-Dart-Key 헤더 없음")
+    from ingest.dart_corp import download_document
+    d = await request.json()
+    rcept = str(d.get("rcept_no", "")).strip()
+    if not rcept:
+        raise HTTPException(422, "rcept_no 필요")
+    try:
+        blob = download_document(x_dart_key, rcept)
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
+    return Response(
+        content=blob, media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="dart_{rcept}.zip"'})
+
+
 @app.get("/api/method/options")
 def method_options() -> dict:
     """위저드 선택지 — 목적·거래유형 카탈로그(프론트 하드코딩 방지, SSOT=백엔드)."""

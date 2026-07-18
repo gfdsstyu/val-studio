@@ -16,7 +16,19 @@ function DartFetchPanel({ project, onSave }) {
   const [res, setRes] = useState(project?.data?.dart_financials || null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [q, setQ] = useState(project?.company || "");
+  const [hits, setHits] = useState(null);
   const key = loadKey("dart");
+
+  const searchCorp = async () => {
+    if (!key) { setErr("BYOK 탭에서 DART API 키를 먼저 저장하세요."); return; }
+    if (!q.trim()) return;
+    setBusy(true); setErr(null);
+    try {
+      const d = await api.dartCorpSearch(key, q.trim(), true);   // 상장사 우선
+      setHits(d.results);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
 
   const fetch = async () => {
     if (!key) { setErr("BYOK 탭에서 DART API 키를 먼저 저장하세요."); return; }
@@ -48,6 +60,22 @@ function DartFetchPanel({ project, onSave }) {
       <h2>DART 재무제표 조회 <span className="muted">— OpenDART fnlttSinglAcntAll(BYOK 키)</span></h2>
       <div className="pad">
         {!key && <div className="finding warn">BYOK 탭에서 OpenDART API 키를 저장해야 조회됩니다.</div>}
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 }}>
+          <div className="row" style={{ margin: 0, flex: 1, maxWidth: 260 }}><label>회사명으로 corp_code 찾기</label>
+            <input type="text" value={q} onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && searchCorp()} placeholder="예: 삼성전자" /></div>
+          <button className="ghost" onClick={searchCorp} disabled={busy}>검색</button>
+        </div>
+        {hits && (
+          <div className="muted" style={{ marginBottom: 8, fontSize: 12 }}>
+            {hits.length ? hits.slice(0, 8).map((h) => (
+              <button key={h.corp_code} className="ghost xs" style={{ margin: "2px 4px 2px 0" }}
+                onClick={() => { setCorp(h.corp_code); setHits(null); }}
+                title={`corp_code ${h.corp_code}`}>
+                {h.corp_name}{h.stock_code ? `(${h.stock_code})` : ""}</button>
+            )) : "검색 결과 없음"}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div className="row" style={{ margin: 0 }}><label>corp_code (8자리)</label>
             <input type="text" value={corp} onChange={(e) => setCorp(e.target.value)} placeholder="00126380" style={{ width: 110 }} /></div>
