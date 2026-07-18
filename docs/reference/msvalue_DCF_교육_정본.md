@@ -222,7 +222,7 @@ Ke = Rf + βL × Risk Premium + (country risk) + (size premium) + (specific risk
 | **Tax** | 한계법인세율 20.9%(200억 이하)·23.1%(200억 초과) |
 
 > **우리 엔진 매핑**: `wacc.py`(CAPM 빌드업·Hamada·size premium)와 완전 일치. MRP 국내=한공회
-> 는 [[베타_Bloomberg_vs_KICPA]]·checks β/ERP 정합의 근거. Deloitte 60개월은 [[deloitte_감사인검토_WACC방법론]].
+> 는 [[베타_Bloomberg_vs_KICPA]]·checks β/MRP 정합의 근거. Deloitte 60개월은 [[deloitte_감사인검토_WACC방법론]].
 
 ### 3.3 Hamada — β 언레버/리레버
 관측 Levered β → Unlevered β 전환 → 목표 자본구조로 Re-levering. 체계적 위험 β 는 **법인세율에
@@ -298,7 +298,7 @@ NWC 각각 재조정:
 | FCFF 스파인·mid-year·EBIT 세금 | `calc_core.dcf`(비올 골든) |
 | BS 재분류(영업/비영업·순차입자본) | NOA/IBD 브리지·[[MnA_실사_가격구조_SPA]] §4 |
 | WACC CAPM·Hamada·조정베타·size | `wacc.py`·[[베타_Bloomberg_vs_KICPA]]·[[deloitte_감사인검토_WACC방법론]] |
-| 국내 위험프리미엄 = 한공회 **MRP** | checks β/ERP 정합(용어: 국내=MRP) |
+| 국내 위험프리미엄 = 한공회 **MRP** | checks β/MRP 정합(용어: 국내=MRP) |
 | Normalized CF 운전자본 재조정 | 개선 B `terminal_reinvestment_rate`·[[검증_클래시스_DCF]] |
 | K-IFRS 1036.35 VIU 5년 상한 | 손상 트랙 연결점([[손상검사_impairment]]·로드맵) |
 | 흑자도산(운전자본 급증) | checks 확장 후보(운전자본/매출 급등) |

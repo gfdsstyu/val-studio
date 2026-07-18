@@ -90,7 +90,7 @@ WACC = [(Debt to Capital × Cost of Debt) × (1−Tax Rate)] + (Equity to Capita
 | K열 `J/(1+(1-F)*I)` | `unlever_beta(levered, d_e, tax)` |
 | F22 relever | `relever_beta(unlevered, d_e, tax)` |
 | K16 평균 | `peer_unlevered_beta(peers)` (peers=[(βL,D/E,tax),…]) |
-| F32 Ke | `Ke = risk_free + beta·ERP + size + CRP + CSRP` |
+| F32 Ke | `Ke = risk_free + beta·MRP + size + CRP + CSRP` |
 | F37 after-tax Kd | `pre_tax_cost_of_debt × (1−tax)` |
 | F39/F40 weights | `we = 1/(1+D/E)`, `wd = D/E/(1+D/E)` (또는 G16/H16 직접) |
 | F42 WACC | `we·Ke + wd·Kd_at` |
@@ -100,7 +100,7 @@ WACC = [(Debt to Capital × Cost of Debt) × (1−Tax Rate)] + (Equity to Capita
 ## 5. 재현 체크리스트 (WACC)
 - [ ] peer 세율 = 규모별(20.9/23.1/27.5%) 개별 적용해 무부채화.
 - [ ] 베타 옵션(2Y weekly vs 5Y monthly) 명시 — 리포트 예시는 **2년 주간 조정베타**(Bloomberg adjusted = ⅔·raw + ⅓·1).
-- [ ] ERP = 한공회 가이던스(예시 8%).
+- [ ] MRP = 한공회 가이던스(예시 8%).
 - [ ] 목표 자본구조 = 유사회사 평균(D/Cap, E/Cap).
 - [ ] Ke에 size/CRP/CSRP 반영 여부 문서화.
 - [ ] WACC 재계산 = `wacc.build_wacc` 결과와 일치.
