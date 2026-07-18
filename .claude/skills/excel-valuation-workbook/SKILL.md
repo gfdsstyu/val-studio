@@ -87,7 +87,7 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 | **W1 리서치** | Company Brief 초안(가용 소스만) | 필수 슬롯·출처 누락 검사 | 기업리서치_양식·참고보고서_활용 |
 | **W2 과거 FS 정합성·무결성 + 이관** | `fs_clean.py`로 정규화·교차검증·재분류 추적 | FAIL 0·재분류 미해결 0·대차·tie-out | 모델링_실무_2강4강·account_dictionary |
 | **W2.5 손익 계정 세분화** | 러프한 IS 라인을 성격별로 분해(매출→제품/상품/용역, 원가·판관비→성격별) — `fs_disagg.py` | **세분합=원계정(합보존) FAIL 0**·구성비 YoY 급변 WARN 표면화 | account_dictionary·모델링_실무_2강4강 |
-| **W3 계정재분류** | PL 4유형·BS 6유형 태깅(모호는 표면화) | 분류합=원본 FS합(누락·중복 0) | xDCF_계정분류·msvalue_DCF_교육_정본 |
+| **W3 계정재분류** | PL 4유형·BS 6유형 태깅(모호는 표면화) — `reclass.py`로 파티션 검증 | **분류합=원본 FS합(FAIL 게이트)**·누락·중복·유형오류 0 | xDCF_계정분류·msvalue_DCF_교육_정본 |
 | **W4 추정** | 드라이버 후보 제시→선택분 수식 구현. **`Fcst_Rev`·`Fcst_Cost`는 FS_Disagg 세분 라인(제품/상품/용역, 재료/노무/경비, 급여/상각/광고)과 동일 성격 행 → `계=Σ세분` 살아있는 SUM 롤업 → DCF!매출/원가/판관비** | projection_smoothness·wc_burn·가정 출처 완비·**세분 계=원계정 롤업 일치** | msvalue_리포트예시·모델링_실무 |
 | **W5 WACC** | `wacc.py`(Kroll 제안·peer 근거) | β/MRP 정합·provenance·8~14% | wacc_할인율서식·베타·deloitte·PGR |
 | **W6 DCF** | 스파인 입력셀→Fcst 계 참조 승격(`promote.py`) + `dcf.py` 재계산 | **승격 tie-out(per_share 불변)**·워크북 vs 엔진 rel_tol 1e-6·audit 전규칙·gap_diagnosis | engine_spec·검증_클래시스 |
@@ -127,6 +127,9 @@ echo '{"sources":[{"label":"FY2024","periods":{"2024":{"매출액":"1,234",...}}
 
 # W2.5 손익 세분화 (세분합=원계정 합보존 게이트 + 구성비 YoY 추이)
 echo '{"blocks":[{"parent":"매출액","periods":{"2024":{"total":"1,234","children":{"제품매출":"800","상품매출":"434"}}}}]}' | python scripts/fs_disagg.py
+
+# W3 평가재분류 (표준계정→유형 파티션; 분류합=원본 FS합·중복·누락·유형오류 0)
+echo '{"items":[{"account":"매출채권","amount":100,"type":"WC"},{"account":"유형자산","amount":700,"type":"FA"}],"original_total":800}' | python scripts/reclass.py
 
 # W5 WACC (market_cap_musd 주면 Kroll 제안)
 echo '{"risk_free":0.03,"market_risk_premium":0.08,"unlevered_beta":1.0,...}' | python scripts/wacc.py

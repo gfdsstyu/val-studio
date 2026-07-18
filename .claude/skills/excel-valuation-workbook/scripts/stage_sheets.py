@@ -120,7 +120,8 @@ def build_reclass(wb, n: int = 5):
     s.text("B4", "PL 4유형: Sales / COGS / SGA / NO(영업외)")
     s.text("B5", "BS 6유형: WC / FA / NOA(비영업자산) / IBD(이자부채) / OAL / EQU")
     s.text("B6", "⚠️ 현금(최소영업=WC vs 잉여=NOA)·이연법인세 경계는 평가인 판단")
-    row = 8
+    s.text("B7", "게이트: 분류합=원본 FS합(reclass.py) — 누락·중복·유형오류 0")
+    row = 9
     for col, h in zip("BCDEF", ["표준계정", "평가유형", "_A(실사조정)", "_F(최종)", "근거"]):
         s.text(f"{col}{row}", h)
     return s
