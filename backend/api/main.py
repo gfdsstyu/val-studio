@@ -510,6 +510,28 @@ async def costs_build(request: Request) -> dict:
     return {"cogs": res.cogs, "sga": res.sga, "detail": res.detail}
 
 
+@app.post("/api/assumptions/lease")
+async def assumptions_lease(request: Request) -> dict:
+    """K-IFRS 1116 리스 스케줄 → 이자·원금·ROU 감가상각·리스부채잔액.
+
+    body: {term, discount_rate, annual_payment? | initial_liability?, rou_asset?}.
+    → ROU 감가상각(D&A 가산), 리스부채잔액(순차입부채), 이자(금융비용).
+    """
+    from calc_core.lease import lease_schedule
+    d = await request.json()
+    try:
+        r = lease_schedule(
+            int(d["term"]), float(d["discount_rate"]),
+            annual_payment=d.get("annual_payment"),
+            initial_liability=d.get("initial_liability"),
+            rou_asset=d.get("rou_asset"))
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"리스 입력 오류: {e}") from e
+    return {"liability_open": r.liability_open, "interest": r.interest,
+            "principal": r.principal, "payment": r.payment,
+            "liability_close": r.liability_close, "rou_depreciation": r.rou_depreciation}
+
+
 @app.post("/api/fs/classify")
 async def fs_classify(request: Request) -> dict:
     """계정명 리스트 → 버킷 제안(결정론 규칙). 무매칭 = uncertain(유저 분류 필요).

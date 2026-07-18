@@ -17,6 +17,23 @@ export default function FaSheet({ project, onSave }) {
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
+  // K-IFRS 1116 리스: ROU 감가상각 → D&A 합산, 리스부채 → 순차입부채 브리지.
+  const [lease, setLease] = useState(project?.data?.lease_input ||
+    { term: "5", discount_rate: "0.05", annual_payment: "1000", initial_liability: "" });
+  const [leaseRes, setLeaseRes] = useState(project?.data?.lease_built || null);
+  const setL = (k) => (e) => setLease({ ...lease, [k]: e.target.value });
+
+  const buildLease = async () => {
+    setErr(null);
+    try {
+      const body = { term: Number(lease.term), discount_rate: Number(lease.discount_rate) };
+      if (lease.initial_liability.trim()) body.initial_liability = Number(lease.initial_liability);
+      else body.annual_payment = Number(lease.annual_payment);
+      const d = await api.assumptionsLease(body);
+      setLeaseRes(d);
+      onSave?.({ lease_input: lease, lease_built: d });
+    } catch (e) { setErr(e.message); }
+  };
 
   const setRow = (i, k) => (e) => {
     const next = rows.slice(); next[i] = { ...next[i], [k]: e.target.value }; setRows(next);
@@ -42,8 +59,18 @@ export default function FaSheet({ project, onSave }) {
   const pushToDcf = () => {
     if (!res) return;
     const prev = project?.data?.dcf_input || {};
-    onSave?.({ dcf_input: { ...prev, dep_amort: res.dep_amort.map(Math.round).join(", "),
+    // ROU 감가상각을 D&A 에 합산(리스 계산 시).
+    const rou = leaseRes?.rou_depreciation || [];
+    const dep = res.dep_amort.map((v, i) => Math.round(v + (rou[i] || 0)));
+    onSave?.({ dcf_input: { ...prev, dep_amort: dep.join(", "),
       capex: res.capex.map(Math.round).join(", ") } });
+  };
+
+  const pushLeaseDebt = () => {
+    if (!leaseRes) return;
+    const prev = project?.data?.dcf_input || {};
+    const base = Number(prev.net_debt) || 0;
+    onSave?.({ dcf_input: { ...prev, net_debt: Math.round(base + leaseRes.liability_open[0]) } });
   };
 
   return (
@@ -88,9 +115,48 @@ export default function FaSheet({ project, onSave }) {
             </tbody>
           </table>
           <button className="primary" onClick={pushToDcf} style={{ marginTop: 12 }}>
-            D&A·CAPEX 를 DCF 입력에 반영</button>
+            D&A·CAPEX 를 DCF 입력에 반영{leaseRes ? " (+ROU 감가상각)" : ""}</button>
         </div></div>
       )}
+
+      <div className="card">
+        <h2>리스 (K-IFRS 1116) <span className="muted">— 사용권자산 감가상각 + 리스부채</span></h2>
+        <div className="pad">
+          <div className="muted" style={{ marginBottom: 8 }}>
+            리스료가 이자·원금으로 분리되고 사용권자산은 정액 감가상각됩니다. ROU 감가상각은
+            D&A 에 가산, 리스부채 잔액은 순차입부채(EV→지분)에 반영.</div>
+          <div className="grid2">
+            <div className="row"><label>리스기간(년)</label>
+              <input type="text" value={lease.term} onChange={setL("term")} /></div>
+            <div className="row"><label>리스이자율</label>
+              <input type="text" value={lease.discount_rate} onChange={setL("discount_rate")} /></div>
+            <div className="row"><label>연 리스료 (또는 아래 리스부채)</label>
+              <input type="text" value={lease.annual_payment} onChange={setL("annual_payment")} /></div>
+            <div className="row"><label>초기 리스부채 (있으면 우선)</label>
+              <input type="text" value={lease.initial_liability} onChange={setL("initial_liability")} placeholder="선택" /></div>
+          </div>
+          <button className="primary" onClick={buildLease}>리스 스케줄 계산</button>
+
+          {leaseRes && (
+            <>
+              <table style={{ marginTop: 12 }}>
+                <thead><tr><th style={{ textAlign: "left" }}>항목</th>
+                  {leaseRes.rou_depreciation.map((_, i) => <th key={i}>Y{i + 1}</th>)}</tr></thead>
+                <tbody>
+                  <tr><th style={{ textAlign: "left" }}>ROU 감가상각(→D&A)</th>{leaseRes.rou_depreciation.map((v, i) => <td key={i}>{fmt(v)}</td>)}</tr>
+                  <tr><th style={{ textAlign: "left" }}>리스이자(금융비용)</th>{leaseRes.interest.map((v, i) => <td key={i}>{fmt(v)}</td>)}</tr>
+                  <tr><th style={{ textAlign: "left" }}>원금상환</th>{leaseRes.principal.map((v, i) => <td key={i}>{fmt(v)}</td>)}</tr>
+                  <tr style={{ borderTop: "1px solid var(--line)" }}><th style={{ textAlign: "left" }}>리스부채 잔액</th>{leaseRes.liability_close.map((v, i) => <td key={i}>{fmt(v)}</td>)}</tr>
+                </tbody>
+              </table>
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                기초 리스부채 <b>{fmt(leaseRes.liability_open[0])}</b> → 순차입부채 반영 대상.</div>
+              <button className="primary" onClick={pushLeaseDebt} style={{ marginTop: 8 }}>
+                리스부채를 순차입부채에 반영</button>
+            </>
+          )}
+        </div>
+      </div>
     </>
   );
 }
