@@ -485,6 +485,31 @@ async def assumptions_build(request: Request) -> dict:
 
 
 # ── FS 계정 자동 분류 (NOA/IBD 등 버킷 제안) ─────────────────────────────────
+@app.post("/api/assumptions/costs-build")
+async def costs_build(request: Request) -> dict:
+    """성격별 원가 라인 → 매출원가·판관비 벡터(비올/MSVALUE 다중 드라이버).
+
+    body: {years, cpi?:[연율], fa_dep?:[감가상각], lines:[{name, category:'cogs'|'sga',
+    method:'growth'|'ratio'|'headcount'|'cpi'|'fa_dep'|'fixed', ...params}]}.
+    → {cogs, sga, detail}. 각 라인은 자기 경제동인으로 투영 후 카테고리 합산.
+    """
+    from calc_core.cost_build import CostLine, project_costs
+    d = await request.json()
+    years = int(d.get("years", 0))
+    if years <= 0:
+        raise HTTPException(422, "years 필요")
+    _F = {"base", "growth", "driver", "pct", "headcount", "wage_per_head",
+          "bonus_rate", "severance_rate", "fa_share"}
+    try:
+        lines = [CostLine(name=ln.get("name", "?"), category=ln.get("category", "cogs"),
+                          method=ln["method"], **{k: ln[k] for k in _F if k in ln})
+                 for ln in (d.get("lines") or [])]
+        res = project_costs(lines, years, cpi=d.get("cpi"), fa_dep=d.get("fa_dep"))
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"원가 라인 오류: {e}") from e
+    return {"cogs": res.cogs, "sga": res.sga, "detail": res.detail}
+
+
 @app.post("/api/fs/classify")
 async def fs_classify(request: Request) -> dict:
     """계정명 리스트 → 버킷 제안(결정론 규칙). 무매칭 = uncertain(유저 분류 필요).

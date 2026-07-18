@@ -24,6 +24,7 @@ export const api = {
   peerSelect: (body) => j("POST", "/api/peer/select", body),
   ksicSearch: (q) => j("GET", `/api/ksic/search?q=${encodeURIComponent(q)}`),
   assumptionsBuild: (body) => j("POST", "/api/assumptions/build", body),
+  assumptionsBuildCosts: (body) => j("POST", "/api/assumptions/costs-build", body),
   fsClassify: (body) => j("POST", "/api/fs/classify", body),
   briefFromXbrl: (body) => j("POST", "/api/brief/from_xbrl", body),
   validateGeminiKey: (key) =>
