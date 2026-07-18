@@ -262,7 +262,9 @@ W2는 **과거 재무제표의 정합성·무결성을 검증하는 절차**이�
 
 - **엔진 3×3** (`dcf.run` sensitivity): WACC×g, step ±1%p, 중심 [1][1]==base. **내부 self-consistency 앵커만** — 리포트용 아님. 엔진 변경 없음.
 - **워크북 그리드** (W8 산출물): WACC×PGR **5×5 살아있는 Excel 수식**(셀마다 독립 DCF 재계산). Claude가 수식으로 생성. MSVALUE 리포트 관행(부록F) 그리드 크기 계승.
-- **연결**: 워크북 그리드 중심 == 엔진 3×3 중심 == base per_share (3자 일치 게이트). 외곽 셀은 Excel recalc 게이트(LibreOffice headless)가 검증.
+- **연결**: 워크북 그리드 중심 == 엔진 3×3 중심 == base per_share (3자 일치 게이트). 외곽 셀은 Excel recalc 게이트(LibreOffice headless, `scripts/recalc_gate.py`)가 검증.
+
+**recalc 게이트(`scripts/recalc_gate.py`) — 수식 정확성 CI 도구**: 우리 export 는 `<f>수식</f><v>엔진캐시값</v>` 를 함께 쓰므로 지금까지 테스트는 캐시(엔진값)만 봤다. 이 게이트는 **cached 를 제거한 '수식만' xlsx** 를 LibreOffice 로 recalc-on-load(OOXMLRecalcMode=0) 시켜, 계산된 값을 엔진값과 대조 → `<f>` 수식(셀참조·중첩 IF 구간세율·`^`·크로스시트 참조)이 진짜 Calc 엔진에서 우리 엔진과 동일하게 계산되는지 확인한다. cached 제거가 핵심(안 하면 recalc 미동작 시 캐시 echo 로 false pass). `soffice` 미설치면 skip(오탐 아님). W6 승격 셀(`=Fcst_*!계`)·W8 그리드 외곽 셀의 수식 검증에 사용. `tests/skill/test_recalc_gate.py`.
 - **(선택) 시나리오×민감도 2중 그리드**: 부록F의 `CHOOSE` 드라이버 토글로 시나리오 전환 + 각 시나리오별 민감도. W7·W8 합성. v1은 단일 시나리오 5×5 우선, 2중 그리드는 Should.
 
 ### 1.4d 단계별 추천 모델·effort·난이도 기반 선택
