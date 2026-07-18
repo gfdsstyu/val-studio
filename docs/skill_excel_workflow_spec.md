@@ -181,7 +181,7 @@ Research 시트·template_conventions 저술 시 아래 실무 양식의 항목 
 | **W5 WACC** | CAPM 빌드업 (`WACC`) | `wacc.py` 실행, Kroll 제안, peer 근거 정리 | β 출처·peer·WACC 승인 | `check_beta_erp_consistency`(F3)·`check_beta_provenance`, 8~14% 상식범위 |
 | **W6 DCF 완성** | 스파인 입력셀→Fcst 계 참조 승격(`promote.py`) + 독립 재계산 | `promote.py`(승격+tie-out)·`dcf.py` 재계산 → 워크북 셀 단위 대조 | 결과 확정(승격 델타 검토) | **승격 tie-out(per_share 불변; 불일치=라인·연도 델타 표면화)**, **워크북 vs 엔진 per_share (rel_tol 1e-6)**, `audit_dcf` 전 규칙, 필요 시 `gap_diagnosis` |
 | **W7 시나리오** | upside/base/downside (`Scenario`) | 케이스 구성안, `scenario.py` 실행 | 케이스·**가중치 승인(합=1)** | weights 완전일치·합=1 아니면 엔진 거부 |
-| **W8 민감도** | WACC×PGR **5×5 살아있는 수식** + (선택)2중 그리드 | Excel 수식 생성, 엔진 3×3 중심 대조 | 그리드 범위·스텝 확정 | **워크북 중심 == 엔진 3×3 중심 == base**, 외곽은 recalc 게이트 |
+| **W8 민감도** | `sensitivity.py`로 WACC×PGR **5×5 살아있는 수식**(closed-form, FCFF 고정·할인·터미널만 축 반응) + (선택)2중 그리드 | Excel 수식 생성, 엔진 3×3 중심 대조 | 그리드 범위·스텝 확정 | **워크북 중심 == 엔진 3×3 중심 == base**, 내부 3×3 == 엔진 민감도, 외곽은 recalc 게이트 |
 | **W9 리포트(선택)** | 주요가정 표·차이 서사 | 리포트 초안(출처 표) | 최종 검토 | audit findings 요약 누락 없이 반영 |
 
 ### 1.4a 단계별 자료 요청 프로토콜 (guided intake — just-in-time)
@@ -261,7 +261,7 @@ W2는 **과거 재무제표의 정합성·무결성을 검증하는 절차**이�
 ### 1.4c 민감도 2층 구조 (엔진 검증 ≠ 워크북 산출물)
 
 - **엔진 3×3** (`dcf.run` sensitivity): WACC×g, step ±1%p, 중심 [1][1]==base. **내부 self-consistency 앵커만** — 리포트용 아님. 엔진 변경 없음.
-- **워크북 그리드** (W8 산출물): WACC×PGR **5×5 살아있는 Excel 수식**(셀마다 독립 DCF 재계산). Claude가 수식으로 생성. MSVALUE 리포트 관행(부록F) 그리드 크기 계승.
+- **워크북 그리드** (W8 산출물): WACC×PGR **5×5 살아있는 Excel 수식**(셀마다 독립 DCF 재계산). `scripts/sensitivity.py`(→`backend/excel/sensitivity_grid.py`)가 생성 — **명시연도 FCFF 는 WACC·g 무관(고정)이라 `DCF!FCFF` 행 참조, 할인·터미널만 축값 반응하는 closed-form**(엔진 `_compute` 대수 1:1). 셀 캐시=엔진 재계산값, 수식은 그 closed-form 에서 생성. 내부 3×3 == 엔진 자체 민감도로 교차검증, Excel 문법은 recalc 게이트가 확인. MSVALUE 리포트 관행(부록F) 그리드 크기 계승.
 - **연결**: 워크북 그리드 중심 == 엔진 3×3 중심 == base per_share (3자 일치 게이트). 외곽 셀은 Excel recalc 게이트(LibreOffice headless, `scripts/recalc_gate.py`)가 검증.
 
 **recalc 게이트(`scripts/recalc_gate.py`) — 수식 정확성 CI 도구**: 우리 export 는 `<f>수식</f><v>엔진캐시값</v>` 를 함께 쓰므로 지금까지 테스트는 캐시(엔진값)만 봤다. 이 게이트는 **cached 를 제거한 '수식만' xlsx** 를 LibreOffice 로 recalc-on-load(OOXMLRecalcMode=0) 시켜, 계산된 값을 엔진값과 대조 → `<f>` 수식(셀참조·중첩 IF 구간세율·`^`·크로스시트 참조)이 진짜 Calc 엔진에서 우리 엔진과 동일하게 계산되는지 확인한다. cached 제거가 핵심(안 하면 recalc 미동작 시 캐시 echo 로 false pass). `soffice` 미설치면 skip(오탐 아님). W6 승격 셀(`=Fcst_*!계`)·W8 그리드 외곽 셀의 수식 검증에 사용. `tests/skill/test_recalc_gate.py`.

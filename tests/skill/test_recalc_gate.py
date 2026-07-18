@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 import recalc_gate  # noqa: E402
 from calc_core import DcfSpineInput, run  # noqa: E402
 from excel.dcf_export import build_dcf_sheet  # noqa: E402
+from excel.sensitivity_grid import build_sensitivity  # noqa: E402
 from excel.template_schema import RESULT, ROW, YEAR_COLS  # noqa: E402
 from excel.xlsx_reader import read_workbook  # noqa: E402
 
@@ -110,6 +111,28 @@ def test_recalc_matches_engine():
           f"(엔진 {res.per_share:,.2f}) — 수식 정확성 확인")
 
 
+def test_recalc_sensitivity_grid():
+    """W8 Sens 그리드(가장 복잡한 수식: SUMPRODUCT·구간세 IF·크로스시트)가 Calc 에서
+    엔진 캐시와 일치. soffice 없으면 skip."""
+    soffice = recalc_gate.find_soffice()
+    if not soffice:
+        print("SKIP test_recalc_sensitivity_grid: LibreOffice 미설치")
+        return
+    inp = _viol()
+    wb = build_sensitivity(inp)                      # DCF + Sens
+    engine_cache = {ref: c.cached for s in wb.sheets if s.name == "Sens"
+                    for ref, c in s.cells.items() if c.formula is not None}
+    recalc_gate.strip_cached(wb)
+    with tempfile.TemporaryDirectory() as td:
+        p = str(Path(td) / "sens.xlsx")
+        wb.save(p)
+        sens = recalc_gate.recalc(p, soffice=soffice)["Sens"]
+    fails = [f"{ref}: recalc {sens.get(ref)!r} != 엔진 {exp!r}"
+             for ref, exp in engine_cache.items() if not _close(sens.get(ref), exp)]
+    assert not fails, "Sens recalc 불일치:\n  " + "\n  ".join(fails[:10])
+    print(f"  Sens 중심 recalc = {sens.get('F7'):,.2f} — 25셀 수식 정확성 확인")
+
+
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -119,4 +142,6 @@ if __name__ == "__main__":
     print("PASS test_strip_cached_yields_formula_only")
     test_recalc_matches_engine()
     print("PASS test_recalc_matches_engine")
-    print("\n2 tests passed (recalc 는 soffice 있을 때만 실제 대조).")
+    test_recalc_sensitivity_grid()
+    print("PASS test_recalc_sensitivity_grid")
+    print("\n3 tests passed (recalc 는 soffice 있을 때만 실제 대조).")
