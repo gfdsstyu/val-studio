@@ -15,6 +15,7 @@ import FaSheet from "./pages/appraiser/FaSheet.jsx";
 import WcSheet from "./pages/appraiser/WcSheet.jsx";
 import MaterialsSheet from "./pages/appraiser/MaterialsSheet.jsx";
 import MappingSheet from "./pages/appraiser/MappingSheet.jsx";
+import Dashboard from "./pages/appraiser/Dashboard.jsx";
 import Roundtrip from "./pages/appraiser/Roundtrip.jsx";
 
 /* 셸(ia_ux_architecture.md §3): 헤더(정체성+상태, 액션 無) · LNB=단계 축 ·
@@ -148,7 +149,11 @@ function Workspace({ projectId, onHome }) {
 
   const body = (() => {
     if (showByok) return <ByokPanel />;
-    if (stage.id === "cover") return <CoverSheet project={project} />;
+    if (stage.id === "cover")
+      return project.mode === "appraiser"
+        ? <Dashboard project={project}
+            onNavigate={(sid) => { const st = stages.find((x) => x.id === sid); if (st) gotoStage(st); }} />
+        : <CoverSheet project={project} />;
     if (stage.id === "materials")
       return <MaterialsSheet project={project} sheet={sheet.id} onSave={saveData} />;
     if (stage.id === "mapping")
