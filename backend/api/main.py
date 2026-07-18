@@ -749,6 +749,54 @@ async def price_fx(request: Request) -> dict:
     return {"pair": pair, "rate": c, "rate_date": dt}
 
 
+# ── CSV/엑셀 업로드 → 정규화 그리드(복붙 대안: 한공회 β·Kd 매트릭스·신용등급 표) ──
+def _cells_to_grid(cells: dict) -> list[list]:
+    """{cell ref: RCell} → 2D 그리드(행·열 정렬). 빈 셀은 ''."""
+    import re as _re2
+    parsed, maxr, maxc = [], 0, 0
+    for ref, cell in cells.items():
+        m = _re2.match(r"([A-Z]+)(\d+)", ref)
+        if not m:
+            continue
+        col = 0
+        for ch in m.group(1):
+            col = col * 26 + (ord(ch) - 64)
+        row = int(m.group(2))
+        val = cell.value if cell.value is not None else ""
+        parsed.append((row, col, val))
+        maxr, maxc = max(maxr, row), max(maxc, col)
+    grid = [["" for _ in range(maxc)] for _ in range(maxr)]
+    for row, col, val in parsed:
+        grid[row - 1][col - 1] = val
+    return grid
+
+
+@app.post("/api/upload/sheet")
+async def upload_sheet(request: Request) -> dict:
+    """{csv} 또는 {xlsx_b64} → 탭 구분 텍스트(+2D rows). 복붙 textarea 에 드롭용.
+
+    한공회 β·KOFIABOND Kd 매트릭스·신용등급 표 등을 파일로 올려 manual_paste 게이트로
+    보낸다(복붙과 동일 검증). xlsx 는 첫 시트만. 값이 살아있는 수식은 캐시값 사용.
+    """
+    d = await request.json()
+    if d.get("csv"):
+        rows = [[c.strip() for c in ln.split(",")]
+                for ln in str(d["csv"]).splitlines() if ln.strip()]
+    elif d.get("xlsx_b64"):
+        path = _write_temp_xlsx(_decode_xlsx(d["xlsx_b64"]))
+        try:
+            wb = read_workbook(path)
+        except Exception as e:                        # noqa: BLE001
+            raise HTTPException(422, f"xlsx 읽기 실패: {e}") from e
+        finally:
+            os.unlink(path)
+        rows = _cells_to_grid(next(iter(wb.values()), {}))
+    else:
+        raise HTTPException(422, "csv 또는 xlsx_b64 필요")
+    text = "\n".join("\t".join(str(c) for c in r) for r in rows)
+    return {"text": text, "rows": rows, "n_rows": len(rows)}
+
+
 @app.get("/api/method/options")
 def method_options() -> dict:
     """위저드 선택지 — 목적·거래유형 카탈로그(프론트 하드코딩 방지, SSOT=백엔드)."""

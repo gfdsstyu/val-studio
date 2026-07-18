@@ -39,6 +39,7 @@ export const api = {
   priceBeta: (body) => j("POST", "/api/price/beta", body),
   priceMarketcap: (body) => j("POST", "/api/price/marketcap", body),
   priceFx: (body) => j("POST", "/api/price/fx", body),
+  uploadSheet: (body) => j("POST", "/api/upload/sheet", body),
   projects: {
     list: () => j("GET", "/api/projects"),
     create: (body) => j("POST", "/api/projects", body),

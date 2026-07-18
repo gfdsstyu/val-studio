@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { api } from "../../api.js";
+import { api, fileToBase64 } from "../../api.js";
 
 /* 3.할인율 > WACC 빌드업 — 커넥터 어셈블리(/api/wacc/assemble) 소비.
    Rf·MRP·Kd 는 복붙(문자열) → 서버가 range 게이트. peers 무부채화·Kroll size·
@@ -188,8 +188,22 @@ export default function DiscountSheet({ project, onSave }) {
               <input type="text" value={form.tax_rate} onChange={set("tax_rate")} /></div>
           </div>
 
-          <div className="row"><label>Kd 신용등급×만기 매트릭스 (복붙 — 등급 + 만기별 수익률%)</label>
-            <textarea rows={4} value={form.kd_matrix_text} onChange={set("kd_matrix_text")} /></div>
+          <div className="row"><label>Kd 신용등급×만기 매트릭스 (복붙 또는 CSV/엑셀 업로드)</label>
+            <textarea rows={4} value={form.kd_matrix_text} onChange={set("kd_matrix_text")} />
+            <div style={{ marginTop: 4 }}>
+              <input type="file" accept=".csv,.xlsx" style={{ fontSize: 11 }}
+                onChange={async (e) => {
+                  const f = e.target.files[0]; if (!f) return;
+                  try {
+                    const body = /\.xlsx$/i.test(f.name)
+                      ? { xlsx_b64: await fileToBase64(f) }
+                      : { csv: await f.text() };
+                    const d = await api.uploadSheet(body);
+                    setForm({ ...form, kd_matrix_text: d.text });
+                  } catch (er) { setErr(er.message); }
+                }} />
+              <span className="muted" style={{ fontSize: 11 }}> CSV/엑셀 표 → 매트릭스 자동 채움</span>
+            </div></div>
           <div className="grid2">
             <div className="row"><label>Kd 선택 등급</label>
               <input type="text" value={form.kd_grade} onChange={set("kd_grade")} placeholder="BBB" /></div>
