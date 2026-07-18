@@ -20,7 +20,7 @@ const DEMO = {
 };
 
 const FIELD_LABELS = [
-  ["revenue", "매출액 (백만원, 연도별 콤마 구분)"],
+  ["revenue", "매출액"],
   ["cogs", "매출원가"],
   ["sga", "판관비"],
   ["dep_amort", "감가상각비"],
@@ -67,18 +67,34 @@ export default function DcfSheet({ project, onSave }) {
     const init = saved || DEMO;
     return assembledWacc != null ? { ...init, wacc: String(assembledWacc) } : init;
   });
+  // 시리즈는 연도=열 그리드로 편집(콤마 문자열 → 셀 배열). 저장 시 다시 조인해 하류 호환.
+  const [grid, setGrid] = useState(() => {
+    const src = saved || DEMO;
+    return Object.fromEntries(
+      FIELD_LABELS.map(([k]) => [k, parseSeries(src[k] ?? DEMO[k]).map(String)]));
+  });
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  const years = grid.revenue.length;
+  const setCell = (k, i) => (e) => {
+    const next = grid[k].slice();
+    next[i] = e.target.value;
+    setGrid({ ...grid, [k]: next });
+  };
+  const addYear = () =>
+    setGrid(Object.fromEntries(FIELD_LABELS.map(([k]) => [k, [...grid[k], "0"]])));
+  const rmYear = (i) =>
+    setGrid(Object.fromEntries(FIELD_LABELS.map(([k]) => [k, grid[k].filter((_, j) => j !== i)])));
 
   const runDcf = async () => {
     setBusy(true); setErr(null); setRes(null);
-    const lens = FIELD_LABELS.map(([k]) => parseSeries(form[k]).length);
-    if (new Set(lens).size !== 1) {
-      setErr(`연도 수 불일치: ${FIELD_LABELS.map(([k], i) => `${k}=${lens[i]}`).join(", ")}`);
-      setBusy(false); return;
+    for (const [k, label] of FIELD_LABELS) {
+      if (grid[k].some((v) => v.trim() === "" || Number.isNaN(Number(v)))) {
+        setErr(`${label}: 숫자가 아닌/빈 셀이 있습니다.`); setBusy(false); return;
+      }
     }
     const body = {
       wacc: Number(form.wacc),
@@ -87,15 +103,17 @@ export default function DcfSheet({ project, onSave }) {
       net_debt: Number(form.net_debt),
       shares_outstanding: Number(form.shares_outstanding),
     };
-    for (const [k] of FIELD_LABELS) body[k] = parseSeries(form[k]);
+    for (const [k] of FIELD_LABELS) body[k] = grid[k].map(Number);
     if (form.claimed_per_share.trim()) body.claimed_per_share = Number(form.claimed_per_share);
     try {
       const d = await api.dcf(body);
       setRes(d);
-      onSave?.({ dcf_input: form, dcf_result_summary: {
+      // 시리즈는 콤마 문자열로 직렬화해 저장(시나리오·export 가 그대로 소비).
+      const seriesStr = Object.fromEntries(FIELD_LABELS.map(([k]) => [k, grid[k].join(", ")]));
+      onSave?.({ dcf_input: { ...form, ...seriesStr }, dcf_result_summary: {
         per_share: d.per_share, tv_weight: d.tv_weight,
         warn: d.findings.filter((f) => f.severity !== "pass").length,
-      }});
+      }, dcf_findings: d.findings.filter((f) => f.severity !== "pass") });
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -119,12 +137,36 @@ export default function DcfSheet({ project, onSave }) {
             <div className="row"><label>영구성장률 PGR (소수)</label>
               <input type="text" value={form.terminal_growth} onChange={set("terminal_growth")} /></div>
           </div>
-          {FIELD_LABELS.map(([k, label]) => (
-            <div className="row" key={k}>
-              <label>{label}</label>
-              <input type="text" value={form[k]} onChange={set(k)} />
-            </div>
-          ))}
+          <label style={{ marginTop: 6 }}>추정 시계열 (백만원, 연도=열)</label>
+          <div style={{ overflowX: "auto" }}>
+            <table className="grid-input">
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left" }}>항목</th>
+                  {Array.from({ length: years }, (_, i) => (
+                    <th key={i}>
+                      Y{i + 1}
+                      {years > 1 && (
+                        <button className="ghost xs" title="열 삭제" onClick={() => rmYear(i)}>✕</button>
+                      )}
+                    </th>
+                  ))}
+                  <th><button className="ghost xs" title="연도 추가" onClick={addYear}>+</button></th>
+                </tr>
+              </thead>
+              <tbody>
+                {FIELD_LABELS.map(([k, label]) => (
+                  <tr key={k}>
+                    <th style={{ textAlign: "left", whiteSpace: "nowrap" }}>{label}</th>
+                    {grid[k].map((v, i) => (
+                      <td key={i}><input type="text" value={v} onChange={setCell(k, i)} /></td>
+                    ))}
+                    <td></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <div className="grid2">
             <div className="row"><label>비영업자산 (백만원)</label>
               <input type="text" value={form.non_operating_assets} onChange={set("non_operating_assets")} /></div>

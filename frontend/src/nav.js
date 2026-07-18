@@ -25,7 +25,7 @@ export const NAV = {
     ]},
     { id: "valuation", label: "4. 밸류에이션", sheets: [
       { id: "dcf", label: "DCF" },
-      { id: "scenario", label: "시나리오", soon: true },
+      { id: "scenario", label: "시나리오" },
     ]},
     { id: "output", label: "5. 산출물", sheets: [
       { id: "report", label: "리포트", soon: true },

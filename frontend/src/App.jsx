@@ -5,6 +5,7 @@ import Home from "./pages/Home.jsx";
 import ByokPanel from "./pages/Byok.jsx";
 import DcfSheet from "./pages/appraiser/DcfSheet.jsx";
 import DiscountSheet from "./pages/appraiser/DiscountSheet.jsx";
+import ScenarioSheet from "./pages/appraiser/ScenarioSheet.jsx";
 import Roundtrip from "./pages/appraiser/Roundtrip.jsx";
 
 /* 셸(ia_ux_architecture.md §3): 헤더(정체성+상태, 액션 無) · LNB=단계 축 ·
@@ -61,6 +62,49 @@ function CoverSheet({ project }) {
   );
 }
 
+/** 근거·판단 보조 패널 — 저장된 provenance(출처 라벨) + 비-pass 게이트 findings.
+    DiscountSheet/DcfSheet 가 onSave 로 남긴 데이터를 감사 추적용으로 표면화. */
+function ContextPanel({ project }) {
+  const d = project?.data || {};
+  const prov = d.wacc_provenance || {};
+  const provKeys = Object.keys(prov);
+  const findings = [...(d.wacc_findings || []), ...(d.dcf_findings || [])];
+  const empty = !provKeys.length && !findings.length;
+  return (
+    <aside className="context-panel">
+      <h2>근거·판단 보조</h2>
+      <div className="pad">
+        {empty && (
+          <div className="muted">
+            WACC 빌드업·DCF 를 실행하면 출처(provenance)와 게이트 경고가 여기 모입니다.
+          </div>
+        )}
+        {provKeys.length > 0 && (
+          <>
+            <h3 style={{ fontSize: 12, color: "var(--sub)", margin: "4px 0" }}>출처 (provenance)</h3>
+            <table><tbody>
+              {provKeys.map((k) => (
+                <tr key={k}><th style={{ textAlign: "left", width: 96 }}>{k}</th>
+                  <td style={{ textAlign: "left" }} className="muted">{prov[k]}</td></tr>
+              ))}
+            </tbody></table>
+          </>
+        )}
+        {findings.length > 0 && (
+          <>
+            <h3 style={{ fontSize: 12, color: "var(--sub)", margin: "10px 0 4px" }}>게이트 경고</h3>
+            {findings.map((f, i) => (
+              <div key={i} className={`finding ${f.severity}`}>
+                <b>[{f.severity.toUpperCase()}] {f.rule}</b> — {f.message}
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </aside>
+  );
+}
+
 /** Task Pane 임베드 모드(?embed=1) — 좁은 폭(~350px) 대응. FR-M2.7. */
 const EMBED = new URLSearchParams(window.location.search).has("embed");
 
@@ -100,6 +144,8 @@ function Workspace({ projectId, onHome }) {
       return <DiscountSheet project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "dcf")
       return <DcfSheet project={project} onSave={saveData} />;
+    if (stage.id === "valuation" && sheet.id === "scenario")
+      return <ScenarioSheet project={project} onSave={saveData} />;
     if (stage.id === "output" && (sheet.id === "export" || sheet.id === "diff"))
       return <Roundtrip project={project} sheet={sheet.id} onSave={saveData} />;
     return <div className="placeholder">'{stage.label} › {sheet.label}' 화면은 준비중입니다.</div>;
@@ -150,15 +196,7 @@ function Workspace({ projectId, onHome }) {
           <div className="main-inner">{body}</div>
         </main>
 
-        {panelOpen && (
-          <aside className="context-panel">
-            <h2>근거·판단 보조</h2>
-            <div className="pad muted">
-              선택한 항목의 출처(provenance)·audit finding·AI 제안(⚖️ 애매 큐)이
-              여기에 표시됩니다 — 추후 배선.
-            </div>
-          </aside>
-        )}
+        {panelOpen && <ContextPanel project={project} />}
         <button className="panel-toggle" title="근거·판단 보조 패널"
           onClick={() => setPanelOpen(!panelOpen)}>
           {panelOpen ? "»" : "«"}

@@ -1,6 +1,65 @@
 import React, { useState } from "react";
 import { api, fileToBase64 } from "../../api.js";
 
+/** 편집본 되읽기 — 단일 .xlsx 업로드 → 표준 레이아웃 역파싱 → 재계산·로컬 반영.
+    diff(before/after 왕복)와 달리 before 없이 바로 반영. 표준 레이아웃 아니면 422. */
+function ImportPanel({ onSave }) {
+  const [file, setFile] = useState(null);
+  const [out, setOut] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [applied, setApplied] = useState(false);
+
+  const load = async () => {
+    if (!file) { setErr("xlsx 파일을 선택하세요."); return; }
+    setBusy(true); setErr(null); setOut(null); setApplied(false);
+    try {
+      setOut(await api.xlsx.import(await fileToBase64(file)));
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const apply = () => {
+    if (!out) return;
+    onSave?.({
+      dcf_input: out.input,
+      dcf_result_summary: {
+        per_share: out.result.per_share,
+        warn: (out.result.findings || []).filter((f) => f.severity !== "pass").length,
+      },
+    });
+    setApplied(true);
+  };
+
+  return (
+    <div className="card">
+      <h2>편집본 되읽기 <span className="muted">— 단일 xlsx → 로컬 모델 재구성</span></h2>
+      <div className="pad">
+        <div className="muted" style={{ marginBottom: 10 }}>
+          내보낸 표준 레이아웃 xlsx 를 엑셀에서 편집했다면, before 없이 바로 올려
+          입력을 역파싱·재계산합니다(비표준 템플릿은 거부).
+        </div>
+        <div className="row" style={{ gap: 16 }}>
+          <label>편집본 xlsx <input type="file" accept=".xlsx"
+            onChange={(e) => setFile(e.target.files[0])} /></label>
+          <button className="primary" disabled={busy} onClick={load}>
+            {busy ? "읽는 중…" : "되읽기"}
+          </button>
+        </div>
+        {err && <div className="err" style={{ marginTop: 10 }}>{err}</div>}
+        {out && (
+          <div style={{ marginTop: 12 }}>
+            <div className="muted">재계산 주당가치:
+              <b> {Math.round(out.result.per_share).toLocaleString("ko-KR")} 원</b></div>
+            <button className="primary" style={{ marginTop: 8 }} disabled={applied} onClick={apply}>
+              {applied ? "반영됨 ✓" : "로컬 모델에 반영"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* 왕복(export ↔ diff) — 5. 산출물 단계.
    export: 로컬 DCF 입력 → 수식 live .xlsx 다운로드(감사 추적·재편집).
    diff:   before/after 워크북 업로드 → 3버킷 diff + apply-정책(자동 반영/승인 대기/차단).
@@ -33,7 +92,7 @@ function ExportSheet({ project }) {
           <>
             <div className="muted" style={{ marginBottom: 10 }}>
               현재 DCF 입력을 수식이 살아있는 .xlsx 로 내보냅니다. 엑셀에서 편집 후
-              아래 '왕복 diff'로 다시 반영할 수 있습니다.
+              아래 '편집본 되읽기'(단일 파일) 또는 '왕복 diff'(before/after)로 반영하세요.
             </div>
             <button className="primary" disabled={busy} onClick={download}>
               {busy ? "생성 중…" : "xlsx 내보내기"}
@@ -165,7 +224,12 @@ function DiffSheet({ project, onSave }) {
 }
 
 export default function Roundtrip({ project, sheet, onSave }) {
-  return sheet === "export"
-    ? <ExportSheet project={project} />
-    : <DiffSheet project={project} onSave={onSave} />;
+  if (sheet === "export")
+    return (
+      <>
+        <ExportSheet project={project} />
+        <ImportPanel onSave={onSave} />
+      </>
+    );
+  return <DiffSheet project={project} onSave={onSave} />;
 }

@@ -114,6 +114,9 @@ export default function DiscountSheet({ project, onSave }) {
             relevered_beta: d.relevered_beta,
             after_tax_cost_of_debt: d.after_tax_cost_of_debt,
           },
+          // 근거·판단 보조 패널이 소비: 출처 라벨 + 비-pass 게이트.
+          wacc_provenance: d.provenance,
+          wacc_findings: d.findings.filter((f) => f.severity !== "pass"),
         });
       }
     } catch (e) {
