@@ -12,10 +12,13 @@ API 키 발급: https://opendart.fss.or.kr (crtfc_key). 키 없이도 import·mo
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from .parsers.base import BaseParser, ParseResult
 from .provenance import ExtractMethod, Locator, SourceKind
+
+if TYPE_CHECKING:
+    from .dart_employee import EmployeeSnapshot
 
 HttpFn = Callable[[str, dict], dict]
 
@@ -84,6 +87,29 @@ class DartClient:
         )
         parser = DartFsParser(source_id=f"DART:{corp_code}:{bsns_year}")
         return parser.extract(data.get("list", []))
+
+    # ── 직원현황 ──────────────────────────────────────────────────────────────
+    def employee_status(
+        self,
+        corp_code: str,
+        bsns_year: str | int,
+        *,
+        reprt_code: str = REPRT_ANNUAL,
+    ) -> "EmployeeSnapshot":
+        """직원현황(empSttus) → 총인원·급여총액·인당급여 집계(noumbi headcount 드라이버 시드).
+
+        cost_build headcount 드라이버 base(인원×인당급여)와 노무비 cross-source tie-out
+        (주석 급여 vs DART 급여총액)에 쓰인다. 반환 snapshot.report.ok 로 게이트.
+        """
+        from .dart_employee import EmployeeSnapshot, aggregate_employee_status  # 순환참조 회피
+        data = self._get(
+            "empSttus.json",
+            corp_code=corp_code, bsns_year=str(bsns_year), reprt_code=reprt_code,
+        )
+        return aggregate_employee_status(
+            data.get("list", []),
+            source_id=f"DART:{corp_code}:{bsns_year}:emp", year=str(bsns_year),
+        )
 
 
 class DartFsParser(BaseParser):
