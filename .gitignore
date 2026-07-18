@@ -40,3 +40,6 @@ frontend/dist/
 
 # 로컬 앱 데이터(프로젝트 JSON)
 var/
+
+# 스킬 빌드 산출(vendoring·zip은 build_excel_skill.py 로 재생성) — dist/ 는 위에서 커버
+.claude/skills/*/scripts/vendor/
