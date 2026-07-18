@@ -91,7 +91,7 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 | **W4 추정** | 드라이버 후보 제시→선택분 수식 구현. **`Fcst_Rev`·`Fcst_Cost`는 FS_Disagg 세분 라인(제품/상품/용역, 재료/노무/경비, 급여/상각/광고)과 동일 성격 행 → `계=Σ세분` 살아있는 SUM 롤업 → DCF!매출/원가/판관비** | projection_smoothness·wc_burn·가정 출처 완비·**세분 계=원계정 롤업 일치** | msvalue_리포트예시·모델링_실무 |
 | **W5 WACC** | `wacc.py`(Kroll 제안·peer 근거) | β/MRP 정합·provenance·8~14% | wacc_할인율서식·베타·deloitte·PGR |
 | **W6 DCF** | 스파인 입력셀→Fcst 계 참조 승격(`promote.py`) + `dcf.py` 재계산 | **승격 tie-out(per_share 불변)**·워크북 vs 엔진 rel_tol 1e-6·audit 전규칙·gap_diagnosis | engine_spec·검증_클래시스 |
-| **W7 시나리오** | `scenario.py`(구성=판단) | 가중치 완전일치·합=1 | msvalue_리포트예시 부록F |
+| **W7 시나리오** | `scenario.py`(구성=판단) → Scenario 시트(가중 SUMPRODUCT·합=1 게이트 살아있는 수식) | 가중치 완전일치·합=1 | msvalue_리포트예시 부록F |
 | **W8 민감도** | `sensitivity.py`로 WACC×PGR 5×5 살아있는 수식 그리드(셀마다 독립 DCF 재계산) | 워크북 중심 == 엔진 3×3 중심 == base·(설치 시)recalc 게이트 | 앤트로픽_금융스킬_벤치마크 §1 |
 | **W9 리포트(선택)** | 주요가정 표·차이 서사 | audit findings 누락 없이 반영 | msvalue_리포트예시·장표_작성법 |
 
@@ -144,8 +144,9 @@ python scripts/roundtrip.py before.xlsx --diff after.xlsx      # 3버킷 diff
 # W6 hard number 승격 (스파인 입력셀 → Fcst 계 참조 + per_share 불변 검증)
 echo '{"spine":{...DcfSpineInput...},"fcst_totals":{"rev":[...],"cogs":[...],"sga":[...]}}' | python scripts/promote.py
 
-# W7 시나리오
+# W7 시나리오 (기본=JSON 분석; --emit-cells 로 Scenario 시트 셀)
 echo '{"cases":{"Base":{...},"Up":{...}},"weights":{"Base":0.5,"Up":0.5}}' | python scripts/scenario.py
+echo '{...}' | python scripts/scenario.py --emit-cells      # Scenario 시트(가중 SUMPRODUCT)
 
 # W8 민감도 그리드 (WACC×PGR 5×5 살아있는 수식; 중심==base, DCF 있는 워크북에 Sens 추가)
 echo '{...DcfSpineInput...}' | python scripts/sensitivity.py --emit-cells

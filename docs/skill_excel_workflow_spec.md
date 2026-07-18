@@ -180,7 +180,7 @@ Research 시트·template_conventions 저술 시 아래 실무 양식의 항목 
 | **W4 추정** | 매출·원가·판관비·CapEx상각·WC 로직 구축 (`Fcst_*`·`Capex_Dep`·`WC`). **`Fcst_Rev`·`Fcst_Cost`는 `template_schema.ROLLUP` SSOT로 FS_Disagg 세분 라인과 동일 성격 행 생성 + `계=Σ세분` 살아있는 SUM 롤업 → DCF 스파인** | 드라이버 후보 제시, 선택분 수식 구현, 근거 리서치 | 드라이버 선택·가정값 확정·자료 투입 | `check_projection_smoothness`·`check_working_capital_burn`, 가정 출처 태그 완비(1.6), 세분 계=원계정 롤업 | 
 | **W5 WACC** | CAPM 빌드업 (`WACC`) | `wacc.py` 실행, Kroll 제안, peer 근거 정리 | β 출처·peer·WACC 승인 | `check_beta_mrp_consistency`(F3)·`check_beta_provenance`, 8~14% 상식범위 |
 | **W6 DCF 완성** | 스파인 입력셀→Fcst 계 참조 승격(`promote.py`) + 독립 재계산 | `promote.py`(승격+tie-out)·`dcf.py` 재계산 → 워크북 셀 단위 대조 | 결과 확정(승격 델타 검토) | **승격 tie-out(per_share 불변; 불일치=라인·연도 델타 표면화)**, **워크북 vs 엔진 per_share (rel_tol 1e-6)**, `audit_dcf` 전 규칙, 필요 시 `gap_diagnosis` |
-| **W7 시나리오** | upside/base/downside (`Scenario`) | 케이스 구성안, `scenario.py` 실행 | 케이스·**가중치 승인(합=1)** | weights 완전일치·합=1 아니면 엔진 거부 |
+| **W7 시나리오** | upside/base/downside (`Scenario`) | 케이스 구성안, `scenario.py` 실행 → Scenario 시트(가중 SUMPRODUCT·합=1 게이트 살아있는 수식) | 케이스·**가중치 승인(합=1)** | weights 완전일치·합=1 아니면 엔진 거부 |
 | **W8 민감도** | `sensitivity.py`로 WACC×PGR **5×5 살아있는 수식**(closed-form, FCFF 고정·할인·터미널만 축 반응) + (선택)2중 그리드 | Excel 수식 생성, 엔진 3×3 중심 대조 | 그리드 범위·스텝 확정 | **워크북 중심 == 엔진 3×3 중심 == base**, 내부 3×3 == 엔진 민감도, 외곽은 recalc 게이트 |
 | **W9 리포트(선택)** | 주요가정 표·차이 서사 | 리포트 초안(출처 표) | 최종 검토 | audit findings 요약 누락 없이 반영 |
 
