@@ -63,7 +63,8 @@ def _compute(inp: DcfSpineInput, wacc: float, g: float) -> DcfResult:
     pv_factor = [1.0 / (1.0 + wacc) ** periods[i] for i in range(n)]
     pv_fcff = [fcff[i] * pv_factor[i] for i in range(n)]
 
-    # Terminal(개선 B): fcff_override > reinvestment_rate(g/ROIC) > D&A=CAPEX 기본.
+    # Terminal(개선 B): fcff_override > reinvestment_rate(g/ROIC) >
+    #                   (D&A=CAPEX − 정규화 WC 재조정).
     if inp.terminal_fcff_override is not None:
         terminal_fcff = inp.terminal_fcff_override  # 정규화된 FCF_{n+1} 직접 주입
     else:
@@ -71,10 +72,15 @@ def _compute(inp: DcfSpineInput, wacc: float, g: float) -> DcfResult:
         terminal_tax = _tax_on(inp, terminal_ebit, None)
         terminal_noplat = terminal_ebit - terminal_tax
         if inp.terminal_reinvestment_rate is not None:
-            # 성장에 필요한 재투자 차감: FCFF_T = NOPLAT_T×(1−g/ROIC)
+            # 성장에 필요한 재투자 차감(WC 포함 번들): FCFF_T = NOPLAT_T×(1−g/ROIC)
             terminal_fcff = terminal_noplat * (1.0 - inp.terminal_reinvestment_rate)
         else:
-            terminal_fcff = terminal_noplat  # 영구구간 D&A=CAPEX, ΔNWC=0
+            # 영구구간 D&A=CAPEX(상각비만큼 재투자). ΔWC 는 정규화 재조정(정본):
+            # 터미널 WC 투자 = 추정말매출 × g × WC비율 (없으면 0 = 과대계상 위험).
+            terminal_wc_investment = 0.0
+            if inp.terminal_wc_ratio is not None:
+                terminal_wc_investment = inp.revenue[-1] * g * inp.terminal_wc_ratio
+            terminal_fcff = terminal_noplat - terminal_wc_investment
     terminal_value = terminal_fcff / (wacc - g)
     terminal_value_pv = terminal_value * (1.0 / (1.0 + wacc) ** term_period)
 

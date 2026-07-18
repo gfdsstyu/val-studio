@@ -37,12 +37,16 @@ def check_terminal_growth(
     wacc: float,
     *,
     long_term_gdp: float = DEFAULT_LONG_TERM_GDP,
+    reinvestment_modeled: bool = False,
     report: ValidationReport | None = None,
 ) -> list[Finding]:
     """영구성장률 타당성: Gordon 수렴(PGR<WACC) + 경제성 상한(PGR≤GDP).
 
     - PGR ≥ WACC : FAIL. TV = FCFF_T/(WACC−g) 가 음수/무한대 → 수학적 무효.
     - PGR > GDP  : WARN. 기업이 영구히 경제성장률을 추월한다는 비현실적 가정.
+
+    reinvestment_modeled: 터미널 재투자/정규화 WC(terminal_wc_ratio·reinvestment_rate·
+        fcff_override)가 반영됐으면 True → F1 과대계상 WARN 을 PASS 로 승격.
     """
     out: list[Finding] = []
     if pgr >= wacc:
@@ -79,12 +83,20 @@ def check_terminal_growth(
 
     # F1: 재투자 모델 없이 PGR 이 높으면 terminal FCFF(=NOPLAT) 과대 → TV 과대계상.
     if pgr > REINVESTMENT_FREE_PGR:
-        out.append(Finding(
-            "terminal_reinvestment", Severity.WARN,
-            f"PGR({pgr:.2%}) > {REINVESTMENT_FREE_PGR:.0%} 이나 재투자 미반영(D&A=CAPEX) "
-            f"— TV 과대계상 위험(재투자율 g/ROIC 필요)",
-            {"pgr": pgr, "threshold": REINVESTMENT_FREE_PGR},
-        ))
+        if reinvestment_modeled:
+            out.append(Finding(
+                "terminal_reinvestment", Severity.PASS,
+                f"PGR({pgr:.2%}) > {REINVESTMENT_FREE_PGR:.0%} 이나 터미널 재투자/정규화 WC "
+                f"반영됨 — 과대계상 방어",
+                {"pgr": pgr, "threshold": REINVESTMENT_FREE_PGR, "modeled": True},
+            ))
+        else:
+            out.append(Finding(
+                "terminal_reinvestment", Severity.WARN,
+                f"PGR({pgr:.2%}) > {REINVESTMENT_FREE_PGR:.0%} 이나 재투자 미반영(D&A=CAPEX, "
+                f"ΔWC=0) — TV 과대계상 위험(terminal_wc_ratio 또는 재투자율 g/ROIC 필요)",
+                {"pgr": pgr, "threshold": REINVESTMENT_FREE_PGR, "modeled": False},
+            ))
 
     if report is not None:
         for f in out:
@@ -409,8 +421,14 @@ def audit_dcf(
     감사인에게 노출, fail(PGR≥WACC 등)은 결과 무효로 취급한다.
     """
     report = ValidationReport()
+    reinvestment_modeled = (
+        inp.terminal_wc_ratio is not None
+        or inp.terminal_reinvestment_rate is not None
+        or inp.terminal_fcff_override is not None
+    )
     check_terminal_growth(inp.terminal_growth, inp.wacc,
-                          long_term_gdp=long_term_gdp, report=report)
+                          long_term_gdp=long_term_gdp,
+                          reinvestment_modeled=reinvestment_modeled, report=report)
     check_terminal_value_weight(result, report=report)
     check_projection_smoothness(list(inp.revenue), name="revenue", report=report)
     check_working_capital_burn(list(inp.revenue), list(inp.delta_nwc_cash_adj), report=report)

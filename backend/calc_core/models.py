@@ -39,10 +39,16 @@ class DcfSpineInput:
     # 실무 모델은 분석가 예측세금(세전이익 기반, 종종 절대액 고정)을 쓰므로 재계산 대신 주입.
     tax_override: list[float] | None = None      # 연도별 세금(백만원, 양수 크기)
     effective_tax_rate: float | None = None      # EBIT 대비 유효세율
-    # ── 터미널 정규화(개선 B) — 우선순위: fcff_override > reinvestment_rate > D&A=CAPEX.
+    # ── 터미널 정규화(개선 B) — 우선순위: fcff_override > reinvestment_rate >
+    #    (D&A=CAPEX 기본 − terminal_wc_ratio 정규화 WC).
     # WACC≈g 에서 순진한 Gordon 이 폭발 → 정규화 FCF 주입 또는 재투자율(g/ROIC) 반영.
     terminal_fcff_override: float | None = None  # 영구구간 FCF_{n+1} 직접 주입
     terminal_reinvestment_rate: float | None = None  # NOPLAT_T×(1−rate), rate=g/ROIC
+    # 정규화 운전자본 재조정(MSVALUE 정본 §Normalized CF). 터미널 ΔWC = 추정말매출 × g ×
+    # WC비율(운전자본/매출). 기본 None → ΔWC=0(D&A=CAPEX 만) = g>0 시 과대계상 위험.
+    # reinvestment_rate 미사용 시에만 적용(둘 다 주면 reinvestment_rate 가 WC 를 이미 번들).
+    # 옳은 방식(정본): 추정말매출 × g × ratio (틀린 방식=말WC투자×(1+g), TV 21% 왜곡).
+    terminal_wc_ratio: float | None = None
 
     def n_years(self) -> int:
         return len(self.revenue)

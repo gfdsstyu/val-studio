@@ -72,3 +72,14 @@ def project_working_capital(
         delta.append(-(nwc[t] - prev))  # 증가 → 현금유출(−)
         prev = nwc[t]
     return WcResult(net_working_capital=nwc, delta_nwc_cash_adj=delta)
+
+
+def normalized_wc_ratio(net_working_capital_last: float, sales_last: float) -> float | None:
+    """정규화 운전자본비율 = 추정말 순운전자본 / 추정말 매출 (터미널 WC 재조정 시드).
+
+    dcf.terminal_wc_ratio 에 주입 → 터미널 ΔWC = 추정말매출 × g × 이 비율(정본 공식).
+    회전기간이 추정말에 안정화됐다는 가정. 매출≤0 이면 None(산출 불가).
+    """
+    if sales_last <= 0:
+        return None
+    return net_working_capital_last / sales_last
