@@ -21,7 +21,7 @@ export const NAV = {
     ]},
     { id: "discount", label: "3. 할인율", sheets: [
       { id: "peer", label: "유사회사 4-step", soon: true },
-      { id: "wacc", label: "WACC 빌드업", soon: true },
+      { id: "wacc", label: "WACC 빌드업" },
     ]},
     { id: "valuation", label: "4. 밸류에이션", sheets: [
       { id: "dcf", label: "DCF" },

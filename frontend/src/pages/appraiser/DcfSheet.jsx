@@ -61,7 +61,12 @@ function SensitivityTable({ sens }) {
 
 export default function DcfSheet({ project, onSave }) {
   const saved = project?.data?.dcf_input;
-  const [form, setForm] = useState(saved || DEMO);
+  // 3.할인율 > WACC 빌드업에서 조립·저장된 WACC 를 이어받는다(front-back 배선).
+  const assembledWacc = project?.data?.wacc_result?.wacc;
+  const [form, setForm] = useState(() => {
+    const init = saved || DEMO;
+    return assembledWacc != null ? { ...init, wacc: String(assembledWacc) } : init;
+  });
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -105,7 +110,12 @@ export default function DcfSheet({ project, onSave }) {
         <div className="pad">
           <div className="grid2">
             <div className="row"><label>WACC (소수, 예 0.10)</label>
-              <input type="text" value={form.wacc} onChange={set("wacc")} /></div>
+              <input type="text" value={form.wacc} onChange={set("wacc")} />
+              {assembledWacc != null && (
+                <div className="muted" style={{ fontSize: "0.8rem", marginTop: 2 }}>
+                  ↳ 3.할인율 빌드업에서 조립됨: <b>{(assembledWacc * 100).toFixed(2)}%</b> (수정 가능)
+                </div>
+              )}</div>
             <div className="row"><label>영구성장률 PGR (소수)</label>
               <input type="text" value={form.terminal_growth} onChange={set("terminal_growth")} /></div>
           </div>

@@ -16,6 +16,10 @@ export const api = {
   health: () => j("GET", "/api/health"),
   dcf: (body) => j("POST", "/api/dcf", body),
   scenario: (body) => j("POST", "/api/scenario", body),
+  // 어셈블리: 커넥터 원천값(복붙 문자열 or 숫자) → 검증된 WACC/DCF.
+  // 복붙 문자열(예 "3.45%")은 서버가 커넥터로 통과시켜 range 게이트를 건다.
+  wacc: { assemble: (body) => j("POST", "/api/wacc/assemble", body) },
+  dcfAssemble: (body) => j("POST", "/api/dcf/assemble", body),
   validateGeminiKey: (key) =>
     j("POST", "/api/keys/validate", undefined, { "X-Gemini-Key": key }),
   projects: {

@@ -4,6 +4,7 @@ import { NAV, MODE_LABEL, firstAvailable } from "./nav.js";
 import Home from "./pages/Home.jsx";
 import ByokPanel from "./pages/Byok.jsx";
 import DcfSheet from "./pages/appraiser/DcfSheet.jsx";
+import DiscountSheet from "./pages/appraiser/DiscountSheet.jsx";
 import Roundtrip from "./pages/appraiser/Roundtrip.jsx";
 
 /* 셸(ia_ux_architecture.md §3): 헤더(정체성+상태, 액션 無) · LNB=단계 축 ·
@@ -95,6 +96,8 @@ function Workspace({ projectId, onHome }) {
   const body = (() => {
     if (showByok) return <ByokPanel />;
     if (stage.id === "cover") return <CoverSheet project={project} />;
+    if (stage.id === "discount" && sheet.id === "wacc")
+      return <DiscountSheet project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "dcf")
       return <DcfSheet project={project} onSave={saveData} />;
     if (stage.id === "output" && (sheet.id === "export" || sheet.id === "diff"))
