@@ -71,7 +71,7 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 **단계 시트 뼈대 생성**: 각 단계에서 `scaffold.py --stage W1..W5`(및 `W2.5`)로 그 단계 시트의 뼈대(제목·범례·라벨·입력 placeholder·타시트 참조 스텁)를 결정론으로 찍고, 그 위에 값·수식·근거를 채운다. 뼈대가 색상·참조 규약을 강제하므로 손으로 시트를 그리는 것보다 일관되다. W1=Research, W2=FS_Hist, W2.5=FS_Disagg, W3=Reclass, W4=Fcst_Rev·Fcst_Cost·Capex_Dep·WC, W5=WACC.
 
 - 참조 단방향(`뒤→앞`, 순환 금지). 색상 3색: Blue(입력)/Black(수식)/Green(타시트) + 핵심가정 yellow.
-- **hard number 승격**: 상류 시트가 생기면 DCF 가정 셀을 상류 참조(Green)로 교체하고, **교체 전후 per_share 불변(tie-out)**을 `roundtrip.py`로 확인.
+- **hard number 승격(W6)**: 상류 시트가 생기면 DCF 스파인 입력셀(매출/원가/판관비)을 상류 참조(`=Fcst_Rev!C12` 등, Green)로 교체하고, **교체 전후 per_share 불변(tie-out)**을 `promote.py`로 검증(불일치 시 라인·연도 델타 표면화).
 
 **Research 시트 = SSOT**: 붙여넣은 자료를 여기 정리(숫자=하류 수식 참조 대상, 서사=판단 맥락). MD Brief는 필요 시 여기서 뽑는 파생뷰(이중 유지 금지).
 
@@ -90,7 +90,7 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 | **W3 계정재분류** | PL 4유형·BS 6유형 태깅(모호는 표면화) | 분류합=원본 FS합(누락·중복 0) | xDCF_계정분류·msvalue_DCF_교육_정본 |
 | **W4 추정** | 드라이버 후보 제시→선택분 수식 구현. **`Fcst_Rev`·`Fcst_Cost`는 FS_Disagg 세분 라인(제품/상품/용역, 재료/노무/경비, 급여/상각/광고)과 동일 성격 행 → `계=Σ세분` 살아있는 SUM 롤업 → DCF!매출/원가/판관비** | projection_smoothness·wc_burn·가정 출처 완비·**세분 계=원계정 롤업 일치** | msvalue_리포트예시·모델링_실무 |
 | **W5 WACC** | `wacc.py`(Kroll 제안·peer 근거) | β/ERP 정합·provenance·8~14% | wacc_할인율서식·베타·deloitte·PGR |
-| **W6 DCF** | 가정 상류참조 승격 + `dcf.py` 재계산 | tie-out(워크북 vs 엔진 rel_tol 1e-6)·audit 전규칙·gap_diagnosis | engine_spec·검증_클래시스 |
+| **W6 DCF** | 스파인 입력셀→Fcst 계 참조 승격(`promote.py`) + `dcf.py` 재계산 | **승격 tie-out(per_share 불변)**·워크북 vs 엔진 rel_tol 1e-6·audit 전규칙·gap_diagnosis | engine_spec·검증_클래시스 |
 | **W7 시나리오** | `scenario.py`(구성=판단) | 가중치 완전일치·합=1 | msvalue_리포트예시 부록F |
 | **W8 민감도** | WACC×PGR 5×5 살아있는 수식 | 워크북 중심 == 엔진 3×3 중심 == base | 앤트로픽_금융스킬_벤치마크 §1 |
 | **W9 리포트(선택)** | 주요가정 표·차이 서사 | audit findings 누락 없이 반영 | msvalue_리포트예시·장표_작성법 |
@@ -137,6 +137,9 @@ echo '{"wacc":0.09,"terminal_growth":0.01,"revenue":[...],...}' | python scripts
 # W0/W6 워크북 왕복 tie-out
 python scripts/roundtrip.py model.xlsx --expect inputs.json
 python scripts/roundtrip.py before.xlsx --diff after.xlsx      # 3버킷 diff
+
+# W6 hard number 승격 (스파인 입력셀 → Fcst 계 참조 + per_share 불변 검증)
+echo '{"spine":{...DcfSpineInput...},"fcst_totals":{"rev":[...],"cogs":[...],"sga":[...]}}' | python scripts/promote.py
 
 # W7 시나리오
 echo '{"cases":{"Base":{...},"Up":{...}},"weights":{"Base":0.5,"Up":0.5}}' | python scripts/scenario.py

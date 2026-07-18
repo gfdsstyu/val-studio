@@ -65,6 +65,30 @@ DISAGG_BLOCKS = [
 # 스파인 라인 key → 세분 자식(합보존 롤업 대상). 영업외 등 스파인 행 없는 블록은 제외.
 ROLLUP = {b["parent_key"]: b["children"] for b in DISAGG_BLOCKS if "parent_key" in b}
 
+# ── W4 Fcst 시트 레이아웃(스파인 라인별 세분 블록 시작행). 계 셀은 파생 ─────────
+# stage_sheets.build_fcst_* 와 promote.py(W6 승격)가 이 SSOT 를 공유 — Fcst 계 셀을
+# 양쪽이 같은 주소로 참조해야 승격 수식(=Fcst_Rev!C12)이 정확히 걸린다.
+# 블록 구조: [title] / [Year] / [children...] / [계]  →  계 행 = start + 2 + len(children).
+FCST = {
+    "rev":  {"sheet": "Fcst_Rev",  "block_start": 6},
+    "cogs": {"sheet": "Fcst_Cost", "block_start": 6},
+    "sga":  {"sheet": "Fcst_Cost", "block_start": 14},
+}
+
+
+def fcst_total_row(line: str) -> int:
+    """Fcst 시트에서 해당 스파인 라인의 '계'(Σ세분) 행 번호."""
+    return FCST[line]["block_start"] + 2 + len(ROLLUP[line])
+
+
+def fcst_total_cell(line: str, col: str) -> str:
+    """Fcst 계 셀의 크로스시트 주소. 예: fcst_total_cell('rev','C') == 'Fcst_Rev!C12'."""
+    return f"{FCST[line]['sheet']}!{col}{fcst_total_row(line)}"
+
+
+# 승격 대상 스파인 라인 → (ROW/입력 key, DcfSpineInput 필드명). W6 promote 가 소비.
+PROMOTABLE = {"rev": "revenue", "cogs": "cogs", "sga": "sga"}
+
 
 # ── 헬퍼 ──────────────────────────────────────────────────────────────────
 def cell(col: str, row_key: str) -> str:

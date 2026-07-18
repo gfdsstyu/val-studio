@@ -10,7 +10,7 @@ from __future__ import annotations
 
 # 셀 레이아웃·세분 롤업 위계는 vendored template_schema SSOT 를 소비(자체 복사 금지).
 # scaffold.py 가 _bootstrap 로 vendor 를 path 에 올린 뒤 stage_sheets 를 import 한다.
-from excel.template_schema import DISAGG_BLOCKS, ROLLUP, YEAR_COLS
+from excel.template_schema import DISAGG_BLOCKS, FCST, ROLLUP, YEAR_COLS
 
 _LEGEND = "범례: [입력]=파랑(hard) · [수식]=검정 · [참조]=초록(타시트) · 핵심가정=노랑fill"
 
@@ -134,7 +134,7 @@ def build_fcst_rev(wb, n: int = 5):
     _header(s, "Fcst_Rev — 매출 추정(성격별 세분, 드라이버=평가인 선택)")
     s.text("B3", "세분 라인 = FS_Disagg 매출 세분(동일 성격). 역사 앵커=FS_Disagg 매출 세분(초록 참조).")
     s.text("B4", "드라이버: 성장률 / 시장점유율 / P×Q / 결합 [평가인]. 가정근거=Research!(시장 CAGR·목표점유율).")
-    _rollup_block(s, "── 매출 세분 추정 ──", ROLLUP["rev"], 6, n, ", → DCF!매출")
+    _rollup_block(s, "── 매출 세분 추정 ──", ROLLUP["rev"], FCST["rev"]["block_start"], n, ", → DCF!매출")
     return s
 
 
@@ -145,8 +145,8 @@ def build_fcst_cost(wb, n: int = 5):
     _header(s, "Fcst_Cost — 원가·판관비 추정(성격별 세분)")
     s.text("B3", "세분 라인 = FS_Disagg 원가·판관비 세분. 역사 앵커=FS_Disagg(초록 참조).")
     s.text("B4", "각 성격에 변동(매출 연동)/고정(CPI·임금 연동) 드라이버 적용 [평가인 판단].")
-    nxt = _rollup_block(s, "── 매출원가 세분 추정 ──", ROLLUP["cogs"], 6, n, ", → DCF!매출원가")
-    _rollup_block(s, "── 판매관리비 세분 추정 ──", ROLLUP["sga"], nxt, n, ", → DCF!판관비")
+    _rollup_block(s, "── 매출원가 세분 추정 ──", ROLLUP["cogs"], FCST["cogs"]["block_start"], n, ", → DCF!매출원가")
+    _rollup_block(s, "── 판매관리비 세분 추정 ──", ROLLUP["sga"], FCST["sga"]["block_start"], n, ", → DCF!판관비")
     return s
 
 
