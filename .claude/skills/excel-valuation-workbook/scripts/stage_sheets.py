@@ -10,9 +10,30 @@ from __future__ import annotations
 
 # 셀 레이아웃·세분 롤업 위계는 vendored template_schema SSOT 를 소비(자체 복사 금지).
 # scaffold.py 가 _bootstrap 로 vendor 를 path 에 올린 뒤 stage_sheets 를 import 한다.
-from excel.template_schema import DISAGG_BLOCKS, YEAR_COLS
+from excel.template_schema import DISAGG_BLOCKS, ROLLUP, YEAR_COLS
 
 _LEGEND = "범례: [입력]=파랑(hard) · [수식]=검정 · [참조]=초록(타시트) · 핵심가정=노랑fill"
+
+
+def _rollup_block(s, title: str, children: list[str], start_row: int, n: int,
+                  target_note: str) -> int:
+    """성격별 세분 자식 입력행 + 계(SUM live 롤업) 행 생성. 다음 블록 시작행 반환.
+
+    자식 행 값은 [입력](Claude 가 FS_Disagg 역사앵커+드라이버로 채움), 계 행은 살아있는
+    SUM 수식 — 세분→원계정 합보존 롤업을 워크북 수식으로 강제한다(합보존 게이트의 시트 구현).
+    """
+    s.text(f"B{start_row}", title)
+    _years(s, start_row + 1, n)
+    first = start_row + 2
+    r = first
+    for ch in children:
+        s.text(f"B{r}", ch)                          # [입력·FS_Disagg 앵커 + 드라이버]
+        r += 1
+    last = r - 1
+    s.text(f"B{r}", f"계 (= Σ세분{target_note})")
+    for c in YEAR_COLS[:n]:
+        s.formula(f"{c}{r}", f"SUM({c}{first}:{c}{last})")   # 캐시값 없음(placeholder, Excel recalc)
+    return r + 2                                     # 블록 간 1행 여백
 
 
 def _years(s, row: int, n: int, base_year: int = 2024) -> None:
@@ -107,24 +128,25 @@ def build_reclass(wb, n: int = 5):
 
 # ── W4 추정 4시트 ────────────────────────────────────────────────────────────
 def build_fcst_rev(wb, n: int = 5):
+    """매출 추정 — FS_Disagg 매출 세분(제품/상품/용역/기타)과 동일 성격 라인으로 배선.
+    각 세분을 드라이버로 추정 → 계=Σ 살아있는 SUM → DCF!매출(합보존 롤업)."""
     s = wb.add_sheet("Fcst_Rev")
-    _header(s, "Fcst_Rev — 매출 추정(드라이버=평가인 선택)")
-    s.text("B4", "드라이버 선택: 성장률 / 시장점유율 / P×Q / 결합 — [평가인 판단]")
-    s.text("B5", "근거: Research!(시장 CAGR·목표점유율) 참조(초록)")
-    _years(s, 7, n)
-    s.text("B8", "드라이버 값")
-    s.text("B9", "매출(→ DCF!매출 행 참조 대상)")
+    _header(s, "Fcst_Rev — 매출 추정(성격별 세분, 드라이버=평가인 선택)")
+    s.text("B3", "세분 라인 = FS_Disagg 매출 세분(동일 성격). 역사 앵커=FS_Disagg 매출 세분(초록 참조).")
+    s.text("B4", "드라이버: 성장률 / 시장점유율 / P×Q / 결합 [평가인]. 가정근거=Research!(시장 CAGR·목표점유율).")
+    _rollup_block(s, "── 매출 세분 추정 ──", ROLLUP["rev"], 6, n, ", → DCF!매출")
     return s
 
 
 def build_fcst_cost(wb, n: int = 5):
+    """원가·판관비 추정 — FS_Disagg 원가·판관비 세분과 동일 성격 라인으로 배선.
+    성격별 세분에 변동/고정 드라이버 적용 → 각 계=Σ SUM → DCF!매출원가·판관비(합보존 롤업)."""
     s = wb.add_sheet("Fcst_Cost")
-    _header(s, "Fcst_Cost — 원가·판관비(성격별)")
-    _years(s, 4, n)
-    for i, lbl in enumerate(
-        ["변동비(매출 연동)", "고정비(CPI 연동)", "인건비(임금상승률)", "상각비(FA 연동)",
-         "매출원가 계", "판관비 계"], start=5):
-        s.text(f"B{i}", lbl)
+    _header(s, "Fcst_Cost — 원가·판관비 추정(성격별 세분)")
+    s.text("B3", "세분 라인 = FS_Disagg 원가·판관비 세분. 역사 앵커=FS_Disagg(초록 참조).")
+    s.text("B4", "각 성격에 변동(매출 연동)/고정(CPI·임금 연동) 드라이버 적용 [평가인 판단].")
+    nxt = _rollup_block(s, "── 매출원가 세분 추정 ──", ROLLUP["cogs"], 6, n, ", → DCF!매출원가")
+    _rollup_block(s, "── 판매관리비 세분 추정 ──", ROLLUP["sga"], nxt, n, ", → DCF!판관비")
     return s
 
 

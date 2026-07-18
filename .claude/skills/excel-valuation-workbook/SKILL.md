@@ -62,7 +62,7 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 | W2 | `FS_Hist`(Raw/Normalized/Map) |
 | W2.5 | `FS_Disagg`(손익 세분 + 합보존·구성비) |
 | W3 | `Reclass`(`_A/_F` 레이어) |
-| W4 | `Fcst_Rev`·`Fcst_Cost`·`Capex_Dep`·`WC` |
+| W4 | `Fcst_Rev`·`Fcst_Cost`(FS_Disagg 세분 롤업)·`Capex_Dep`·`WC` |
 | W5 | `WACC` |
 | W6~W8 | `DCF` 가정 상류참조 승격, `Scenario`·`Sens` |
 
@@ -88,7 +88,7 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 | **W2 과거 FS 정합성·무결성 + 이관** | `fs_clean.py`로 정규화·교차검증·재분류 추적 | FAIL 0·재분류 미해결 0·대차·tie-out | 모델링_실무_2강4강·account_dictionary |
 | **W2.5 손익 계정 세분화** | 러프한 IS 라인을 성격별로 분해(매출→제품/상품/용역, 원가·판관비→성격별) — `fs_disagg.py` | **세분합=원계정(합보존) FAIL 0**·구성비 YoY 급변 WARN 표면화 | account_dictionary·모델링_실무_2강4강 |
 | **W3 계정재분류** | PL 4유형·BS 6유형 태깅(모호는 표면화) | 분류합=원본 FS합(누락·중복 0) | xDCF_계정분류·msvalue_DCF_교육_정본 |
-| **W4 추정** | 드라이버 후보 제시→선택분 수식 구현 | projection_smoothness·wc_burn·가정 출처 완비 | msvalue_리포트예시·모델링_실무 |
+| **W4 추정** | 드라이버 후보 제시→선택분 수식 구현. **`Fcst_Rev`·`Fcst_Cost`는 FS_Disagg 세분 라인(제품/상품/용역, 재료/노무/경비, 급여/상각/광고)과 동일 성격 행 → `계=Σ세분` 살아있는 SUM 롤업 → DCF!매출/원가/판관비** | projection_smoothness·wc_burn·가정 출처 완비·**세분 계=원계정 롤업 일치** | msvalue_리포트예시·모델링_실무 |
 | **W5 WACC** | `wacc.py`(Kroll 제안·peer 근거) | β/ERP 정합·provenance·8~14% | wacc_할인율서식·베타·deloitte·PGR |
 | **W6 DCF** | 가정 상류참조 승격 + `dcf.py` 재계산 | tie-out(워크북 vs 엔진 rel_tol 1e-6)·audit 전규칙·gap_diagnosis | engine_spec·검증_클래시스 |
 | **W7 시나리오** | `scenario.py`(구성=판단) | 가중치 완전일치·합=1 | msvalue_리포트예시 부록F |

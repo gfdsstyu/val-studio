@@ -56,7 +56,7 @@ def test_scaffold_emit_cells():
 def test_scaffold_stage_generators():
     """W1~W5 단계 뼈대 생성 — 각 단계가 규약 시트를 만든다(stdin 불요)."""
     expected = {
-        "W1": ["Research"], "W2": ["FS_Hist"], "W3": ["Reclass"],
+        "W1": ["Research"], "W2": ["FS_Hist"], "W2.5": ["FS_Disagg"], "W3": ["Reclass"],
         "W4": ["Fcst_Rev", "Fcst_Cost", "Capex_Dep", "WC"], "W5": ["WACC"],
     }
     for stage, sheets in expected.items():
@@ -66,6 +66,32 @@ def test_scaffold_stage_generators():
         assert set(sheets) <= made
         # 뼈대는 범례(규약)를 담는다
         assert any("범례" in str(c.get("value", "")) for c in out["cells"])
+
+
+def test_scaffold_w4_rollup_wiring():
+    """W4 추정 시트가 FS_Disagg 세분 라인과 동일 성격으로 배선되고, 계=Σ 살아있는 SUM
+    롤업 수식으로 DCF 스파인에 합보존 연결되는지(② 배선)."""
+    out = _run("scaffold.py", "--stage", "W4", "--emit-cells")
+    cells = out["cells"]
+
+    def sheet_cells(name):
+        return [c for c in cells if c["sheet"] == name]
+
+    rev = sheet_cells("Fcst_Rev")
+    # FS_Disagg 매출 세분과 동일 성격 라인(제품매출 등)이 행 라벨로
+    rev_labels = {c.get("value") for c in rev}
+    assert "제품매출" in rev_labels and "상품매출" in rev_labels
+    # 계 = Σ세분 살아있는 SUM 수식 + DCF!매출 롤업 표기
+    rev_formulas = [c["formula"] for c in rev if "formula" in c]
+    assert any(f.startswith("SUM(") for f in rev_formulas), "매출 계 SUM 롤업 없음"
+    assert any("DCF!매출" in str(c.get("value", "")) for c in rev), "→ DCF!매출 롤업 표기 없음"
+
+    cost = sheet_cells("Fcst_Cost")
+    cost_labels = {c.get("value") for c in cost}
+    assert "재료비" in cost_labels and "급여" in cost_labels    # 원가·판관비 성격별 세분
+    cost_formulas = [c["formula"] for c in cost if "formula" in c]
+    # 매출원가 계 + 판관비 계 = 두 개의 SUM 롤업
+    assert sum(1 for f in cost_formulas if f.startswith("SUM(")) >= 2, "원가·판관비 계 SUM 롤업 부족"
 
 
 def test_scaffold_stage_xlsx():
@@ -85,6 +111,8 @@ if __name__ == "__main__":
     print("PASS test_scaffold_emit_cells")
     test_scaffold_stage_generators()
     print("PASS test_scaffold_stage_generators")
+    test_scaffold_w4_rollup_wiring()
+    print("PASS test_scaffold_w4_rollup_wiring")
     test_scaffold_stage_xlsx()
     print("PASS test_scaffold_stage_xlsx")
-    print("\n4 tests passed.")
+    print("\n5 tests passed.")
