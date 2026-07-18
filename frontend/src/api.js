@@ -36,6 +36,9 @@ export const api = {
     j("POST", "/api/dart/corp-search", { q, listed_only: !!listedOnly }, { "X-Dart-Key": key }),
   dartFilings: (key, body) =>
     j("POST", "/api/dart/filings", body, { "X-Dart-Key": key }),
+  priceBeta: (body) => j("POST", "/api/price/beta", body),
+  priceMarketcap: (body) => j("POST", "/api/price/marketcap", body),
+  priceFx: (body) => j("POST", "/api/price/fx", body),
   projects: {
     list: () => j("GET", "/api/projects"),
     create: (body) => j("POST", "/api/projects", body),

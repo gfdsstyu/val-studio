@@ -81,6 +81,24 @@ export default function DiscountSheet({ project, onSave }) {
     setPeers([...peers, { ticker: "", levered_beta: "", debt_to_equity: "", tax_rate: "0.22" }]);
   const rmPeer = (i) => setPeers(peers.filter((_, j) => j !== i));
 
+  // 주가에서 β 자동계산 — 각 peer 티커(종목코드) 2년 주간 회귀(look-ahead 가드). KRX 무료.
+  const [betaBusy, setBetaBusy] = useState(false);
+  const fetchBetas = async () => {
+    if (!baseDate) { setErr("평가기준일(셋업)이 필요합니다 — 프로젝트 설계에서 지정하세요."); return; }
+    setBetaBusy(true); setErr(null);
+    try {
+      const next = await Promise.all(peers.map(async (p) => {
+        const tk = (p.ticker || "").trim();
+        if (!/^\d{6}$/.test(tk)) return p;              // 6자리 종목코드만
+        try {
+          const b = await api.priceBeta({ ticker: tk, base_date: baseDate, freq: "W", years: 2 });
+          return { ...p, levered_beta: b.raw.toFixed(3), _r2: b.r_squared };
+        } catch { return p; }
+      }));
+      setPeers(next);
+    } finally { setBetaBusy(false); }
+  };
+
   const assemble = async () => {
     setBusy(true); setErr(null); setRes(null);
     const body = {
@@ -158,7 +176,10 @@ export default function DiscountSheet({ project, onSave }) {
               ))}
             </tbody>
           </table>
-          <button className="ghost" onClick={addPeer} style={{ marginTop: 6 }}>+ 유사회사 추가</button>
+          <button className="ghost" onClick={addPeer} style={{ marginTop: 6 }}>+ 유사회사 추가</button>{" "}
+          <button className="ghost" onClick={fetchBetas} disabled={betaBusy} style={{ marginTop: 6 }}
+            title="종목코드(6자리)에서 2년 주간 β 회귀 — KRX 무료">
+            {betaBusy ? "β 계산 중…" : "주가로 β 계산(KRX)"}</button>
 
           <div className="grid2" style={{ marginTop: 14 }}>
             <div className="row"><label>대상회사 목표 D/E</label>

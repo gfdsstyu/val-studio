@@ -27,6 +27,13 @@ REAL_GDP_GROWTH = "real_gdp_growth"
 CPI_INFLATION = "cpi_inflation"
 NOMINAL_WAGE_GROWTH = "nominal_wage_growth"
 RISK_FREE_10Y = "risk_free_10y"                 # 국고채 10년 무위험이자율(Rf)
+BASE_RATE = "base_rate"                          # 한은 기준금리
+EXCHANGE_RATE_USD = "exchange_rate_usd"         # 원/미국달러 매매기준율(레벨)
+EXCHANGE_RATE_JPY = "exchange_rate_jpy"         # 원/100엔(레벨)
+EXCHANGE_RATE_EUR = "exchange_rate_eur"         # 원/유로(레벨)
+
+# 레벨 지표(환율·지수 등) = %가 아니므로 /100 정규화 제외. 그 외는 비율(%→소수).
+_LEVEL_INDICATORS = frozenset({EXCHANGE_RATE_USD, EXCHANGE_RATE_JPY, EXCHANGE_RATE_EUR})
 
 # staleness 경고 임계: 최신 usable vintage 와 평가기준일 간격(일). 거시 예측은 통상 분기
 # 갱신 → 6개월(180일) 초과 시 오래된 전망 사용 경고.
@@ -245,6 +252,11 @@ _ECOS_STATS = {
     CPI_INFLATION: ("901Y009", "M"),            # 소비자물가지수 월
     # 국고채 10년(일별). item 미지정 시 통계표 전 항목이 섞여 나오므로 만기물 코드 필수.
     RISK_FREE_10Y: ("817Y002", "D", "010210000"),   # 시장금리 일별 / 국고채 10년
+    BASE_RATE: ("722Y001", "D", "0101000"),         # 한국은행 기준금리(일별)
+    # 환율(731Y001 원/각국통화, 일별) — 레벨값. item: 원/달러·원/100엔·원/유로.
+    EXCHANGE_RATE_USD: ("731Y001", "D", "0000001"),
+    EXCHANGE_RATE_JPY: ("731Y001", "D", "0000002"),
+    EXCHANGE_RATE_EUR: ("731Y001", "D", "0000003"),
 }
 
 
@@ -276,6 +288,7 @@ class EcosProvider:
         with urllib.request.urlopen(url, timeout=30) as resp:      # noqa: S310
             payload = json.loads(resp.read().decode("utf-8"))
         rows = payload.get("StatisticSearch", {}).get("row", [])
+        is_level = indicator in _LEVEL_INDICATORS
         obs: list[MacroObservation] = []
         for r in rows:
             period = _ecos_time_to_period(str(r.get("TIME", "")), cycle)
@@ -283,9 +296,11 @@ class EcosProvider:
                 v = float(r.get("DATA_VALUE"))
             except (TypeError, ValueError):
                 continue
-            obs.append(MacroObservation(indicator, period, v / 100.0,
+            # 레벨(환율·지수)은 원값, 그 외(%금리·성장률)는 소수 비율로.
+            obs.append(MacroObservation(indicator, period, v if is_level else v / 100.0,
                                         vintage=None, source="ECOS", is_forecast=False))
-        return MacroSeries(indicator, "%", tuple(obs))
+        unit = "KRW" if is_level else "%"
+        return MacroSeries(indicator, unit, tuple(obs))
 
 
 def _ecos_period(date_str: str, cycle: str) -> str:

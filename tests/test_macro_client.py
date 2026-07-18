@@ -116,6 +116,37 @@ def test_actual_full_year_before_base_ok():
     assert not any(f.severity is Severity.FAIL for f in fs)
 
 
+def test_ecos_level_vs_percent_scaling():
+    # 환율(레벨)은 원값 유지, 금리(%)는 /100 — 환율 1330이 13.3 되는 버그 방지
+    import json
+    import urllib.request
+    from ingest.macro_client import EXCHANGE_RATE_USD, EcosProvider
+
+    class FakeResp:
+        def __init__(self, payload):
+            self._p = payload; self.status = 200
+        def read(self):
+            return json.dumps(self._p).encode("utf-8")
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    orig = urllib.request.urlopen
+    try:
+        urllib.request.urlopen = lambda *a, **k: FakeResp(
+            {"StatisticSearch": {"row": [{"TIME": "20230630", "DATA_VALUE": "1330.5"}]}})
+        s = EcosProvider("KEY").fetch(EXCHANGE_RATE_USD, "2023-06-01", "2023-06-30")
+        assert abs(s.observations[0].value - 1330.5) < 1e-9 and s.unit == "KRW"
+
+        urllib.request.urlopen = lambda *a, **k: FakeResp(
+            {"StatisticSearch": {"row": [{"TIME": "20230630", "DATA_VALUE": "3.45"}]}})
+        s2 = EcosProvider("KEY").fetch(RISK_FREE_10Y, "2023-06-01", "2023-06-30")
+        assert abs(s2.observations[0].value - 0.0345) < 1e-9 and s2.unit == "%"
+    finally:
+        urllib.request.urlopen = orig
+
+
 def test_ecos_period_formatting():
     assert _ecos_period("2020", "A") == "2020"
     assert _ecos_period("2023-06-30", "M") == "202306"

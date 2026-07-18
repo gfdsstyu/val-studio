@@ -682,6 +682,73 @@ async def dart_document(request: Request,
         headers={"Content-Disposition": f'attachment; filename="dart_{rcept}.zip"'})
 
 
+# ── 주가·β·시총·환율 (KRX FinanceDataReader — 무료, 키 불요) ──────────────────
+def _fdr_provider():
+    from ingest.price_client import FinanceDataReaderProvider
+    return FinanceDataReaderProvider()
+
+
+@app.post("/api/price/beta")
+async def price_beta(request: Request) -> dict:
+    """{ticker, market_ticker?, base_date, freq?, years?} → 회귀 β(look-ahead 가드).
+
+    ticker=종목코드(005930), market_ticker 기본 KS11(KOSPI). 조정베타=0.67·raw+0.33.
+    """
+    from ingest.price_client import beta_from_prices
+    d = await request.json()
+    tk, base = str(d.get("ticker", "")).strip(), str(d.get("base_date", "")).strip()
+    if not (tk and base):
+        raise HTTPException(422, "ticker, base_date 필요")
+    try:
+        r = beta_from_prices(_fdr_provider(), tk, str(d.get("market_ticker", "KS11")),
+                             base, freq=str(d.get("freq", "W")), years=float(d.get("years", 2)))
+    except RuntimeError as e:                          # fdr 미설치
+        raise HTTPException(503, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    return {"raw": r.raw, "adjusted": r.adjusted, "r_squared": r.r_squared,
+            "n": r.n, "freq": r.freq, "window_end": r.window_end}
+
+
+@app.post("/api/price/marketcap")
+async def price_marketcap(request: Request) -> dict:
+    """{ticker, shares, base_date} → 시가총액(평가기준일 이하 최신 종가 × 발행주식수)."""
+    from ingest.price_client import market_cap
+    d = await request.json()
+    tk, base = str(d.get("ticker", "")).strip(), str(d.get("base_date", "")).strip()
+    try:
+        shares = float(d["shares"])
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"shares 필요: {e}") from e
+    if not (tk and base):
+        raise HTTPException(422, "ticker, base_date 필요")
+    try:
+        mc = market_cap(_fdr_provider(), tk, shares=shares, base_date=base)
+    except RuntimeError as e:
+        raise HTTPException(503, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    return {"value": mc.value, "price": mc.price, "price_date": mc.price_date, "shares": mc.shares}
+
+
+@app.post("/api/price/fx")
+async def price_fx(request: Request) -> dict:
+    """{pair, base_date} → 평가기준일 이하 최신 환율(look-ahead 가드). pair 예: USD/KRW."""
+    d = await request.json()
+    pair, base = str(d.get("pair", "USD/KRW")).strip(), str(d.get("base_date", "")).strip()
+    if not base:
+        raise HTTPException(422, "base_date 필요")
+    try:
+        prov = _fdr_provider()
+        rows = [(dt, c) for dt, c in prov.closes(pair, "2000-01-01", base) if dt <= base]
+    except RuntimeError as e:
+        raise HTTPException(503, str(e)) from e
+    if not rows:
+        raise HTTPException(422, f"{pair}: 평가기준일 이하 환율 없음")
+    dt, c = rows[-1]
+    return {"pair": pair, "rate": c, "rate_date": dt}
+
+
 @app.get("/api/method/options")
 def method_options() -> dict:
     """위저드 선택지 — 목적·거래유형 카탈로그(프론트 하드코딩 방지, SSOT=백엔드)."""
