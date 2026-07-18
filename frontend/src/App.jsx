@@ -6,6 +6,7 @@ import ByokPanel from "./pages/Byok.jsx";
 import DcfSheet from "./pages/appraiser/DcfSheet.jsx";
 import DiscountSheet from "./pages/appraiser/DiscountSheet.jsx";
 import ScenarioSheet from "./pages/appraiser/ScenarioSheet.jsx";
+import RelativeSheet from "./pages/appraiser/RelativeSheet.jsx";
 import RevenueSheet from "./pages/appraiser/RevenueSheet.jsx";
 import PeerSheet from "./pages/appraiser/PeerSheet.jsx";
 import ReportSheet from "./pages/appraiser/ReportSheet.jsx";
@@ -170,6 +171,8 @@ function Workspace({ projectId, onHome }) {
       return <DcfSheet project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "scenario")
       return <ScenarioSheet project={project} onSave={saveData} />;
+    if (stage.id === "valuation" && sheet.id === "relative")
+      return <RelativeSheet project={project} onSave={saveData} />;
     if (stage.id === "output" && (sheet.id === "export" || sheet.id === "diff"))
       return <Roundtrip project={project} sheet={sheet.id} onSave={saveData} />;
     return <div className="placeholder">'{stage.label} › {sheet.label}' 화면은 준비중입니다.</div>;

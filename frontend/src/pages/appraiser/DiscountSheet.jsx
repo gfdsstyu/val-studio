@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { api, fileToBase64 } from "../../api.js";
 
 /* 3.할인율 > WACC 빌드업 — 커넥터 어셈블리(/api/wacc/assemble) 소비.
@@ -70,8 +70,17 @@ export default function DiscountSheet({ project, onSave }) {
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [country, setCountry] = useState(saved?.country || "한국");
+  const [countries, setCountries] = useState([]);
+  const [crp, setCrp] = useState(null);
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+
+  // Damodaran CRP — 국가 목록 로드 + 선택국 CRP 조회(WACC 마지막 입력).
+  useEffect(() => { api.damodaranCrp().then((d) => setCountries(d.countries)).catch(() => {}); }, []);
+  useEffect(() => {
+    api.damodaranCrp(country).then((d) => setCrp(d.crp)).catch(() => setCrp(null));
+  }, [country]);
   const setPeer = (i, k) => (e) => {
     const next = peers.slice();
     next[i] = { ...next[i], [k]: e.target.value };
@@ -118,6 +127,7 @@ export default function DiscountSheet({ project, onSave }) {
       kd_grade: form.kd_grade, kd_tenor: form.kd_tenor,
       beta_source: form.beta_source || null, beta_market: form.beta_market || null,
       erp_source: form.erp_source || null, erp_market: form.erp_market || null,
+      country_risk_premium: crp != null ? crp : 0,
       pasted_at: baseDate || undefined,
     };
     if (form.market_cap_musd.trim()) body.market_cap_musd = Number(form.market_cap_musd);
@@ -126,7 +136,7 @@ export default function DiscountSheet({ project, onSave }) {
       setRes(d);
       if (!d.blocked) {
         onSave?.({
-          wacc_input: { form, peers },
+          wacc_input: { form, peers, country },
           wacc_result: {
             wacc: d.wacc, cost_of_equity: d.cost_of_equity,
             relevered_beta: d.relevered_beta,
@@ -223,6 +233,14 @@ export default function DiscountSheet({ project, onSave }) {
               <div style={{ display: "flex", gap: 6 }}>
                 <input type="text" value={form.erp_source} onChange={set("erp_source")} placeholder="kicpa" />
                 <input type="text" value={form.erp_market} onChange={set("erp_market")} placeholder="KOSPI" />
+              </div></div>
+            <div className="row"><label>국가위험프리미엄 CRP (Damodaran)</label>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <select value={country} onChange={(e) => setCountry(e.target.value)} style={{ fontSize: 12 }}>
+                  {countries.map((c) => <option key={c.country} value={c.country}>{c.country}</option>)}
+                </select>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  CRP = {crp != null ? (crp * 100).toFixed(2) + "%" : "미등록(0)"}</span>
               </div></div>
           </div>
 

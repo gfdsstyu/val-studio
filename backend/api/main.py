@@ -797,6 +797,63 @@ async def upload_sheet(request: Request) -> dict:
     return {"text": text, "rows": rows, "n_rows": len(rows)}
 
 
+# ── Damodaran 국가위험프리미엄(CRP) — WACC 마지막 입력 ──────────────────────
+@app.get("/api/damodaran/crp")
+def damodaran_crp(country: str | None = None) -> dict:
+    """country 주면 그 국가 CRP, 없으면 등록국 목록. 미등록국은 crp=null(업로드 갱신)."""
+    from ingest.damodaran import DAMODARAN_VINTAGE, country_detail, list_countries
+    if country:
+        d = country_detail(country)
+        return {"detail": d, "vintage": DAMODARAN_VINTAGE,
+                "crp": d["crp"] if d else None}
+    return {"countries": list_countries(), "vintage": DAMODARAN_VINTAGE}
+
+
+# ── 상대가치평가 (peer 배수 → 내재가치) ──────────────────────────────────────
+@app.post("/api/relative/value")
+async def relative_value(request: Request) -> dict:
+    """{peers:[{name,per?,pbr?,ev_ebitda?}], target_eps?, target_bps?, target_ebitda?,
+    net_debt?, shares_outstanding?, use?} → 방식별 내재 주당가치 + 5-10 Rule 경고."""
+    from calc_core.multiples import PeerMultiple, relative_valuation
+    d = await request.json()
+    try:
+        peers = [PeerMultiple(name=p.get("name", "?"),
+                              per=p.get("per"), pbr=p.get("pbr"), ev_ebitda=p.get("ev_ebitda"))
+                 for p in (d.get("peers") or [])]
+    except (TypeError, AttributeError) as e:
+        raise HTTPException(422, f"peers 형식 오류: {e}") from e
+    if not peers:
+        raise HTTPException(422, "peers 필요")
+    r = relative_valuation(
+        peers, target_eps=d.get("target_eps"), target_bps=d.get("target_bps"),
+        target_ebitda=d.get("target_ebitda"), net_debt=float(d.get("net_debt", 0.0)),
+        shares_outstanding=d.get("shares_outstanding"), use=str(d.get("use", "median")))
+    return {"per": r.per, "pbr": r.pbr, "ev_ebitda": r.ev_ebitda, "warnings": r.warnings}
+
+
+@app.post("/api/price/multiples")
+async def price_multiples(request: Request) -> dict:
+    """{tickers:[...], base_date} → 종목별 PER/PBR/EPS/BPS(pykrx). ⚠️ pykrx 는 KRX 로그인
+    필요(KRX_ID/KRX_PW env) — 미설정 시 503, 수동/CSV 입력으로 대체."""
+    from ingest.price_client import pykrx_fundamentals
+    d = await request.json()
+    base = str(d.get("base_date", "")).strip()
+    tickers = [str(t).strip() for t in (d.get("tickers") or []) if str(t).strip()]
+    if not (tickers and base):
+        raise HTTPException(422, "tickers, base_date 필요")
+    out, errors = [], []
+    for tk in tickers:
+        try:
+            out.append(pykrx_fundamentals(tk, base))
+        except RuntimeError as e:
+            raise HTTPException(503, str(e)) from e
+        except ValueError as e:
+            errors.append({"ticker": tk, "error": str(e)})
+    if not out and errors:
+        raise HTTPException(503, "pykrx 배수 조회 실패(KRX 로그인 필요 가능) — 수동/CSV 입력 권장")
+    return {"multiples": out, "errors": errors}
+
+
 @app.get("/api/method/options")
 def method_options() -> dict:
     """위저드 선택지 — 목적·거래유형 카탈로그(프론트 하드코딩 방지, SSOT=백엔드)."""

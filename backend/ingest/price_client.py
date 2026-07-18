@@ -160,6 +160,36 @@ class SyntheticProvider:
         return [(d, c) for d, c in self.data.get(ticker, []) if start <= d <= end]
 
 
+def pykrx_fundamentals(ticker: str, base_date: str) -> dict:
+    """pykrx 재무배수(PER·PBR·EPS·BPS·DIV) — 평가기준일 이하 최신(look-ahead 가드).
+
+    상대가치평가(multiples) 입력. pykrx lazy import(미설치 RuntimeError). 종목코드 6자리.
+    """
+    try:
+        from pykrx import stock
+    except ImportError:
+        raise RuntimeError(
+            "pykrx 미설치 — `pip install pykrx` 후 재시도.") from None
+    import datetime
+    ed = datetime.date.fromisoformat(base_date)
+    sd = ed - datetime.timedelta(days=14)          # 휴장 대비 2주 여유
+    df = stock.get_market_fundamental_by_date(
+        sd.strftime("%Y%m%d"), ed.strftime("%Y%m%d"), ticker)
+    if df is None or len(df) == 0:
+        raise ValueError(f"{ticker}: pykrx 재무배수 없음(기준일 {base_date})")
+    row = df.iloc[-1]                               # 기준일 이하 최신
+    idx = df.index[-1]
+    def g(k):
+        try:
+            v = float(row[k])
+            return v if v == v and v != 0 else None    # NaN·0 제외
+        except (KeyError, TypeError, ValueError):
+            return None
+    return {"ticker": ticker, "date": idx.strftime("%Y-%m-%d"),
+            "per": g("PER"), "pbr": g("PBR"), "eps": g("EPS"),
+            "bps": g("BPS"), "div": g("DIV")}
+
+
 @dataclass
 class FinanceDataReaderProvider:
     """실사용 — FinanceDataReader lazy import. 미설치면 RuntimeError(안내)."""

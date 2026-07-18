@@ -40,6 +40,8 @@ export const api = {
   priceMarketcap: (body) => j("POST", "/api/price/marketcap", body),
   priceFx: (body) => j("POST", "/api/price/fx", body),
   uploadSheet: (body) => j("POST", "/api/upload/sheet", body),
+  damodaranCrp: (country) => j("GET", `/api/damodaran/crp${country ? `?country=${encodeURIComponent(country)}` : ""}`),
+  relativeValue: (body) => j("POST", "/api/relative/value", body),
   projects: {
     list: () => j("GET", "/api/projects"),
     create: (body) => j("POST", "/api/projects", body),
