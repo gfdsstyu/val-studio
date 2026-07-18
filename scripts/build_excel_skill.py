@@ -33,7 +33,8 @@ DIST = SKILL / "dist"
 # 패키지는 전체 복사, 일부는 지정 파일만(커넥터 등 무거운/네트워크 모듈 배제).
 VENDOR_PKGS_FULL = ["calc_core", "excel"]                 # 디렉터리 통째
 VENDOR_PKG_FILES = {
-    "ingest": ["__init__.py", "provenance.py", "validators.py"],  # 커넥터 배제
+    # 커넥터(네트워크) 배제. peer_selection=유사회사 4-step 퍼널(stdlib, peer.py 소비).
+    "ingest": ["__init__.py", "provenance.py", "validators.py", "peer_selection.py"],
     "rag": ["__init__.py", "searcher.py", "embedder.py"],
 }
 

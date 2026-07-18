@@ -57,7 +57,7 @@ def test_scaffold_stage_generators():
     """W1~W5 단계 뼈대 생성 — 각 단계가 규약 시트를 만든다(stdin 불요)."""
     expected = {
         "W1": ["Research"], "W2": ["FS_Hist"], "W2.5": ["FS_Disagg"], "W3": ["Reclass"],
-        "W4": ["Fcst_Rev", "Fcst_Cost", "Capex_Dep", "WC"], "W5": ["WACC"],
+        "W4": ["Fcst_Rev", "Fcst_Cost", "Capex_Dep", "WC"], "W5": ["Peer", "WACC"],
     }
     for stage, sheets in expected.items():
         out = _run("scaffold.py", "--stage", stage, "--emit-cells")
@@ -94,6 +94,26 @@ def test_scaffold_w4_rollup_wiring():
     assert sum(1 for f in cost_formulas if f.startswith("SUM(")) >= 2, "원가·판관비 계 SUM 롤업 부족"
 
 
+def test_scaffold_w5_peer_and_wacc_live_formulas():
+    """W5 = Peer(4-step 퍼널 + Hamada 무부채화) + WACC(빌드업). 둘 다 살아있는 수식."""
+    out = _run("scaffold.py", "--stage", "W5", "--emit-cells")
+    peer = [c for c in out["cells"] if c["sheet"] == "Peer"]
+    wacc = [c for c in out["cells"] if c["sheet"] == "WACC"]
+    pf = [c["formula"] for c in peer if "formula" in c]
+    wf = [c["formula"] for c in wacc if "formula" in c]
+    # Peer: Hamada 무부채화(/(1+(1-t)·D/E) + 평균
+    assert any("/(1+(1-" in f for f in pf), "Peer Hamada 무부채화 없음"
+    assert any(f.startswith("AVERAGE(") for f in pf), "Peer 평균행 없음"
+    # Peer: 4-step 퍼널 컬럼(판정·생존스텝) + peer.py 게이트
+    pv = {str(c.get("value")) for c in peer}
+    assert any("판정" in v for v in pv) and any("생존스텝" in v for v in pv)
+    assert any("peer.py" in v and "Step" in v for v in pv)
+    # WACC: 재부채화·Ke·WACC 조립(가중합)
+    assert any("*(1+(1-" in f for f in wf), "WACC 재부채화 없음"
+    assert any("*" in f and "+" in f for f in wf), "Ke/WACC 조립 없음"
+    assert any("시장위험프리미엄 MRP" in str(c.get("value")) for c in wacc)   # ERP 아님
+
+
 def test_scaffold_stage_xlsx():
     """단계 뼈대를 xlsx 로도 저장 가능(Claude Code 경로)."""
     import tempfile as _tf
@@ -113,6 +133,8 @@ if __name__ == "__main__":
     print("PASS test_scaffold_stage_generators")
     test_scaffold_w4_rollup_wiring()
     print("PASS test_scaffold_w4_rollup_wiring")
+    test_scaffold_w5_peer_and_wacc_live_formulas()
+    print("PASS test_scaffold_w5_peer_and_wacc_live_formulas")
     test_scaffold_stage_xlsx()
     print("PASS test_scaffold_stage_xlsx")
-    print("\n5 tests passed.")
+    print("\n6 tests passed.")

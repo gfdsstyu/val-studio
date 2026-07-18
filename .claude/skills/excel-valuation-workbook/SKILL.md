@@ -63,12 +63,12 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 | W2.5 | `FS_Disagg`(손익 세분 + 합보존·구성비) |
 | W3 | `Reclass`(`_A/_F` 레이어) |
 | W4 | `Fcst_Rev`·`Fcst_Cost`(FS_Disagg 세분 롤업)·`Capex_Dep`·`WC` |
-| W5 | `WACC` |
+| W5 | `Peer`(유사회사 4-step 퍼널 + Hamada 무부채화)·`WACC`(빌드업) |
 | W6~W8 | `DCF` 가정 상류참조 승격, `Scenario`·`Sens` |
 
 **정체성 원칙(중요)**: 시트명·레이아웃은 위 **자체 정의**를 따른다. **MSVALUE(H_FS/EBIT/BackData 등) 시트명·레이아웃을 복제하지 않는다.** MSVALUE·xDCF 지식은 "무엇을 계산·검증할지"로만 쓴다. 규약은 `references/template_conventions.md`.
 
-**단계 시트 뼈대 생성**: 각 단계에서 `scaffold.py --stage W1..W5`(및 `W2.5`)로 그 단계 시트의 뼈대(제목·범례·라벨·입력 placeholder·타시트 참조 스텁)를 결정론으로 찍고, 그 위에 값·수식·근거를 채운다. 뼈대가 색상·참조 규약을 강제하므로 손으로 시트를 그리는 것보다 일관되다. W1=Research, W2=FS_Hist, W2.5=FS_Disagg, W3=Reclass, W4=Fcst_Rev·Fcst_Cost·Capex_Dep·WC, W5=WACC.
+**단계 시트 뼈대 생성**: 각 단계에서 `scaffold.py --stage W1..W5`(및 `W2.5`)로 그 단계 시트의 뼈대(제목·범례·라벨·입력 placeholder·타시트 참조 스텁)를 결정론으로 찍고, 그 위에 값·수식·근거를 채운다. 뼈대가 색상·참조 규약을 강제하므로 손으로 시트를 그리는 것보다 일관되다. W1=Research, W2=FS_Hist, W2.5=FS_Disagg, W3=Reclass, W4=Fcst_Rev·Fcst_Cost·Capex_Dep·WC, W5=Peer·WACC.
 
 - 참조 단방향(`뒤→앞`, 순환 금지). 색상 3색: Blue(입력)/Black(수식)/Green(타시트) + 핵심가정 yellow.
 - **hard number 승격(W6)**: 상류 시트가 생기면 DCF 스파인 입력셀(매출/원가/판관비)을 상류 참조(`=Fcst_Rev!C12` 등, Green)로 교체하고, **교체 전후 per_share 불변(tie-out)**을 `promote.py`로 검증(불일치 시 라인·연도 델타 표면화).
@@ -89,7 +89,7 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 | **W2.5 손익 계정 세분화** | 러프한 IS 라인을 성격별로 분해(매출→제품/상품/용역, 원가·판관비→성격별) — `fs_disagg.py` | **세분합=원계정(합보존) FAIL 0**·구성비 YoY 급변 WARN 표면화 | account_dictionary·모델링_실무_2강4강 |
 | **W3 계정재분류** | PL 4유형·BS 6유형 태깅(모호는 표면화) — `reclass.py`로 파티션 검증 | **분류합=원본 FS합(FAIL 게이트)**·누락·중복·유형오류 0 | xDCF_계정분류·msvalue_DCF_교육_정본 |
 | **W4 추정** | 드라이버 후보 제시→선택분 수식 구현. **`Fcst_Rev`·`Fcst_Cost`는 FS_Disagg 세분 라인(제품/상품/용역, 재료/노무/경비, 급여/상각/광고)과 동일 성격 행 → `계=Σ세분` 살아있는 SUM 롤업 → DCF!매출/원가/판관비** | projection_smoothness·wc_burn·가정 출처 완비·**세분 계=원계정 롤업 일치** | msvalue_리포트예시·모델링_실무 |
-| **W5 WACC** | `wacc.py`(Kroll 제안·peer 근거) | β/MRP 정합·provenance·8~14% | wacc_할인율서식·베타·deloitte·PGR |
+| **W5 WACC** | **`peer.py` 유사회사 4-step 퍼널**(Step1 코드→Step2 유사성[판정]→Step3 비중≥70%→Step4 베타포인트·거래정지) → `Peer` 시트 Hamada 무부채화 → `wacc.py` 빌드업(Kroll size) | 퍼널 게이트(무근거 판정 거부·uncertain→⚖️큐·5-10 rule)·β/MRP 정합·provenance·8~14% | wacc_할인율서식·베타·deloitte·PGR·msvalue_리포트예시 §E |
 | **W6 DCF** | 스파인 입력셀→Fcst 계 참조 승격(`promote.py`) + `dcf.py` 재계산 | **승격 tie-out(per_share 불변)**·워크북 vs 엔진 rel_tol 1e-6·audit 전규칙·gap_diagnosis | engine_spec·검증_클래시스 |
 | **W7 시나리오** | `scenario.py`(구성=판단) → Scenario 시트(가중 SUMPRODUCT·합=1 게이트 살아있는 수식) | 가중치 완전일치·합=1 | msvalue_리포트예시 부록F |
 | **W8 민감도** | `sensitivity.py`로 WACC×PGR 5×5 살아있는 수식 그리드(셀마다 독립 DCF 재계산) | 워크북 중심 == 엔진 3×3 중심 == base·(설치 시)recalc 게이트 | 앤트로픽_금융스킬_벤치마크 §1 |
@@ -131,7 +131,10 @@ echo '{"blocks":[{"parent":"매출액","periods":{"2024":{"total":"1,234","child
 # W3 평가재분류 (표준계정→유형 파티션; 분류합=원본 FS합·중복·누락·유형오류 0)
 echo '{"items":[{"account":"매출채권","amount":100,"type":"WC"},{"account":"유형자산","amount":700,"type":"FA"}],"original_total":800}' | python scripts/reclass.py
 
-# W5 WACC (market_cap_musd 주면 Kroll 제안)
+# W5 유사회사 4-step 퍼널 (웹 /api/peer/select 미러; Step2만 판단, 나머지 결정론)
+echo '{"candidates":[{"ticker":"A","industry_code":"2710","revenue_share_related":0.9,"listed_years":5}],"target_industry_codes":["2710"],"judgments":[{"ticker":"A","similar":true,"reason":"동일 사업"}]}' | python scripts/peer.py
+
+# W5 WACC (market_cap_musd 주면 Kroll 제안). 무부채β·목표자본구조는 Peer 확정 peer 평균.
 echo '{"risk_free":0.03,"market_risk_premium":0.08,"unlevered_beta":1.0,...}' | python scripts/wacc.py
 
 # W6 DCF 계산 + audit
