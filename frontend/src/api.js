@@ -23,6 +23,7 @@ export const api = {
   revenueBuild: (body) => j("POST", "/api/revenue/build", body),
   peerSelect: (body) => j("POST", "/api/peer/select", body),
   ksicSearch: (q) => j("GET", `/api/ksic/search?q=${encodeURIComponent(q)}`),
+  assumptionsBuild: (body) => j("POST", "/api/assumptions/build", body),
   validateGeminiKey: (key) =>
     j("POST", "/api/keys/validate", undefined, { "X-Gemini-Key": key }),
   projects: {

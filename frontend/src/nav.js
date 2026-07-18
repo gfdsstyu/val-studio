@@ -6,18 +6,18 @@ export const NAV = {
     { id: "cover", label: "개요 Cover",
       sheets: [{ id: "summary", label: "상태 요약" }] },
     { id: "materials", label: "0. 자료·Brief", sheets: [
-      { id: "files", label: "자료함", soon: true },
-      { id: "brief", label: "Company Brief", soon: true },
+      { id: "files", label: "자료함" },
+      { id: "brief", label: "Company Brief" },
     ]},
     { id: "mapping", label: "1. 계정분류", sheets: [
-      { id: "pl", label: "손익 매핑", soon: true },
-      { id: "bs", label: "BS 매핑(NOA/IBD)", soon: true },
+      { id: "pl", label: "손익 매핑" },
+      { id: "bs", label: "BS 매핑(NOA/IBD)" },
     ]},
     { id: "assumptions", label: "2. 가정", sheets: [
       { id: "revenue", label: "매출(트리)" },
-      { id: "costs", label: "원가·판관비", soon: true },
-      { id: "fa", label: "FA", soon: true },
-      { id: "wc", label: "WC", soon: true },
+      { id: "costs", label: "원가·판관비" },
+      { id: "fa", label: "FA" },
+      { id: "wc", label: "WC" },
     ]},
     { id: "discount", label: "3. 할인율", sheets: [
       { id: "peer", label: "유사회사 4-step" },

@@ -9,6 +9,11 @@ import ScenarioSheet from "./pages/appraiser/ScenarioSheet.jsx";
 import RevenueSheet from "./pages/appraiser/RevenueSheet.jsx";
 import PeerSheet from "./pages/appraiser/PeerSheet.jsx";
 import ReportSheet from "./pages/appraiser/ReportSheet.jsx";
+import CostsSheet from "./pages/appraiser/CostsSheet.jsx";
+import FaSheet from "./pages/appraiser/FaSheet.jsx";
+import WcSheet from "./pages/appraiser/WcSheet.jsx";
+import MaterialsSheet from "./pages/appraiser/MaterialsSheet.jsx";
+import MappingSheet from "./pages/appraiser/MappingSheet.jsx";
 import Roundtrip from "./pages/appraiser/Roundtrip.jsx";
 
 /* 셸(ia_ux_architecture.md §3): 헤더(정체성+상태, 액션 無) · LNB=단계 축 ·
@@ -143,8 +148,18 @@ function Workspace({ projectId, onHome }) {
   const body = (() => {
     if (showByok) return <ByokPanel />;
     if (stage.id === "cover") return <CoverSheet project={project} />;
+    if (stage.id === "materials")
+      return <MaterialsSheet project={project} sheet={sheet.id} onSave={saveData} />;
+    if (stage.id === "mapping")
+      return <MappingSheet project={project} sheet={sheet.id} onSave={saveData} />;
     if (stage.id === "assumptions" && sheet.id === "revenue")
       return <RevenueSheet project={project} onSave={saveData} />;
+    if (stage.id === "assumptions" && sheet.id === "costs")
+      return <CostsSheet project={project} onSave={saveData} />;
+    if (stage.id === "assumptions" && sheet.id === "fa")
+      return <FaSheet project={project} onSave={saveData} />;
+    if (stage.id === "assumptions" && sheet.id === "wc")
+      return <WcSheet project={project} onSave={saveData} />;
     if (stage.id === "discount" && sheet.id === "peer")
       return <PeerSheet project={project} onSave={saveData} />;
     if (stage.id === "discount" && sheet.id === "wacc")

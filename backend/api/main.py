@@ -442,6 +442,48 @@ def ksic_search(q: str) -> dict:
     return {"results": [{"code": c, "name": n} for c, n in ksic.search(q)]}
 
 
+# ── 가정 상류 계산 (원가·판관비 / FA / WC → DCF 시리즈) ───────────────────────
+@app.post("/api/assumptions/build")
+async def assumptions_build(request: Request) -> dict:
+    """운영가정 → DCF 시리즈. 파트별로 입력 있는 것만 계산(3시트 공유 엔드포인트).
+
+    - ebit: {revenue, cogs_pct, sga_pct} → {cogs, sga, gross_profit, ebit}
+    - fa:   {asset_classes:[{name,opening_net_book,remaining_life,useful_life}],
+             new_capex_by_class:{name:[...]}}  → {dep_amort, capex}
+    - wc:   {wc_items:[{name,base_balance,base_driver,is_asset}], wc_driver_by_item,
+             base_net_working_capital} → {net_working_capital, delta_nwc_cash_adj}
+    """
+    from calc_core.ebit import build_ebit_from_ratios
+    from calc_core.fa import project_fixed_assets
+    from calc_core.wc import project_working_capital
+    d = await request.json()
+    out: dict = {}
+    try:
+        if d.get("revenue") and d.get("cogs_pct") and d.get("sga_pct"):
+            eb = build_ebit_from_ratios(
+                [float(x) for x in d["revenue"]],
+                [float(x) for x in d["cogs_pct"]], [float(x) for x in d["sga_pct"]])
+            out["ebit"] = {"cogs": eb.cogs, "sga": eb.sga,
+                           "gross_profit": eb.gross_profit, "ebit": eb.ebit}
+        if d.get("asset_classes"):
+            fa_res = project_fixed_assets(
+                _asset_classes(d["asset_classes"]),
+                {k: [float(x) for x in v]
+                 for k, v in (d.get("new_capex_by_class") or {}).items()})
+            out["fa"] = {"dep_amort": fa_res.dep_amort, "capex": fa_res.capex}
+        if d.get("wc_items"):
+            wc_res = project_working_capital(
+                _wc_items(d["wc_items"]),
+                {k: [float(x) for x in v]
+                 for k, v in (d.get("wc_driver_by_item") or {}).items()},
+                float(d.get("base_net_working_capital", 0.0)))
+            out["wc"] = {"net_working_capital": wc_res.net_working_capital,
+                         "delta_nwc_cash_adj": wc_res.delta_nwc_cash_adj}
+    except (KeyError, TypeError, ValueError, ZeroDivisionError) as e:
+        raise HTTPException(422, f"가정 계산 오류: {e}") from e
+    return out
+
+
 @app.get("/api/method/options")
 def method_options() -> dict:
     """위저드 선택지 — 목적·거래유형 카탈로그(프론트 하드코딩 방지, SSOT=백엔드)."""
