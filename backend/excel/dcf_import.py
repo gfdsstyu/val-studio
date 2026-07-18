@@ -14,12 +14,9 @@ from __future__ import annotations
 
 from calc_core.models import DcfSpineInput
 
-from .dcf_export import YEAR_COLS
+from .template_schema import ASSUMP, META, YEAR_COLS
+from .template_schema import ROW as _ROW
 from .xlsx_reader import read_workbook
-
-# export 의 행 맵과 일치(single source: dcf_export._compute 주석 참조)
-_ROW = {"year": 10, "rev": 11, "cogs": 12, "sga": 14, "tax": 16,
-        "da": 18, "capex": 19, "nwc": 20, "period": 22}
 
 
 class DcfModelImportError(RuntimeError):
@@ -63,21 +60,21 @@ def import_dcf_model(path: str, *, sheet: str = "DCF") -> DcfSpineInput:
         tax_override = [t.number for t in tax_cells]
 
     return DcfSpineInput(
-        wacc=num("C3"),
-        terminal_growth=num("C4"),
+        wacc=num(ASSUMP["wacc"]),
+        terminal_growth=num(ASSUMP["terminal_growth"]),
         revenue=row("rev"),
         cogs=row("cogs"),
         sga=row("sga"),
         dep_amort=row("da"),
         capex=row("capex"),
         delta_nwc_cash_adj=row("nwc"),
-        non_operating_assets=num("C6"),
-        net_debt=num("C7"),
-        shares_outstanding=int(round(num("C5"))),
+        non_operating_assets=num(ASSUMP["non_operating_assets"]),
+        net_debt=num(ASSUMP["net_debt"]),
+        shares_outstanding=int(round(num(ASSUMP["shares_outstanding"]))),
         mid_year_periods=periods,
         terminal_discount_period=periods[-1],  # export 는 마지막 명시연도 factor 로 할인
         tax_override=tax_override,
-        effective_tax_rate=opt("C37"),
-        terminal_fcff_override=opt("C38"),
-        terminal_reinvestment_rate=opt("C39"),
+        effective_tax_rate=opt(META["effective_tax_rate"]),
+        terminal_fcff_override=opt(META["terminal_fcff_override"]),
+        terminal_reinvestment_rate=opt(META["terminal_reinvestment_rate"]),
     )

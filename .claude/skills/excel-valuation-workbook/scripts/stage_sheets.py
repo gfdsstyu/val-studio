@@ -8,7 +8,10 @@ vendor/excel.Workbook 사용(자기완결). scaffold.py 가 --stage 로 호출.
 """
 from __future__ import annotations
 
-YEAR_COLS = ["C", "D", "E", "F", "G"]
+# 셀 레이아웃·세분 롤업 위계는 vendored template_schema SSOT 를 소비(자체 복사 금지).
+# scaffold.py 가 _bootstrap 로 vendor 를 path 에 올린 뒤 stage_sheets 를 import 한다.
+from excel.template_schema import DISAGG_BLOCKS, YEAR_COLS
+
 _LEGEND = "범례: [입력]=파랑(hard) · [수식]=검정 · [참조]=초록(타시트) · 핵심가정=노랑fill"
 
 
@@ -73,15 +76,10 @@ def build_fs_disagg(wb, n: int = 5):
                  "원천자료(주석·세그먼트·제조원가명세서)가 지지하는 만큼만 세분 — 없으면 총액 유지 + [성격별 미확보].")
     s.text("B4", "구성비 YoY 급변(>15%p)은 WARN(사업 변화/재분류 확인). 하류 Fcst_Rev·Fcst_Cost 가 세분 라인 참조.")
 
-    # (원계정, [성격별 자식], 원천자료 힌트)
-    blocks = [
-        ("매출액", ["제품매출", "상품매출", "용역매출", "기타매출"], "매출 세그먼트·품목 주석"),
-        ("매출원가", ["재료비", "노무비", "경비", "기타원가"], "제조원가명세서"),
-        ("판매관리비", ["급여", "감가상각비", "광고선전비", "기타판관비"], "판관비 성격별 주석"),
-        ("영업외손익", ["경상항목", "일회성항목"], "영업외 명세(경상/일회성)"),
-    ]
+    # 원계정별 세분 블록은 template_schema.DISAGG_BLOCKS SSOT(스파인 롤업 위계와 동일 소스).
     row = 6
-    for parent, children, src in blocks:
+    for block in DISAGG_BLOCKS:
+        parent, children, src = block["parent"], block["children"], block["source"]
         s.text(f"B{row}", f"── {parent} 세분 (원천: {src}) ──")
         _years(s, row + 1, n)
         r = row + 2
