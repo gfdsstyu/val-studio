@@ -58,7 +58,7 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 | 단계 | 생성 시트 |
 |------|-----------|
 | W0 | `DCF`(스파인) + `_VS_STATE` |
-| W1 | `Research` |
+| W1 | `Research`(10섹션)·`Assumption`(가정 SSOT) |
 | W2 | `FS_Hist`(Raw/Normalized/Map) |
 | W2.5 | `FS_Disagg`(손익 세분 + 합보존·구성비) |
 | W3 | `Reclass`(`_A/_F` 레이어) |
@@ -68,7 +68,9 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 
 **정체성 원칙(중요)**: 시트명·레이아웃은 위 **자체 정의**를 따른다. **MSVALUE(H_FS/EBIT/BackData 등) 시트명·레이아웃을 복제하지 않는다.** MSVALUE·xDCF 지식은 "무엇을 계산·검증할지"로만 쓴다. 규약은 `references/template_conventions.md`.
 
-**단계 시트 뼈대 생성**: 각 단계에서 `scaffold.py --stage W1..W5`(및 `W2.5`)로 그 단계 시트의 뼈대(제목·범례·라벨·입력 placeholder·타시트 참조 스텁)를 결정론으로 찍고, 그 위에 값·수식·근거를 채운다. 뼈대가 색상·참조 규약을 강제하므로 손으로 시트를 그리는 것보다 일관되다. W1=Research, W2=FS_Hist, W2.5=FS_Disagg, W3=Reclass, W4=Fcst_Rev·Fcst_Cost·Capex_Dep·WC, W5=Peer·WACC.
+**단계 시트 뼈대 생성**: 각 단계에서 `scaffold.py --stage W1..W5`(및 `W2.5`)로 그 단계 시트의 뼈대(제목·범례·라벨·입력 placeholder·타시트 참조 스텁)를 결정론으로 찍고, 그 위에 값·수식·근거를 채운다. 뼈대가 색상·참조 규약을 강제하므로 손으로 시트를 그리는 것보다 일관되다. W1=Research·Assumption, W2=FS_Hist, W2.5=FS_Disagg, W3=Reclass, W4=Fcst_Rev·Fcst_Cost·Capex_Dep·WC, W5=Peer·WACC.
+
+W4/W5 시트는 살아있는 수식: Capex_Dep(기말=기초+CAPEX−상각·정액 스케줄), WC(잔액=드라이버×회전일/365·ΔNWC 차분), Fcst_Cost(영업이익=매출−원가−판관비), Assumption 가정 SSOT를 하류가 Green 참조.
 
 - 참조 단방향(`뒤→앞`, 순환 금지). 색상 3색: Blue(입력)/Black(수식)/Green(타시트) + 핵심가정 yellow.
 - **hard number 승격(W6)**: 상류 시트가 생기면 DCF 스파인 입력셀(매출/원가/판관비)을 상류 참조(`=Fcst_Rev!C12` 등, Green)로 교체하고, **교체 전후 per_share 불변(tie-out)**을 `promote.py`로 검증(불일치 시 라인·연도 델타 표면화).

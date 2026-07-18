@@ -56,7 +56,7 @@ def test_scaffold_emit_cells():
 def test_scaffold_stage_generators():
     """W1~W5 단계 뼈대 생성 — 각 단계가 규약 시트를 만든다(stdin 불요)."""
     expected = {
-        "W1": ["Research"], "W2": ["FS_Hist"], "W2.5": ["FS_Disagg"], "W3": ["Reclass"],
+        "W1": ["Research", "Assumption"], "W2": ["FS_Hist"], "W2.5": ["FS_Disagg"], "W3": ["Reclass"],
         "W4": ["Fcst_Rev", "Fcst_Cost", "Capex_Dep", "WC"], "W5": ["Peer", "WACC"],
     }
     for stage, sheets in expected.items():
@@ -114,6 +114,33 @@ def test_scaffold_w5_peer_and_wacc_live_formulas():
     assert any("시장위험프리미엄 MRP" in str(c.get("value")) for c in wacc)   # ERP 아님
 
 
+def test_scaffold_w4_detail_live_formulas():
+    """② 상세화: Capex_Dep 상각 스케줄·WC 회전율·Fcst_Cost 영업이익 = 살아있는 수식."""
+    out = _run("scaffold.py", "--stage", "W4", "--emit-cells")
+
+    def sf(name):
+        return [c["formula"] for c in out["cells"] if c["sheet"] == name and "formula" in c]
+
+    cap, wc, fc = sf("Capex_Dep"), sf("WC"), sf("Fcst_Cost")
+    # Capex_Dep: 기초=전기기말·기말=기초+CAPEX−상각·신규상각=누적/연수
+    assert any("/$C$13" in f for f in cap), "상각연수 정액 배분 없음"
+    assert any("+" in f and "-" in f for f in cap), "기말=기초+CAPEX−상각 없음"
+    # WC: 회전일→잔액(×일/365)·ΔNWC 차분
+    assert any("/365" in f for f in wc), "회전일→잔액(×/365) 없음"
+    assert any("+" in f and "-" in f for f in wc), "NWC=AR+재고−AP 없음"
+    # Fcst_Cost 영업이익: 매출(Fcst_Rev 참조) − 원가 − 판관비
+    assert any("Fcst_Rev!" in f and "-" in f for f in fc), "영업이익 크로스시트 롤업 없음"
+
+
+def test_scaffold_w1_assumption_ssot():
+    """W1 = Research + Assumption(가정 SSOT). Assumption 은 순수 입력(하류 참조 대상)."""
+    out = _run("scaffold.py", "--stage", "W1", "--emit-cells")
+    assert out["stage_sheets"] == ["Research", "Assumption"]
+    av = {str(c.get("value")) for c in out["cells"] if c["sheet"] == "Assumption"}
+    assert any("가정 SSOT" in v for v in av)
+    assert any("CAPEX(% of sales)" in v for v in av) and any("MRP" in v for v in av)
+
+
 def test_scaffold_stage_xlsx():
     """단계 뼈대를 xlsx 로도 저장 가능(Claude Code 경로)."""
     import tempfile as _tf
@@ -135,6 +162,10 @@ if __name__ == "__main__":
     print("PASS test_scaffold_w4_rollup_wiring")
     test_scaffold_w5_peer_and_wacc_live_formulas()
     print("PASS test_scaffold_w5_peer_and_wacc_live_formulas")
+    test_scaffold_w4_detail_live_formulas()
+    print("PASS test_scaffold_w4_detail_live_formulas")
+    test_scaffold_w1_assumption_ssot()
+    print("PASS test_scaffold_w1_assumption_ssot")
     test_scaffold_stage_xlsx()
     print("PASS test_scaffold_stage_xlsx")
-    print("\n6 tests passed.")
+    print("\n8 tests passed.")

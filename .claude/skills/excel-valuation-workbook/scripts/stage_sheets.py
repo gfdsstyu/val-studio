@@ -10,7 +10,7 @@ from __future__ import annotations
 
 # 셀 레이아웃·세분 롤업 위계는 vendored template_schema SSOT 를 소비(자체 복사 금지).
 # scaffold.py 가 _bootstrap 로 vendor 를 path 에 올린 뒤 stage_sheets 를 import 한다.
-from excel.template_schema import DISAGG_BLOCKS, FCST, ROLLUP, YEAR_COLS
+from excel.template_schema import DISAGG_BLOCKS, FCST, ROLLUP, YEAR_COLS, fcst_total_cell
 
 _LEGEND = "범례: [입력]=파랑(hard) · [수식]=검정 · [참조]=초록(타시트) · 핵심가정=노랑fill"
 
@@ -45,6 +45,34 @@ def _years(s, row: int, n: int, base_year: int = 2024) -> None:
 def _header(s, title: str) -> None:
     s.text("B1", title)
     s.text("B2", _LEGEND)
+
+
+# ── W1 Assumption (가정 SSOT) ─────────────────────────────────────────────────
+def build_assumption(wb, n: int = 5):
+    """가정 SSOT(MSVALUE Assumption 시트). 모든 가정의 단일 소스 — Fcst/Capex_Dep/WC/WACC 가
+    Green 참조("hard number 1곳" 절차화). 값=Research 근거로 평가인 확정(연도별 [입력])."""
+    s = wb.add_sheet("Assumption")
+    _header(s, "Assumption — 가정 SSOT (하류 시트 Green 참조)")
+    s.text("B3", "모든 가정의 단일 소스. Fcst_Rev/Fcst_Cost/Capex_Dep/WC/WACC 가 여기를 참조. "
+                 "값=Research 근거로 평가인 확정.")
+    _years(s, 5, n)
+    blocks = [
+        ("── 매출 드라이버 ──", ["매출성장률 또는 시장CAGR", "목표 시장점유율"]),
+        ("── 마진 ──", ["GP%(=1−원가율)", "EBIT%(판관비 후)"]),
+        ("── 원가 성격 ──", ["변동비율(매출연동)", "고정비 증가율(CPI)", "인건비 상승률"]),
+        ("── CAPEX·상각 ──", ["CAPEX(% of sales)", "상각연수(정액)"]),
+        ("── 운전자본(회전일) ──", ["매출채권 회전일", "재고 회전일", "매입채무 회전일"]),
+        ("── 거시·할인 ──", ["Rf 무위험이자율", "MRP 시장위험프리미엄", "목표 세율 t"]),
+    ]
+    r = 6
+    for title, items in blocks:
+        s.text(f"B{r}", title)
+        r += 1
+        for it in items:
+            s.text(f"B{r}", it)                       # 값=[입력] 연도별
+            r += 1
+    s.text(f"B{r + 1}", "sanity(클래시스 벤치마크): GP% 79.8·EBIT% 51.6 고정, 성장 +20% flat")
+    return s
 
 
 # ── W1 Research ──────────────────────────────────────────────────────────────
@@ -194,29 +222,76 @@ def build_fcst_cost(wb, n: int = 5):
     s.text("B4", "각 성격에 변동(매출 연동)/고정(CPI·임금 연동) 드라이버 적용 [평가인 판단].")
     _rollup_block(s, "── 매출원가 세분 추정 ──", ROLLUP["cogs"], FCST["cogs"]["block_start"], n, ", → DCF!매출원가")
     _rollup_block(s, "── 판매관리비 세분 추정 ──", ROLLUP["sga"], FCST["sga"]["block_start"], n, ", → DCF!판관비")
+    # 영업이익 롤업(EBIT 검산): 매출(Fcst_Rev 계) − 매출원가계 − 판관비계. 살아있는 수식.
+    cogs_tot = FCST["cogs"]["block_start"] + 2 + len(ROLLUP["cogs"])   # 매출원가 계 행
+    sga_tot = FCST["sga"]["block_start"] + 2 + len(ROLLUP["sga"])      # 판관비 계 행
+    ebit_row = sga_tot + 2
+    s.text(f"B{ebit_row}", "영업이익 = 매출 − 매출원가 − 판관비 (→ DCF!EBIT 검산)")
+    for c in YEAR_COLS[:n]:
+        s.formula(f"{c}{ebit_row}", f"{fcst_total_cell('rev', c)}-{c}{cogs_tot}-{c}{sga_tot}")
+    s.text(f"B{ebit_row + 1}", "상각비(원가/판관비)는 Capex_Dep 당기상각에서 배분(초록 참조).")
     return s
 
 
 def build_capex_dep(wb, n: int = 5):
+    """W4 FA·상각비계산 — CAPEX(신규/유지) + 기존자산 잔여상각 + 신규자산 정액상각 스케줄.
+    살아있는 수식: 기초=기말_{t-1}, 당기상각=기존+신규, 기말=기초+CAPEX−상각. → DCF!D&A·CAPEX."""
     s = wb.add_sheet("Capex_Dep")
-    _header(s, "Capex_Dep — CAPEX 계획 + 상각 스케줄")
-    _years(s, 4, n)
-    for i, lbl in enumerate(
-        ["CAPEX(계획)", "기초 유형자산", "당기 상각", "기말 유형자산",
-         "→ DCF!CAPEX 참조", "→ DCF!D&A 참조"], start=5):
-        s.text(f"B{i}", lbl)
+    _header(s, "Capex_Dep — FA·상각비계산 (기존자산 잔여 + 신규 CAPEX 정액)")
+    s.text("B3", "CAPEX=Assumption(%of sales) 신규+유지. 신규자산은 상각연수 정액 → 향후 배분(근사=누적/연수).")
+    _years(s, 5, n)
+    cols = YEAR_COLS[:n]
+    R = {"beg": 6, "capex": 7, "dep_old": 8, "dep_new": 9, "dep": 10, "end": 11}
+    labels = {"beg": "기초 유형자산", "capex": "CAPEX (신규+유지)", "dep_old": "기존자산 잔여상각",
+              "dep_new": "신규자산 상각 (누적CAPEX/연수)", "dep": "당기 상각 (→ DCF!D&A)",
+              "end": "기말 유형자산"}
+    for k, r in R.items():
+        s.text(f"B{r}", labels[k])
+    for j, c in enumerate(cols):
+        if j == 0:
+            s.text(f"{c}{R['beg']}", "[입력·기초]")
+        else:
+            s.formula(f"{c}{R['beg']}", f"{cols[j-1]}{R['end']}")            # 기초=전기 기말
+        s.text(f"{c}{R['capex']}", "[입력]")
+        s.text(f"{c}{R['dep_old']}", "[입력]")
+        s.formula(f"{c}{R['dep_new']}", f"SUM({cols[0]}{R['capex']}:{c}{R['capex']})/$C$13")  # 누적/연수
+        s.formula(f"{c}{R['dep']}", f"{c}{R['dep_old']}+{c}{R['dep_new']}")   # 당기상각
+        s.formula(f"{c}{R['end']}", f"{c}{R['beg']}+{c}{R['capex']}-{c}{R['dep']}")  # 기말
+    s.text("B13", "상각연수(정액)")
+    s.text("C13", "[입력]")
+    s.text("B15", "연결: 당기상각 → DCF!(+)D&A · CAPEX → DCF!(−)CAPEX · 상각비 → EBIT(원가/판관비 배분)")
     return s
 
 
 def build_wc(wb, n: int = 5):
+    """W4 WC — 회전일→잔액→ΔNWC 살아있는 수식. 매출·원가는 Fcst 참조, 회전일은 Assumption.
+    매출채권=매출×일/365, 재고·매입채무=원가×일/365, ΔNWC=NWC_t−NWC_{t-1} → DCF!ΔNWC."""
     s = wb.add_sheet("WC")
-    _header(s, "WC — 운전자본(회전일 기반)")
-    _years(s, 4, n)
-    for i, lbl in enumerate(
-        ["매출채권(회전일→잔액)", "재고자산", "매입채무", "순운전자본(NWC)",
-         "ΔNWC(→ DCF!ΔNWC 참조)"], start=5):
-        s.text(f"B{i}", lbl)
-    s.text("B11", "회전일 근거: Research!(회전일 가정) 참조(초록)")
+    _header(s, "WC — 운전자본 (회전일 → 잔액 → ΔNWC)")
+    s.text("B3", "매출·원가=Fcst 참조(초록), 회전일=Assumption/Research. ⚠️ 회전율 방향 주의(잔액=드라이버×일/365).")
+    _years(s, 5, n)
+    cols = YEAR_COLS[:n]
+    R = {"rev": 6, "cogs": 7, "d_ar": 8, "d_inv": 9, "d_ap": 10,
+         "ar": 11, "inv": 12, "ap": 13, "nwc": 14, "dnwc": 15}
+    labels = {"rev": "매출 (→Fcst_Rev)", "cogs": "매출원가 (→Fcst_Cost)",
+              "d_ar": "매출채권 회전일", "d_inv": "재고 회전일", "d_ap": "매입채무 회전일",
+              "ar": "매출채권 = 매출×일/365", "inv": "재고자산 = 원가×일/365",
+              "ap": "매입채무 = 원가×일/365", "nwc": "순운전자본 NWC = AR+재고−AP",
+              "dnwc": "ΔNWC = NWC_t − NWC_{t-1} (→ DCF!ΔNWC)"}
+    for k, r in R.items():
+        s.text(f"B{r}", labels[k])
+    for k in ("rev", "cogs", "d_ar", "d_inv", "d_ap"):
+        for c in cols:
+            s.text(f"{c}{R[k]}", "[입력]")
+    for j, c in enumerate(cols):
+        s.formula(f"{c}{R['ar']}", f"{c}{R['rev']}*{c}{R['d_ar']}/365")
+        s.formula(f"{c}{R['inv']}", f"{c}{R['cogs']}*{c}{R['d_inv']}/365")
+        s.formula(f"{c}{R['ap']}", f"{c}{R['cogs']}*{c}{R['d_ap']}/365")
+        s.formula(f"{c}{R['nwc']}", f"{c}{R['ar']}+{c}{R['inv']}-{c}{R['ap']}")
+        if j == 0:
+            s.formula(f"{c}{R['dnwc']}", f"{c}{R['nwc']}")      # 첫해=기초NWC(0) 대비; 기초 있으면 입력 차감
+        else:
+            s.formula(f"{c}{R['dnwc']}", f"{c}{R['nwc']}-{cols[j-1]}{R['nwc']}")
     return s
 
 
@@ -322,7 +397,7 @@ def build_wacc(wb, n: int = 5):
 
 
 STAGE_BUILDERS = {
-    "W1": [build_research],
+    "W1": [build_research, build_assumption],
     "W2": [build_fs_hist],
     "W2.5": [build_fs_disagg],
     "W3": [build_reclass],
