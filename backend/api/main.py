@@ -8,8 +8,12 @@
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import dataclasses
+import os
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -19,11 +23,16 @@ sys.path.insert(0, str(_ROOT / "backend"))
 
 from fastapi import FastAPI, Header, HTTPException, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import Response  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 from assemble.dcf_inputs import assemble_dcf_inputs  # noqa: E402
 from assemble.wacc_inputs import PeerBeta, WaccAssembly, assemble_wacc_inputs  # noqa: E402
 from calc_core import DcfSpineInput, run  # noqa: E402
+from excel import build_dcf_sheet, import_dcf_model, read_workbook  # noqa: E402
+from excel.apply_policy import build_apply_plan  # noqa: E402
+from excel.dcf_import import DcfModelImportError  # noqa: E402
+from excel.workbook_diff import diff_workbooks  # noqa: E402
 from calc_core import fa as _fa, wc as _wc  # noqa: E402
 from calc_core.checks import audit_dcf, diagnose_dcf_gap  # noqa: E402
 from calc_core.method_selector import DEAL_TYPES, PURPOSES, recommend_method  # noqa: E402
@@ -106,6 +115,88 @@ async def scenario_endpoint(request: Request) -> dict:
         raise HTTPException(422, str(e)) from e
     return {"rows": a.to_rows(), "spread": a.spread,
             "weighted_per_share": a.weighted_per_share}
+
+
+# ── xlsx 왕복 (export → 편집 → import/diff → 로컬 모델 반영) ──────────────────
+# 업로드는 base64-in-JSON(멀티파트 의존성 python-multipart 불요, 로컬 단일프로세스에 적합).
+def _decode_xlsx(b64: str) -> bytes:
+    try:
+        return base64.b64decode(b64, validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise HTTPException(422, f"xlsx base64 디코드 실패: {e}") from e
+
+
+def _write_temp_xlsx(data: bytes) -> str:
+    fd, path = tempfile.mkstemp(suffix=".xlsx")
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    return path
+
+
+@app.post("/api/xlsx/export")
+async def xlsx_export(request: Request) -> Response:
+    """DcfSpineInput JSON → 수식 live .xlsx 다운로드(감사 추적·재편집 가능)."""
+    inp = _parse_input(await request.json())
+    res = run(inp)
+    path = _write_temp_xlsx(b"")
+    try:
+        build_dcf_sheet(inp, res).save(path)
+        data = Path(path).read_bytes()
+    finally:
+        os.unlink(path)
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="valstudio_dcf.xlsx"'},
+    )
+
+
+@app.post("/api/xlsx/import")
+async def xlsx_import(request: Request) -> dict:
+    """{"xlsx_b64": "..."} → import_dcf_model → 복원 입력 + 재계산 결과.
+
+    표준 Val-Studio DCF 레이아웃 가정(scaffold/export 산출). 타 템플릿은 422.
+    """
+    data = await request.json()
+    if "xlsx_b64" not in data:
+        raise HTTPException(422, "xlsx_b64 필요")
+    path = _write_temp_xlsx(_decode_xlsx(data["xlsx_b64"]))
+    try:
+        inp = import_dcf_model(path)
+    except DcfModelImportError as e:
+        raise HTTPException(422, f"DCF 모델 import 실패(표준 레이아웃 아님?): {e}") from e
+    finally:
+        os.unlink(path)
+    return {"input": {f: getattr(inp, f) for f in _FIELDS}, "result": _result_payload(inp)}
+
+
+@app.post("/api/xlsx/diff")
+async def xlsx_diff(request: Request) -> dict:
+    """{"before_b64", "after_b64"} → 3버킷 diff + apply-정책 계획.
+
+    safe(입력 변경만)면 after 를 import·재계산해 new_result 동봉(자동 반영 가능).
+    수식/구조 변경은 review_queue/blocked 로 표면화(평가인 승인·차단).
+    """
+    data = await request.json()
+    if "before_b64" not in data or "after_b64" not in data:
+        raise HTTPException(422, "before_b64, after_b64 필요")
+    p_before = _write_temp_xlsx(_decode_xlsx(data["before_b64"]))
+    p_after = _write_temp_xlsx(_decode_xlsx(data["after_b64"]))
+    try:
+        diff = diff_workbooks(read_workbook(p_before), read_workbook(p_after))
+        plan = build_apply_plan(diff)
+        out = plan.to_dict()
+        if plan.safe:
+            try:
+                inp = import_dcf_model(p_after)
+                out["new_result"] = _result_payload(inp)
+                out["new_input"] = {f: getattr(inp, f) for f in _FIELDS}
+            except DcfModelImportError:
+                out["new_result"] = None  # 표준 레이아웃 아니면 재계산 생략(diff 만)
+    finally:
+        os.unlink(p_before)
+        os.unlink(p_after)
+    return out
 
 
 # ── 어셈블리 (커넥터 원천값 → 검증된 엔진입력 → 결과) ────────────────────────

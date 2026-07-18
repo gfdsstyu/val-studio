@@ -179,4 +179,10 @@ select:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
 .ok { color: var(--ok); font-weight: 600; }
 .bad { color: var(--err); font-weight: 600; }
 .err { color: var(--err); margin-top: 8px; white-space: pre-wrap; }
+.warn-box { border: 1px solid var(--warn); background: rgba(180,120,0,.06);
+  border-radius: 6px; padding: 10px 12px; }
+.warn-box ul { margin: 6px 0 0; padding-left: 18px; }
+tr.ok code { color: var(--ok); }
+tr.warn code { color: var(--warn); }
+tr.err code { color: var(--err); }
 .placeholder { color: var(--sub); padding: 40px 0; text-align: center; }

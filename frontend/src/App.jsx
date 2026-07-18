@@ -4,6 +4,7 @@ import { NAV, MODE_LABEL, firstAvailable } from "./nav.js";
 import Home from "./pages/Home.jsx";
 import ByokPanel from "./pages/Byok.jsx";
 import DcfSheet from "./pages/appraiser/DcfSheet.jsx";
+import Roundtrip from "./pages/appraiser/Roundtrip.jsx";
 
 /* 셸(ia_ux_architecture.md §3): 헤더(정체성+상태, 액션 無) · LNB=단계 축 ·
    하단 시트탭=단계 내 시트 축 · 우측 접이식 패널(근거·AI 제안 자리) · 본문.
@@ -93,6 +94,8 @@ function Workspace({ projectId, onHome }) {
     if (stage.id === "cover") return <CoverSheet project={project} />;
     if (stage.id === "valuation" && sheet.id === "dcf")
       return <DcfSheet project={project} onSave={saveData} />;
+    if (stage.id === "output" && (sheet.id === "export" || sheet.id === "diff"))
+      return <Roundtrip project={project} sheet={sheet.id} onSave={saveData} />;
     return <div className="placeholder">'{stage.label} › {sheet.label}' 화면은 준비중입니다.</div>;
   })();
 

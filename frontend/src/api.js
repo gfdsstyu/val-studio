@@ -25,4 +25,32 @@ export const api = {
     patch: (id, body) => j("PATCH", `/api/projects/${id}`, body),
     remove: (id) => j("DELETE", `/api/projects/${id}`),
   },
+  xlsx: {
+    // export 는 바이너리(.xlsx) → blob 반환(다운로드는 호출부에서).
+    exportBlob: async (body) => {
+      const r = await fetch("/api/xlsx/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.detail || `HTTP ${r.status}`);
+      }
+      return r.blob();
+    },
+    import: (xlsx_b64) => j("POST", "/api/xlsx/import", { xlsx_b64 }),
+    diff: (before_b64, after_b64) =>
+      j("POST", "/api/xlsx/diff", { before_b64, after_b64 }),
+  },
 };
+
+/** File → base64(순수 데이터, data: 접두 제거). 업로드용. */
+export function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1]);
+    r.onerror = () => reject(new Error("파일 읽기 실패"));
+    r.readAsDataURL(file);
+  });
+}

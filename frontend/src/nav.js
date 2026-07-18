@@ -29,8 +29,8 @@ export const NAV = {
     ]},
     { id: "output", label: "5. 산출물", sheets: [
       { id: "report", label: "리포트", soon: true },
-      { id: "export", label: "xlsx Export", soon: true },
-      { id: "diff", label: "왕복 diff", soon: true },
+      { id: "export", label: "xlsx Export" },
+      { id: "diff", label: "왕복 diff" },
     ]},
   ],
   auditor: [
