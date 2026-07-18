@@ -106,6 +106,16 @@ def test_override_model_uses_constant_terminal():
     assert "DCF!$C$38" in f and "IF(" not in f
 
 
+def test_nci_in_closed_form():
+    """NCI(비지배지분) 모델: 그리드 closed-form 이 -DCF!$C$8 반영, 중심 여전히 == base(-NCI 포함)."""
+    import dataclasses
+    inp = dataclasses.replace(_viol(), non_controlling_interest=300.0)
+    base = run(inp)
+    _, sens = _sens(inp)
+    assert "-DCF!$C$8" in sens.cells["F7"].formula      # 브리지 -NCI
+    assert _close(sens.cells["F7"].cached, base.per_share)   # 중심 == base(NCI 차감 반영)
+
+
 def test_skill_wrapper_emits_sens_only():
     """스킬 래퍼 --emit-cells: Sens 셀만(DCF 는 라이브 워크북)."""
     inp = json.dumps(json.loads((FX / "inputs.json").read_text(encoding="utf-8")))

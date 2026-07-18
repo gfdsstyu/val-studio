@@ -70,6 +70,8 @@ def import_dcf_model(path: str, *, sheet: str = "DCF") -> DcfSpineInput:
         delta_nwc_cash_adj=row("nwc"),
         non_operating_assets=num(ASSUMP["non_operating_assets"]),
         net_debt=num(ASSUMP["net_debt"]),
+        # NCI 는 구 워크북(C8 없음) 호환 위해 optional — 없으면 0(브리지 무영향).
+        non_controlling_interest=opt(ASSUMP["non_controlling_interest"]) or 0.0,
         shares_outstanding=int(round(num(ASSUMP["shares_outstanding"]))),
         mid_year_periods=periods,
         terminal_discount_period=periods[-1],  # export 는 마지막 명시연도 factor 로 할인

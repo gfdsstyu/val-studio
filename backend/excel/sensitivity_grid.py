@@ -67,9 +67,10 @@ def _cell_formula(inp: DcfSpineInput, cols: list[str], w_ref: str, g_ref: str) -
     term_period = _dref(f"{cols[-1]}{ROW['period']}")
     tf = _terminal_fcff_expr(inp, cols, g_ref)
     noa, nd, sh = _dref(ASSUMP["non_operating_assets"]), _dref(ASSUMP["net_debt"]), _dref(ASSUMP["shares_outstanding"])
+    nci = _dref(ASSUMP["non_controlling_interest"])
     explicit = f"SUMPRODUCT({fcff_rng},1/(1+{w_ref})^{per_rng})"
     tv_pv = f"({tf})/({w_ref}-{g_ref})/(1+{w_ref})^{term_period}"
-    return f"=({explicit}+{tv_pv}+{noa}-{nd})/{sh}*1000000"
+    return f"=({explicit}+{tv_pv}+{noa}-{nd}-{nci})/{sh}*1000000"
 
 
 def _axis(center: float, steps: int, step: float) -> list[float]:

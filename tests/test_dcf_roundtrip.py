@@ -106,6 +106,34 @@ def test_standard_model_no_false_override():
     assert back.terminal_fcff_override is None
 
 
+def test_nci_roundtrip_and_bridge():
+    """비지배지분(NCI) 왕복 + 브리지 수식 반영(db6ffb1 배선). NCI 200 → 지분가치 정확히 200 차감."""
+    import dataclasses
+    base = _viol()
+    inp = dataclasses.replace(base, non_controlling_interest=200.0)
+    p = _path()
+    export_dcf(inp, run(inp), p)
+    cells = read_workbook(p)["DCF"]
+    # C8 = NCI 입력셀, 지분 수식에 -C8 반영
+    assert _close(cells["C8"].number, 200.0)
+    assert "-C8" in cells["C32"].formula           # equity = ...+C6-C7-C8
+    # 왕복: NCI 복원 + per_share 정확히 200 차감(주식수로 나눈 만큼)
+    back = import_dcf_model(p)
+    assert _close(back.non_controlling_interest, 200.0)
+    assert _close(run(back).per_share, run(inp).per_share)
+    delta = run(base).per_share - run(inp).per_share  # NCI 200 차감 효과
+    assert _close(delta, 200.0 / inp.shares_outstanding * 1_000_000)
+
+
+def test_old_workbook_without_nci_defaults_zero():
+    """구 워크북(C8 없음) import → NCI 0 기본(브리지 무영향)."""
+    inp = _viol()                                  # NCI 미설정
+    p = _path()
+    export_dcf(inp, run(inp), p)
+    back = import_dcf_model(p)
+    assert back.non_controlling_interest == 0.0
+
+
 def test_reader_reads_formulas_and_values():
     inp = _viol()
     p = _path()

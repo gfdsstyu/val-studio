@@ -24,6 +24,7 @@ ASSUMP = {
     "shares_outstanding": "C5",
     "non_operating_assets": "C6",
     "net_debt": "C7",
+    "non_controlling_interest": "C8",   # NCI(비지배지분) — EV→지분 브리지 차감(기본 0)
 }
 
 # ── 시계열 행 맵(연도=열, key=행번호) ──────────────────────────────────────

@@ -50,6 +50,7 @@ def build_dcf_sheet(inp: DcfSpineInput, res: DcfResult) -> Workbook:
     s.text(label_cell(a["shares_outstanding"]), "발행주식수");     s.num(a["shares_outstanding"], inp.shares_outstanding)
     s.text(label_cell(a["non_operating_assets"]), "(+)비영업자산"); s.num(a["non_operating_assets"], inp.non_operating_assets)
     s.text(label_cell(a["net_debt"]), "(-)순차입부채");           s.num(a["net_debt"], inp.net_debt)
+    s.text(label_cell(a["non_controlling_interest"]), "(-)비지배지분(NCI)"); s.num(a["non_controlling_interest"], inp.non_controlling_interest)
 
     # ── 연도 헤더 (행 맵은 template_schema.ROW SSOT) ──
     s.text(f"B{R['year']}", "Year")
@@ -115,7 +116,8 @@ def build_dcf_sheet(inp: DcfSpineInput, res: DcfResult) -> Workbook:
     s.formula(ev, f"{pve}+{RESULT['terminal_value_pv']}", res.enterprise_value)
     s.text(label_cell(RESULT["equity_value"]), "주식가치")
     s.formula(RESULT["equity_value"],
-              f"{ev}+{ASSUMP['non_operating_assets']}-{ASSUMP['net_debt']}", res.equity_value)
+              f"{ev}+{ASSUMP['non_operating_assets']}-{ASSUMP['net_debt']}-{ASSUMP['non_controlling_interest']}",
+              res.equity_value)
     s.text(label_cell(RESULT["per_share"]), "주당가치(원)")
     s.formula(RESULT["per_share"],
               f"{RESULT['equity_value']}/{ASSUMP['shares_outstanding']}*1000000", res.per_share)
