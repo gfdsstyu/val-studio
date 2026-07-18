@@ -48,7 +48,7 @@ H_FS (과거 재무제표, 하드 입력)
 
    WACC 시트 (할인율 서식_정종범.xlsx 로직):
      신용등급×만기 채권수익률 매트릭스
-     → CAPM 빌드업: Unlevered β → D/E·tax로 relever → Ke = RF + β·ERP
+     → CAPM 빌드업: Unlevered β → D/E·tax로 relever → Ke = RF + β·MRP
        + Size premium + Country risk + Company-specific risk
      → Kd(pre-tax) → after-tax Kd → WACC = E/V·Ke + D/V·Kd(1−t)
      (유사회사 β·자본구조는 peer/유사회사재무 데이터에서)
@@ -325,7 +325,7 @@ API가 없는 소스(Bloomberg 채권수익률 매트릭스·베타, 한공회 �
 | 입력 | 방법론(교육자료) | 출처 |
 |---|---|---|
 | **Rf 무위험이자율** | 국고채 수익률 | Bloomberg / 금융투자협회 KOFIABOND / ECOS |
-| **MRP(시장위험프리미엄)** | **한공회 「시장위험프리미엄 가이던스」 권고 7~9%** (사용자 확정) | 한공회 가이던스 PDF; Damodaran ERP 교차검증 |
+| **MRP(시장위험프리미엄)** | **한공회 「시장위험프리미엄 가이던스」 권고 7~9%** (사용자 확정) | 한공회 가이던스 PDF; Damodaran MRP 교차검증 |
 | **CRP(국가위험프리미엄)** | 국가별 프리미엄 | Damodaran (stern.nyu.edu) |
 | **Beta** | 유사기업 60개월 월간 회귀 → unlever → **relever(D/E·tax)**; Marshall Blume 조정 | Barra/Kisline; **각 peer FS 필요**(아래) |
 | **Size premium(CSRP)** | Deciles 1–10 | Duff&Phelps/Kroll(현 Kroll Cost of Capital) 복붙 |
@@ -345,7 +345,7 @@ API가 없는 소스(Bloomberg 채권수익률 매트릭스·베타, 한공회 �
 | Rf 국고채(10년) | **한국은행 ECOS API** / KOFIABOND | 무료(키) | ✅ | ✅ EcosProvider(817Y002/D/item)+일별 look-ahead 가드. **잔여: item코드 ECOS 확정**(관용후보 배선) |
 | 거시 GDP·CPI·임금 | **ECOS** / IMF WEO / OECD | 무료(키) | ✅ | ✅ **macro_client 구축**(vintage 이중가드·EIU 복붙·as-of 선택·EcosProvider, 12테스트) |
 | **MRP(국내)** | **한공회 시장위험프리미엄 가이던스** | 무료 PDF(연간) | 🔶 수치 수기 | ✅ paste_mrp(복붙→2~15% sanity게이트·provenance). 값 확보=유저 복붙 |
-| CRP·글로벌 ERP 교차검증 | **Damodaran**(stern.nyu.edu) | 무료 다운로드 | ✅ | ⬜ |
+| CRP·글로벌 MRP 교차검증 | **Damodaran**(stern.nyu.edu) | 무료 다운로드 | ✅ | ⬜ |
 | Size premium(CSRP) | **Kroll** deciles | 유료(연간표) | 🔶 2023 하드코딩 有 | ✅ wacc.py 테이블(갱신 필요) |
 | Kd 신용등급×만기 | **KOFIABOND 등급별 민평** + 신용등급(DART 사업보고서·KIS/NICE) | 반무료·수기 | 🔶 복붙 경로 | ✅ **manual_paste 구축**(parse_bond_matrix→BondYieldMatrix·셀별 range게이트, 9테스트) |
 | 산업 CAGR·시장규모 | **Gemini 검색 그라운딩**(구축됨) + 증권사 리포트 | BYOK | ✅ | ✅ 딥서치 |
@@ -363,7 +363,7 @@ build_wacc 를 잇는 오케스트레이션 계층(calc_core 순수 엔진과 in
 `assemble_wacc_inputs`: Rf(paste/ECOS)·MRP(paste)·βu(peers 무부채화, price_client β 또는 Bloomberg
 복붙)·Kd(BondYieldMatrix 등급×만기 룩업)·Size(Kroll decile, price_client 시총)를 모아 조립하되,
 **모든 커넥터 ValidationReport 를 하나로 fold** → FAIL 하나라도 있으면 blocked(조립 차단, result=None).
-checks 의 β provenance·β/ERP 시장정합 게이트도 통합. 실측 검증: Rf 3.45%+MRP 8%+peer βu+BBB 5Y Kd
+checks 의 β provenance·β/MRP 시장정합 게이트도 통합. 실측 검증: Rf 3.45%+MRP 8%+peer βu+BBB 5Y Kd
 → **WACC ≈11.1%(비올 골든 11.3% 대역 일치)**. 7테스트. calc_core/model.py(엔드투엔드)가 이 WaccInputs 를 소비.
 
 **vintage(look-ahead) 이중가드**(macro_client — 사용자 요청 "llm이 사용할 때 평가기준일 기준인지
@@ -420,7 +420,7 @@ Skill 도구 `scripts/peer.py`(--seeds 역산 / --judgments 퍼널 실행).
 
 ### 참고자료 (docs/reference/로 색인)
 - `(MSVALUE) 2강 강의자료(배포용).xlsx` — STEP0-5 모델링 튜토리얼 + `유사회사FS`·`감가상각`·`BackData` 시트(구현 레퍼런스).
-- `0004-Deloitte 외부평가보고서 검토 유의사항` — **감사인 트랙 직결**(외부평가 검토 체크리스트, WACC/beta/ERP/Kd 유의사항).
+- `0004-Deloitte 외부평가보고서 검토 유의사항` — **감사인 트랙 직결**(외부평가 검토 체크리스트, WACC/beta/MRP/Kd 유의사항).
 - `0003-삼일 Fulcrum Valuation Update` — 할인율·CGU·Size premium 방법론.
 - `NOA IBD 구분 참고자료.pdf`, 한공회 MRP 가이던스.
 

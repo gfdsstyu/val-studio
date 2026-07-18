@@ -15,7 +15,7 @@ Python(FastAPI) 백엔드 · React+Vite SPA · Supabase(Postgres+Auth+Storage+pg
 - ✅ **스파인 골든** (`tests/golden/test_viol_spine.py`): 비올 원본과 셀단위 일치(rel_tol 1e-9). 주당가치 8,413.38원 정확 재현.
 - ✅ **상류 엔진** (`revenue·ebit·fa·wc·wacc·model`): 표준 방법론 일반 구현 + 단위테스트 9건. 법인세는 비올과 정확 일치로 앵커.
   - `revenue`: top_down(산업 CAGR) | bottom_up(계층 트리 P×Q, 합계검증)
-  - `wacc`: CAPM 빌드업(Hamada unlever/relever, Ke=Rf+β·ERP+size+CRP+CSRP)
+  - `wacc`: CAPM 빌드업(Hamada unlever/relever, Ke=Rf+β·MRP+size+CRP+CSRP)
   - `fa`: 정액 감가상각 스케줄 · `wc`: 회전율 ΔNWC · `model`: 엔드투엔드 조립
 - ⬜ xlsx export(수식 유지) · DART 인제스트 · 주석 추출·검증 · RAG/챗.
 

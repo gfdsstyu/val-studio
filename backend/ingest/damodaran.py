@@ -1,7 +1,7 @@
 """Damodaran 국가위험프리미엄(CRP) — WACC 의 마지막 미연결 입력.
 
 방법론(교육자료·checks): CRP = 국가 부도스프레드 × (주식σ/채권σ). Ke 빌드업의
-+CRP 항. β·ERP 가 성숙시장(S&P500) 기준이면 신흥국 대상회사엔 CRP 를 더한다.
++CRP 항. β·MRP 가 성숙시장(S&P500) 기준이면 신흥국 대상회사엔 CRP 를 더한다.
 
 ⚠️ 값은 **예시 vintage 고정치**(Kroll size premium 표와 동일 원칙) — Damodaran 은 매년
 1월 ctryprem 을 갱신하므로 반드시 최신값으로 교체할 것. 실무: stern.nyu.edu 에서

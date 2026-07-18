@@ -105,7 +105,7 @@ python scripts/ingest.py <파일경로>
   탈락/선정 사유는 회사별 전량 기록(감사인 "왜 이 peer" — deloitte 체크리스트).
   최종 peer 는 유저 승인 후 확정. 선정 셋은 WACC(β·자본구조)와 **상대가치 peer
   배수(향후)** 둘 다에 쓰인다.
-- **WACC**: CAPM 빌드업(Rf+β·ERP+size). β 출처(Bloomberg=글로벌 / KICPA=한국)와 ERP 시장을
+- **WACC**: CAPM 빌드업(Rf+β·MRP+size). β 출처(Bloomberg=글로벌 / KICPA=한국)와 MRP 시장을
   일치시킬 것. peer 개별 세율로 무부채화 후 평균(Hamada) — references/wacc_할인율서식.
   references/베타, references/deloitte_감사인검토 참조.
 - **영구성장률(PGR)**: 한국 관행 0~1%(실측 DART 의견서 다수 1.00%), 글로벌 2~4%.
@@ -123,11 +123,11 @@ echo '{"wacc":0.09,"terminal_growth":0.01,"revenue":[...],"cogs":[...],"sga":[..
 
 ### 4b. WACC 산정 (도구)
 ```
-echo '{"risk_free":..,"equity_risk_premium":..,"unlevered_beta":..,"target_debt_to_equity":..,
+echo '{"risk_free":..,"market_risk_premium":..,"unlevered_beta":..,"target_debt_to_equity":..,
 "tax_rate":..,"pre_tax_cost_of_debt":..,"size_premium":..,"beta_source":"kicpa",
-"beta_market":"KOSPI","erp_market":"KOSPI","market_cap_musd":500}' | python scripts/wacc.py
+"beta_market":"KOSPI","mrp_market":"KOSPI","market_cap_musd":500}' | python scripts/wacc.py
 ```
-- β/ERP 시장 정합·β provenance 검증 + 시가총액 주면 Kroll size premium 제안.
+- β/MRP 시장 정합·β provenance 검증 + 시가총액 주면 Kroll size premium 제안.
 
 ### 5. 해석·리포트 (LLM)
 - 결과를 밸류에이션 북 근거와 함께 설명. audit 경고는 리스크로 명시.
@@ -171,7 +171,7 @@ echo '{"risk_free":..,"equity_risk_premium":..,"unlevered_beta":..,"target_debt_
 - `book_search.py "질의"` — **밸류에이션 북 검색.** 방법론이 궁금하면 index.md 통독 대신 이걸로
   정확한 챕터·섹션을 찾아 그 부분만 Read. (한글 argv 깨지면 `-f query.txt`)
 - `dcf.py` — DCF 계산 + 가정 audit. **모든 계산은 이것으로.**
-- `wacc.py` — CAPM 빌드업 + β/ERP 정합 + Kroll size premium.
+- `wacc.py` — CAPM 빌드업 + β/MRP 정합 + Kroll size premium.
 - `audit.py` — 독립 재계산 + 주장값 차이 + 민감도(감사인 트랙·검증 에이전트용).
 - `ingest.py` — 파일 → 방식·유형 라우팅 + 프로파일.
 - `brief.py` — 0단계: XBRL → Company Brief 10섹션 골격(②④⑩ 기계 프리필 + LLM 슬롯).

@@ -7,12 +7,12 @@
 
     Unlever(Hamada):  βu = βL / (1 + (1−t)·D/E)          # 유사기업 관측 βL → 무부채 βu
     Relever:          βL' = βu · (1 + (1−t')·D/E')        # 대상회사 자본구조로 재부채
-    Cost of Equity:   Ke = Rf + βL'·ERP + Size + CRP + CSRP
+    Cost of Equity:   Ke = Rf + βL'·MRP + Size + CRP + CSRP
     Cost of Debt:     Kd(after-tax) = Kd(pre-tax)·(1−t')
     WACC:             WACC = We·Ke + Wd·Kd(after-tax)     # We=E/(D+E), Wd=D/(D+E)
 
 용어:
-  Rf  무위험이자율(국고채)          ERP 시장위험프리미엄(한공회 가이던스 7~9%)
+  Rf  무위험이자율(국고채)          MRP 시장위험프리미엄(한공회 가이던스 7~9%)
   Size 규모프리미엄(Kroll deciles)   CRP 국가위험프리미엄(Damodaran)
   CSRP 기업특유위험                  t   법인세 유효세율
 """
@@ -81,7 +81,7 @@ def peer_unlevered_beta(
 @dataclass(frozen=True)
 class WaccInputs:
     risk_free: float               # Rf
-    equity_risk_premium: float     # ERP (MRP)
+    market_risk_premium: float     # MRP (MRP)
     unlevered_beta: float          # 유사기업 무부채 베타
     target_debt_to_equity: float   # 대상회사 목표 D/E
     tax_rate: float                # 유효세율 t
@@ -95,9 +95,9 @@ class WaccInputs:
     beta_market: str | None = None   # 'SP500' | 'KOSPI' | 'KOSDAQ'
     beta_adjusted: bool | None = None  # Bloomberg Adjusted(0.67·raw+0.33) 여부
     # ↑ 조정베타 계산 헬퍼·주가 회귀는 ingest/price_client.py(β 회귀가 있는 곳이 canonical).
-    # ERP provenance — β 와 MRP 는 같은 시장에서 와야 한다(KICPA β ↔ KICPA MRP).
-    erp_source: str | None = None    # 'kicpa' | 'damodaran' | 'deloitte_fas' ...
-    erp_market: str | None = None    # 'SP500' | 'KOSPI' — beta_market 와 일치해야 함
+    # MRP provenance — β 와 MRP 는 같은 시장에서 와야 한다(KICPA β ↔ KICPA MRP).
+    mrp_source: str | None = None    # 'kicpa' | 'damodaran' | 'deloitte_fas' ...
+    mrp_market: str | None = None    # 'SP500' | 'KOSPI' — beta_market 와 일치해야 함
 
 
 @dataclass(frozen=True)
@@ -116,7 +116,7 @@ def build_wacc(inp: WaccInputs) -> WaccResult:
     beta_l = relever_beta(inp.unlevered_beta, de, inp.tax_rate)
     ke = (
         inp.risk_free
-        + beta_l * inp.equity_risk_premium
+        + beta_l * inp.market_risk_premium
         + inp.size_premium
         + inp.country_risk_premium
         + inp.company_specific_risk

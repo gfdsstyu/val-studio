@@ -1,12 +1,12 @@
 #!/usr/bin/env python
-"""WACC 산정 (W5 도구) — CAPM 빌드업 + β/ERP 정합 검증.
+"""WACC 산정 (W5 도구) — CAPM 빌드업 + β/MRP 정합 검증.
 
 판단(β 출처·규모)은 평가인, 산식은 이 스크립트. vendor/calc_core.wacc 얇은 호출.
 
-사용: echo '{"risk_free":0.03,"equity_risk_premium":0.08,"unlevered_beta":1.0,
+사용: echo '{"risk_free":0.03,"market_risk_premium":0.08,"unlevered_beta":1.0,
   "target_debt_to_equity":0.3,"tax_rate":0.22,"pre_tax_cost_of_debt":0.05,
   "size_premium":0.02,"beta_source":"kicpa","beta_market":"KOSPI",
-  "erp_market":"KOSPI","market_cap_musd":500}' | python wacc.py
+  "mrp_market":"KOSPI","market_cap_musd":500}' | python wacc.py
 market_cap_musd 주면 Kroll size premium 자동 제안.
 """
 from __future__ import annotations
@@ -18,7 +18,7 @@ from pathlib import Path
 
 import _bootstrap  # noqa: F401
 
-from calc_core.checks import check_beta_erp_consistency, check_beta_provenance  # noqa: E402
+from calc_core.checks import check_beta_mrp_consistency, check_beta_provenance  # noqa: E402
 from calc_core.wacc import WaccInputs, build_wacc, kroll_size_decile  # noqa: E402
 
 _FIELDS = {f.name for f in dataclasses.fields(WaccInputs)}
@@ -43,7 +43,7 @@ def main() -> None:
         "equity_weight": round(res.equity_weight, 3),
         "checks": [
             {"rule": f.rule, "severity": f.severity.value, "message": f.message}
-            for f in (check_beta_provenance(inp), check_beta_erp_consistency(inp))
+            for f in (check_beta_provenance(inp), check_beta_mrp_consistency(inp))
             if f.severity.value != "pass"
         ],
     }

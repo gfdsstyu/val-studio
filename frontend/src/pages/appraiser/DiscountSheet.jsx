@@ -3,7 +3,7 @@ import { api, fileToBase64 } from "../../api.js";
 
 /* 3.할인율 > WACC 빌드업 — 커넥터 어셈블리(/api/wacc/assemble) 소비.
    Rf·MRP·Kd 는 복붙(문자열) → 서버가 range 게이트. peers 무부채화·Kroll size·
-   β/ERP 시장정합까지 서버 결정론. 여기선 폼이 JSON 만들고 응답(blocked/findings/
+   β/MRP 시장정합까지 서버 결정론. 여기선 폼이 JSON 만들고 응답(blocked/findings/
    provenance/WACC)을 그린다. 계산 로직 0줄. 확정 WACC 는 프로젝트에 저장돼 DCF 로 흐른다. */
 
 const DEMO = {
@@ -12,7 +12,7 @@ const DEMO = {
   kd_matrix_text: "등급 3Y 5Y\nAAA 3.21 3.48\nAA 4.10 4.35\nBBB 5.40 5.80\n",
   kd_grade: "BBB", kd_tenor: "5Y", market_cap_musd: "1500",
   beta_source: "bloomberg", beta_market: "KOSPI",
-  erp_source: "kicpa", erp_market: "KOSPI",
+  mrp_source: "kicpa", mrp_market: "KOSPI",
 };
 const DEMO_PEERS = [
   { ticker: "유사사A", levered_beta: "1.20", debt_to_equity: "0.5", tax_rate: "0.22" },
@@ -126,7 +126,7 @@ export default function DiscountSheet({ project, onSave }) {
       kd_matrix_text: form.kd_matrix_text,
       kd_grade: form.kd_grade, kd_tenor: form.kd_tenor,
       beta_source: form.beta_source || null, beta_market: form.beta_market || null,
-      erp_source: form.erp_source || null, erp_market: form.erp_market || null,
+      mrp_source: form.mrp_source || null, mrp_market: form.mrp_market || null,
       country_risk_premium: crp != null ? crp : 0,
       pasted_at: baseDate || undefined,
     };
@@ -229,10 +229,10 @@ export default function DiscountSheet({ project, onSave }) {
                 <input type="text" value={form.beta_source} onChange={set("beta_source")} placeholder="bloomberg" />
                 <input type="text" value={form.beta_market} onChange={set("beta_market")} placeholder="KOSPI" />
               </div></div>
-            <div className="row"><label>ERP 출처 / 기준시장</label>
+            <div className="row"><label>MRP 출처 / 기준시장</label>
               <div style={{ display: "flex", gap: 6 }}>
-                <input type="text" value={form.erp_source} onChange={set("erp_source")} placeholder="kicpa" />
-                <input type="text" value={form.erp_market} onChange={set("erp_market")} placeholder="KOSPI" />
+                <input type="text" value={form.mrp_source} onChange={set("mrp_source")} placeholder="kicpa" />
+                <input type="text" value={form.mrp_market} onChange={set("mrp_market")} placeholder="KOSPI" />
               </div></div>
             <div className="row"><label>국가위험프리미엄 CRP (Damodaran)</label>
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>

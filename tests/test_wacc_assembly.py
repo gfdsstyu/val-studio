@@ -44,13 +44,13 @@ def test_full_assembly_from_connectors():
         kd_matrix=_kd_matrix(), kd_grade="BBB", kd_tenor="5Y",
         market_cap_musd=1500.0,                      # → Kroll decile size premium
         beta_source="bloomberg", beta_market="KOSPI",
-        erp_source="kicpa", erp_market="KOSPI",
+        mrp_source="kicpa", mrp_market="KOSPI",
     )
     assert not a.blocked
     assert a.result is not None
     # Rf 3.45% + βL'·8% + size 가 Ke 에 반영 → WACC 는 Rf 초과·Ke 미만 사이 상식 범위
     assert 0.03 < a.result.wacc < 0.20
-    assert a.inputs.equity_risk_premium == 0.08
+    assert a.inputs.market_risk_premium == 0.08
     assert abs(a.inputs.risk_free - 0.0345) < 1e-9
     assert a.inputs.pre_tax_cost_of_debt == 0.058   # BBB×5Y = 5.80%
     assert a.inputs.size_premium > 0                # 중형주 → decile 프리미엄 有
@@ -113,16 +113,16 @@ def test_empty_peers_blocks():
     assert any("peers" in f.message for f in a.report.fails)
 
 
-def test_beta_erp_market_mismatch_warns_not_blocks():
-    # β 시장 ≠ ERP 시장 → WARN(감사 노출)이지 FAIL 아님 → 조립은 통과
+def test_beta_mrp_market_mismatch_warns_not_blocks():
+    # β 시장 ≠ MRP 시장 → WARN(감사 노출)이지 FAIL 아님 → 조립은 통과
     a = assemble_wacc_inputs(
         risk_free=0.0345, mrp=0.08, peers=_peers(),
         target_debt_to_equity=0.4, tax_rate=0.22, pre_tax_cost_of_debt=0.058,
         beta_source="bloomberg", beta_market="SP500",
-        erp_source="kicpa", erp_market="KOSPI",
+        mrp_source="kicpa", mrp_market="KOSPI",
     )
     assert not a.blocked                             # WARN 은 게이트 안 막음
-    assert any(f.rule == "beta_erp_consistency" and f.severity is Severity.WARN
+    assert any(f.rule == "beta_mrp_consistency" and f.severity is Severity.WARN
                for f in a.report.findings)
 
 

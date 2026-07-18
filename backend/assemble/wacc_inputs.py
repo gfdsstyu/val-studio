@@ -6,7 +6,7 @@ data 계층과 순수 엔진(calc_core.wacc.build_wacc) 사이의 다리. 원천
 
 원천 → WaccInputs 매핑:
   Rf     ← paste_risk_free / EcosProvider(RISK_FREE_10Y)      → risk_free
-  MRP    ← paste_mrp(한공회)                                   → equity_risk_premium
+  MRP    ← paste_mrp(한공회)                                   → market_risk_premium
   βu     ← peers 무부채화(price_client β 또는 Bloomberg 복붙)  → unlevered_beta
   Kd     ← BondYieldMatrix.yield_of(등급,만기)(manual_paste)   → pre_tax_cost_of_debt
   Size   ← kroll_size_premium(market_cap $M)(price_client)     → size_premium
@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from calc_core.checks import check_beta_erp_consistency, check_beta_provenance
+from calc_core.checks import check_beta_mrp_consistency, check_beta_provenance
 from calc_core.wacc import (
     WaccInputs, build_wacc, kroll_size_premium, peer_unlevered_beta,
 )
@@ -109,20 +109,20 @@ def assemble_wacc_inputs(
     beta_source: str | None = None,
     beta_market: str | None = None,
     beta_adjusted: bool | None = None,
-    erp_source: str | None = None,
-    erp_market: str | None = None,
+    mrp_source: str | None = None,
+    mrp_market: str | None = None,
 ) -> WaccAssembly:
     """커넥터 원천값 → 검증된 WaccInputs → (게이트 통과 시) build_wacc.
 
     Kd 는 kd_matrix+등급+만기(룩업) 또는 pre_tax_cost_of_debt(직접) 중 하나.
     Size premium 은 market_cap_musd(Kroll decile 룩업) 또는 size_premium(직접) 중 하나.
-    β/ERP provenance(source·market)를 넘기면 checks 로 정합(같은 시장?)까지 검사한다.
+    β/MRP provenance(source·market)를 넘기면 checks 로 정합(같은 시장?)까지 검사한다.
     """
     report = ValidationReport()
     prov: dict[str, str] = {}
 
     rf = _pull(risk_free, "risk_free", report, prov)
-    erp = _pull(mrp, "mrp", report, prov)
+    mrp_val = _pull(mrp, "mrp", report, prov)
 
     # ── βu: peers 무부채화 ──────────────────────────────────────────────────
     unlevered = None
@@ -162,21 +162,21 @@ def assemble_wacc_inputs(
         size = 0.0                          # 규모프리미엄 미적용은 정상(대형주) — WARN 없음
 
     # 필수값 결측 시 조립 차단(엔진 호출 전)
-    if None in (rf, erp, unlevered, kd):
+    if None in (rf, mrp_val, unlevered, kd):
         return WaccAssembly(inputs=None, report=report, provenance=prov)
 
     inputs = WaccInputs(
-        risk_free=rf, equity_risk_premium=erp, unlevered_beta=unlevered,
+        risk_free=rf, market_risk_premium=mrp_val, unlevered_beta=unlevered,
         target_debt_to_equity=target_debt_to_equity, tax_rate=tax_rate,
         pre_tax_cost_of_debt=kd, size_premium=size,
         country_risk_premium=country_risk_premium,
         company_specific_risk=company_specific_risk,
         beta_source=beta_source, beta_market=beta_market, beta_adjusted=beta_adjusted,
-        erp_source=erp_source, erp_market=erp_market,
+        mrp_source=mrp_source, mrp_market=mrp_market,
     )
-    # 가정 게이트(β provenance·β/ERP 시장 정합) 통합
+    # 가정 게이트(β provenance·β/MRP 시장 정합) 통합
     check_beta_provenance(inputs, report=report)
-    check_beta_erp_consistency(inputs, report=report)
+    check_beta_mrp_consistency(inputs, report=report)
 
     result = build_wacc(inputs) if report.ok else None
     return WaccAssembly(inputs=inputs, report=report, result=result, provenance=prov)

@@ -247,7 +247,7 @@ def _wacc_from_json(d: dict) -> WaccAssembly:
             company_specific_risk=float(d.get("company_specific_risk", 0.0)),
             beta_source=d.get("beta_source"), beta_market=d.get("beta_market"),
             beta_adjusted=d.get("beta_adjusted"),
-            erp_source=d.get("erp_source"), erp_market=d.get("erp_market"),
+            mrp_source=d.get("mrp_source"), mrp_market=d.get("mrp_market"),
         )
     except (TypeError, ValueError) as e:
         raise HTTPException(422, f"WACC 입력 오류: {e}") from e

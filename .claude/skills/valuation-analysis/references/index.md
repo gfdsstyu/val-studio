@@ -25,6 +25,6 @@
 | **스코프 로드맵** | 밸류에이션_스코프_로드맵.md | 거래·손상·FV·복합금융상품(RCPS) 트랙 지도 |
 
 ## 도구 (scripts/)
-- `scripts/dcf.py` — DCF 결정론 계산 + 가정 audit(PGR·TV비중·재투자·β/ERP). **계산은 항상 이것으로.**
+- `scripts/dcf.py` — DCF 결정론 계산 + 가정 audit(PGR·TV비중·재투자·β/MRP). **계산은 항상 이것으로.**
 - `scripts/ingest.py` — 파일(xbrl/pdf/xlsx) → 방식·유형 라우팅 + 구조화 + 프로파일.
 - 더 깊은 로직은 레포 `backend/`(calc_core·ingest) 직접 호출 가능.

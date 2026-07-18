@@ -64,7 +64,7 @@ calc_core/
 | 필드 | 설명 | 출처 (교육자료 근거) |
 |---|---|---|
 | `risk_free` | 무위험이자율(국고채) | Bloomberg / 금융투자협회 KOFIABOND / 한국은행 ECOS |
-| `equity_risk_premium` | 시장위험프리미엄(MRP/ERP) | **한공회 「시장위험프리미엄 가이던스」 7~9%**; Damodaran 교차 |
+| `market_risk_premium` | 시장위험프리미엄(MRP/MRP) | **한공회 「시장위험프리미엄 가이던스」 7~9%**; Damodaran 교차 |
 | `unlevered_beta` | 유사기업 무부채 베타 | `wacc.peer_unlevered_beta` (peer FS 필요) |
 | `target_debt_to_equity` | 대상회사 목표 D/E | peer 자본구조 or 대상 실제 |
 | `tax_rate` | 유효세율 | FS or 법정세율 |
@@ -116,7 +116,7 @@ STEP 5. FA·WC 가정
 
 STEP 6. WACC 빌드업
    - 유사기업 FS(DART) 적재 → 각 peer βL·D/E·세율 → unlever → 평균 βu.
-   - Rf·ERP(한공회)·size·CRP → Ke; 신용등급 회사채 수익률 → Kd; 자본구조 → WACC.
+   - Rf·MRP(한공회)·size·CRP → Ke; 신용등급 회사채 수익률 → Kd; 자본구조 → WACC.
    - peer 주가·시총: FinanceDataReader/pykrx.
 
 STEP 7. 실행 & 산출
@@ -162,7 +162,7 @@ export_dcf(inp, res, "out/dcf.xlsx")
 - [ ] **부호**: capex 양수, ΔNWC 현금조정(증가 시 −).
 - [ ] **합계검증**: 매출 트리 상위=하위합(`validate_tree_sums`). 판관비 성격별 합=IS 판관비.
 - [ ] **정합성(tie-out)**: 주석 감가상각 = CF D&A; 주석 유형자산 기말 = BS; peer 무부채화 세율 일관.
-- [ ] **WACC 상식범위**: 8~14% (한공회 ERP 7~9% 기준). 민감도 중심셀=base 주당가치.
+- [ ] **WACC 상식범위**: 8~14% (한공회 MRP 7~9% 기준). 민감도 중심셀=base 주당가치.
 - [ ] **회귀**: `python tests/golden/test_viol_spine.py` + `tests/test_upstream.py` + `tests/test_xlsx_export.py` 전부 PASS.
 - [ ] **export 추적성**: 결과 셀이 수식(<f>)으로 기록, 캐시값=calc_core.
 

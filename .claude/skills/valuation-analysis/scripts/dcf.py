@@ -6,7 +6,7 @@
 사용:
   echo '{"wacc":0.09,"terminal_growth":0.01,"revenue":[...],...}' | python dcf.py
   python dcf.py inputs.json
-출력: 주당가치·EV·지분가치 + audit 경고(PGR≤GDP·TV비중·재투자·β/ERP) JSON.
+출력: 주당가치·EV·지분가치 + audit 경고(PGR≤GDP·TV비중·재투자·β/MRP) JSON.
 """
 from __future__ import annotations
 

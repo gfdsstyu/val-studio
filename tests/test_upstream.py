@@ -52,9 +52,9 @@ def test_beta_unlever_relever_roundtrip():
 
 
 def test_wacc_buildup():
-    # 깨끗한 예: Rf 3.5%, ERP 8%(한공회 범위), βu 0.9, D/E 0.25, t 22%, Kd 5%
+    # 깨끗한 예: Rf 3.5%, MRP 8%(한공회 범위), βu 0.9, D/E 0.25, t 22%, Kd 5%
     r = build_wacc(WaccInputs(
-        risk_free=0.035, equity_risk_premium=0.08, unlevered_beta=0.9,
+        risk_free=0.035, market_risk_premium=0.08, unlevered_beta=0.9,
         target_debt_to_equity=0.25, tax_rate=0.22, pre_tax_cost_of_debt=0.05,
         size_premium=0.01,
     ))
@@ -129,7 +129,7 @@ def test_run_model_end_to_end():
         wc_driver_by_item={"AR": [1000, 1100, 1210]},
         base_net_working_capital=100.0,
         wacc_inputs=WaccInputs(
-            risk_free=0.035, equity_risk_premium=0.08, unlevered_beta=0.9,
+            risk_free=0.035, market_risk_premium=0.08, unlevered_beta=0.9,
             target_debt_to_equity=0.25, tax_rate=0.22, pre_tax_cost_of_debt=0.05,
         ),
         terminal_growth=0.02,

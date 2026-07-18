@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from calc_core.checks import (  # noqa: E402
-    audit_dcf, check_beta_erp_consistency, check_beta_provenance,
+    audit_dcf, check_beta_mrp_consistency, check_beta_provenance,
     check_projection_smoothness, check_terminal_growth, check_terminal_value_weight,
     check_wara_irr_wacc, check_working_capital_burn, diagnose_dcf_gap,
 )
@@ -85,15 +85,15 @@ def test_kroll_monotonic_decreasing():
     assert prems == sorted(prems, reverse=True)
 
 
-# ── F3: β↔ERP 시장정합 ───────────────────────────────────────────────────────
-def test_beta_erp_market_mismatch_warns():
-    inp = _wacc_inp(beta_market="KOSPI", erp_market="SP500")
-    assert check_beta_erp_consistency(inp).severity is Severity.WARN
+# ── F3: β↔MRP 시장정합 ───────────────────────────────────────────────────────
+def test_beta_mrp_market_mismatch_warns():
+    inp = _wacc_inp(beta_market="KOSPI", mrp_market="SP500")
+    assert check_beta_mrp_consistency(inp).severity is Severity.WARN
 
 
-def test_beta_erp_market_match_passes():
-    inp = _wacc_inp(beta_market="KOSPI", erp_market="KOSPI")
-    assert check_beta_erp_consistency(inp).severity is Severity.PASS
+def test_beta_mrp_market_match_passes():
+    inp = _wacc_inp(beta_market="KOSPI", mrp_market="KOSPI")
+    assert check_beta_mrp_consistency(inp).severity is Severity.PASS
 
 
 # ── TV 비중 ──────────────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ def test_tv_weight_overreliance_warns():
 
 # ── β provenance ─────────────────────────────────────────────────────────────
 def _wacc_inp(**kw) -> WaccInputs:
-    base = dict(risk_free=0.03, equity_risk_premium=0.08, unlevered_beta=1.0,
+    base = dict(risk_free=0.03, market_risk_premium=0.08, unlevered_beta=1.0,
                 target_debt_to_equity=0.3, tax_rate=0.22, pre_tax_cost_of_debt=0.05)
     base.update(kw)
     return WaccInputs(**base)

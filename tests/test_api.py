@@ -122,7 +122,7 @@ _WACC_BODY = {
     "kd_matrix_text": "등급 3Y 5Y\nAAA 3.21 3.48\nBBB 5.40 5.80\n",
     "kd_grade": "BBB", "kd_tenor": "5Y", "market_cap_musd": 1500.0,
     "beta_source": "bloomberg", "beta_market": "KOSPI",
-    "erp_source": "kicpa", "erp_market": "KOSPI",
+    "mrp_source": "kicpa", "mrp_market": "KOSPI",
     "pasted_at": "2023-06-30", "user": "jjb",
 }
 _OPS_BODY = {

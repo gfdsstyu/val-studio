@@ -29,7 +29,7 @@ def _wacc(**over):
         target_debt_to_equity=0.4, tax_rate=0.22,
         kd_matrix=kd, kd_grade="BBB", kd_tenor="5Y", market_cap_musd=1500.0,
         beta_source="bloomberg", beta_market="KOSPI",
-        erp_source="kicpa", erp_market="KOSPI",
+        mrp_source="kicpa", mrp_market="KOSPI",
     )
     kw.update(over)
     return assemble_wacc_inputs(**kw)

@@ -15,7 +15,7 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 
 - **Claude(이 스킬)**: 기계적 작업(FS 정규화·시트 생성·수식 구현) + 지식기반 제안(계정분류안·드라이버 후보·가정 근거) + 리서치. **애매하면 단정하지 않고 표면화**한다.
 - **평가인(사용자)**: 판단·확정. 재분류 승인, 매출 드라이버 선택, 가정값 확정, 자료 투입.
-- **결정론 도구(`scripts/`)**: 계산·검증. 골든 재현, audit 룰(PGR≤GDP·TV비중·β/ERP), tie-out. **암산·추정 금지** — 숫자는 반드시 scripts/ 로.
+- **결정론 도구(`scripts/`)**: 계산·검증. 골든 재현, audit 룰(PGR≤GDP·TV비중·β/MRP), tie-out. **암산·추정 금지** — 숫자는 반드시 scripts/ 로.
 
 > **가정은 추천만, 판단은 평가인.** 매출추정 드라이버·계정 영업성 판정·가정값은 전부 평가인 몫. Claude는 후보 제시·근거 리서치·선택된 로직의 수식 구현만.
 
@@ -89,7 +89,7 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 | **W2.5 손익 계정 세분화** | 러프한 IS 라인을 성격별로 분해(매출→제품/상품/용역, 원가·판관비→성격별) — `fs_disagg.py` | **세분합=원계정(합보존) FAIL 0**·구성비 YoY 급변 WARN 표면화 | account_dictionary·모델링_실무_2강4강 |
 | **W3 계정재분류** | PL 4유형·BS 6유형 태깅(모호는 표면화) | 분류합=원본 FS합(누락·중복 0) | xDCF_계정분류·msvalue_DCF_교육_정본 |
 | **W4 추정** | 드라이버 후보 제시→선택분 수식 구현. **`Fcst_Rev`·`Fcst_Cost`는 FS_Disagg 세분 라인(제품/상품/용역, 재료/노무/경비, 급여/상각/광고)과 동일 성격 행 → `계=Σ세분` 살아있는 SUM 롤업 → DCF!매출/원가/판관비** | projection_smoothness·wc_burn·가정 출처 완비·**세분 계=원계정 롤업 일치** | msvalue_리포트예시·모델링_실무 |
-| **W5 WACC** | `wacc.py`(Kroll 제안·peer 근거) | β/ERP 정합·provenance·8~14% | wacc_할인율서식·베타·deloitte·PGR |
+| **W5 WACC** | `wacc.py`(Kroll 제안·peer 근거) | β/MRP 정합·provenance·8~14% | wacc_할인율서식·베타·deloitte·PGR |
 | **W6 DCF** | 스파인 입력셀→Fcst 계 참조 승격(`promote.py`) + `dcf.py` 재계산 | **승격 tie-out(per_share 불변)**·워크북 vs 엔진 rel_tol 1e-6·audit 전규칙·gap_diagnosis | engine_spec·검증_클래시스 |
 | **W7 시나리오** | `scenario.py`(구성=판단) | 가중치 완전일치·합=1 | msvalue_리포트예시 부록F |
 | **W8 민감도** | `sensitivity.py`로 WACC×PGR 5×5 살아있는 수식 그리드(셀마다 독립 DCF 재계산) | 워크북 중심 == 엔진 3×3 중심 == base·(설치 시)recalc 게이트 | 앤트로픽_금융스킬_벤치마크 §1 |
@@ -129,7 +129,7 @@ echo '{"sources":[{"label":"FY2024","periods":{"2024":{"매출액":"1,234",...}}
 echo '{"blocks":[{"parent":"매출액","periods":{"2024":{"total":"1,234","children":{"제품매출":"800","상품매출":"434"}}}}]}' | python scripts/fs_disagg.py
 
 # W5 WACC (market_cap_musd 주면 Kroll 제안)
-echo '{"risk_free":0.03,"equity_risk_premium":0.08,"unlevered_beta":1.0,...}' | python scripts/wacc.py
+echo '{"risk_free":0.03,"market_risk_premium":0.08,"unlevered_beta":1.0,...}' | python scripts/wacc.py
 
 # W6 DCF 계산 + audit
 echo '{"wacc":0.09,"terminal_growth":0.01,"revenue":[...],...}' | python scripts/dcf.py

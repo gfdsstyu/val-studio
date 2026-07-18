@@ -180,8 +180,8 @@ def build_wacc(wb, n: int = 5):
     rows = [
         ("무위험이자율 Rf", "[입력]"), ("무부채 베타 βu", "[입력·peer 평균]"),
         ("목표 D/E", "[입력]"), ("세율 t", "[입력]"),
-        ("재부채화 베타 βL", "[수식: Hamada]"), ("시장위험프리미엄 ERP", "[입력]"),
-        ("size premium", "[입력·Kroll 제안]"), ("자기자본비용 Ke", "[수식: Rf+βL·ERP+size]"),
+        ("재부채화 베타 βL", "[수식: Hamada]"), ("시장위험프리미엄 MRP", "[입력]"),
+        ("size premium", "[입력·Kroll 제안]"), ("자기자본비용 Ke", "[수식: Rf+βL·MRP+size]"),
         ("세전 부채비용 Kd", "[입력]"), ("세후 Kd", "[수식: Kd·(1-t)]"),
         ("자기자본 비중", "[수식]"), ("타인자본 비중", "[수식]"),
         ("WACC (→ DCF!C3 참조)", "[수식]"),
@@ -189,7 +189,7 @@ def build_wacc(wb, n: int = 5):
     for i, (lbl, hint) in enumerate(rows, start=4):
         s.text(f"B{i}", lbl)
         s.text(f"C{i}", hint)
-    s.text(f"B{4 + len(rows) + 1}", "게이트: β/ERP 시장 정합·provenance, WACC 8~14% (wacc.py 검증)")
+    s.text(f"B{4 + len(rows) + 1}", "게이트: β/MRP 시장 정합·provenance, WACC 8~14% (wacc.py 검증)")
     return s
 
 

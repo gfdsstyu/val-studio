@@ -150,29 +150,29 @@ def check_beta_provenance(
     return f
 
 
-def check_beta_erp_consistency(
+def check_beta_mrp_consistency(
     inp: WaccInputs,
     *,
     report: ValidationReport | None = None,
 ) -> Finding:
-    """β 기준시장 == ERP 기준시장 정합 검사.
+    """β 기준시장 == MRP 기준시장 정합 검사.
 
     핵심 원칙(베타 문서): β 와 그에 곱해질 MRP 는 **같은 시장**에서 와야 한다.
-    KOSPI β 에 S&P500 ERP 를 곱하는 혼용은 체계적위험 이중기준 → WARN.
+    KOSPI β 에 S&P500 MRP 를 곱하는 혼용은 체계적위험 이중기준 → WARN.
     두 market 이 모두 명시된 경우에만 판정(하나라도 없으면 provenance 검사가 담당).
     """
-    bm, em = inp.beta_market, inp.erp_market
+    bm, em = inp.beta_market, inp.mrp_market
     if bm is None or em is None:
-        f = Finding("beta_erp_consistency", Severity.PASS,
-                    "β/ERP 시장 정합 판정보류(provenance 부족)",
-                    {"beta_market": bm, "erp_market": em})
+        f = Finding("beta_mrp_consistency", Severity.PASS,
+                    "β/MRP 시장 정합 판정보류(provenance 부족)",
+                    {"beta_market": bm, "mrp_market": em})
     elif bm != em:
-        f = Finding("beta_erp_consistency", Severity.WARN,
-                    f"β 시장({bm}) ≠ ERP 시장({em}) — 체계적위험 이중기준 혼용",
-                    {"beta_market": bm, "erp_market": em})
+        f = Finding("beta_mrp_consistency", Severity.WARN,
+                    f"β 시장({bm}) ≠ MRP 시장({em}) — 체계적위험 이중기준 혼용",
+                    {"beta_market": bm, "mrp_market": em})
     else:
-        f = Finding("beta_erp_consistency", Severity.PASS,
-                    f"β/ERP 시장 일치({bm})", {"beta_market": bm, "erp_market": em})
+        f = Finding("beta_mrp_consistency", Severity.PASS,
+                    f"β/MRP 시장 일치({bm})", {"beta_market": bm, "mrp_market": em})
     if report is not None:
         report.add(f)
     return f
@@ -416,5 +416,5 @@ def audit_dcf(
     check_working_capital_burn(list(inp.revenue), list(inp.delta_nwc_cash_adj), report=report)
     if wacc_inputs is not None:
         check_beta_provenance(wacc_inputs, report=report)
-        check_beta_erp_consistency(wacc_inputs, report=report)
+        check_beta_mrp_consistency(wacc_inputs, report=report)
     return report

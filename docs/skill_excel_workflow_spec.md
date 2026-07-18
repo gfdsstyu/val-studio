@@ -31,7 +31,7 @@ Val-Studio(valuation-platform)의 **결정론 DCF 엔진(`calc_core`)**을 **Cla
 |------|------|------|
 | **Claude (스킬)** | 기계적 작업 + 지식기반 제안·리서치 | FS 정규화, 계정재분류 매핑안, 추정 로직 수식 구현, 가정 후보 제시(근거 포함), 산업 리서치 |
 | **평가인 (사용자)** | 판단·확정 | 재분류 승인, 매출 드라이버 선택, 가정값 확정, 경영진 자료 투입 |
-| **calc_core / checks (결정론)** | 검증 | 골든 재현, F1 재투자·F2 Kroll·F3 β/ERP 룰, 민감도 base 셀 정합 |
+| **calc_core / checks (결정론)** | 검증 | 골든 재현, F1 재투자·F2 Kroll·F3 β/MRP 룰, 민감도 base 셀 정합 |
 
 이는 감사 구조 그 자체다: **제안(LLM) → 판단(사람) → 검증(결정론 룰)**. 기존 `.claude/skills/valuation-analysis`의 "판단은 LLM, 계산·검증은 코드" 원칙과 Anthropic dcf-model 스킬의 "단계별 confirm" 패턴의 결합이다.
 
@@ -178,7 +178,7 @@ Research 시트·template_conventions 저술 시 아래 실무 양식의 항목 
 | **W2.5 손익 계정 세분화** | 러프한 IS 라인을 성격별·유형별로 분해 (1.4e) → `FS_Disagg` | 주석·세그먼트·원가명세서·W1 리서치 근거로 세분 매핑안 제시(모호는 표면화) | 세분 과립도·성격 판정(변동/고정) 승인, 자료 보강 | `fs_disagg.py` **세분합 = 원계정(합보존) FAIL 0건**, 구성비 YoY 급변 WARN 표면화 |
 | **W3 계정재분류** | PL 4유형·BS 6유형 + 분석방법 태깅 (`Reclass`, `_A/_F`) | 분류안 제시(모호는 표면화) | 재분류 승인(현금·NOA/IBD 경계) | 분류 합계 = 원본 FS 합계(누락·중복 0) |
 | **W4 추정** | 매출·원가·판관비·CapEx상각·WC 로직 구축 (`Fcst_*`·`Capex_Dep`·`WC`). **`Fcst_Rev`·`Fcst_Cost`는 `template_schema.ROLLUP` SSOT로 FS_Disagg 세분 라인과 동일 성격 행 생성 + `계=Σ세분` 살아있는 SUM 롤업 → DCF 스파인** | 드라이버 후보 제시, 선택분 수식 구현, 근거 리서치 | 드라이버 선택·가정값 확정·자료 투입 | `check_projection_smoothness`·`check_working_capital_burn`, 가정 출처 태그 완비(1.6), 세분 계=원계정 롤업 | 
-| **W5 WACC** | CAPM 빌드업 (`WACC`) | `wacc.py` 실행, Kroll 제안, peer 근거 정리 | β 출처·peer·WACC 승인 | `check_beta_erp_consistency`(F3)·`check_beta_provenance`, 8~14% 상식범위 |
+| **W5 WACC** | CAPM 빌드업 (`WACC`) | `wacc.py` 실행, Kroll 제안, peer 근거 정리 | β 출처·peer·WACC 승인 | `check_beta_mrp_consistency`(F3)·`check_beta_provenance`, 8~14% 상식범위 |
 | **W6 DCF 완성** | 스파인 입력셀→Fcst 계 참조 승격(`promote.py`) + 독립 재계산 | `promote.py`(승격+tie-out)·`dcf.py` 재계산 → 워크북 셀 단위 대조 | 결과 확정(승격 델타 검토) | **승격 tie-out(per_share 불변; 불일치=라인·연도 델타 표면화)**, **워크북 vs 엔진 per_share (rel_tol 1e-6)**, `audit_dcf` 전 규칙, 필요 시 `gap_diagnosis` |
 | **W7 시나리오** | upside/base/downside (`Scenario`) | 케이스 구성안, `scenario.py` 실행 | 케이스·**가중치 승인(합=1)** | weights 완전일치·합=1 아니면 엔진 거부 |
 | **W8 민감도** | `sensitivity.py`로 WACC×PGR **5×5 살아있는 수식**(closed-form, FCFF 고정·할인·터미널만 축 반응) + (선택)2중 그리드 | Excel 수식 생성, 엔진 3×3 중심 대조 | 그리드 범위·스텝 확정 | **워크북 중심 == 엔진 3×3 중심 == base**, 내부 3×3 == 엔진 민감도, 외곽은 recalc 게이트 |
