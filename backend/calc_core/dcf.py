@@ -80,7 +80,9 @@ def _compute(inp: DcfSpineInput, wacc: float, g: float) -> DcfResult:
 
     pv_explicit_sum = sum(pv_fcff)
     enterprise_value = pv_explicit_sum + terminal_value_pv
-    equity_value = enterprise_value + inp.non_operating_assets - inp.net_debt
+    # 지배주주 귀속 지분가치 = EV +비영업자산 −순차입부채 −비지배지분(NCI).
+    equity_value = (enterprise_value + inp.non_operating_assets - inp.net_debt
+                    - inp.non_controlling_interest)
     per_share = equity_value / inp.shares_outstanding * 1_000_000
 
     return DcfResult(
@@ -97,6 +99,7 @@ def _compute(inp: DcfSpineInput, wacc: float, g: float) -> DcfResult:
         enterprise_value=enterprise_value,
         non_operating_assets=inp.non_operating_assets,
         net_debt=inp.net_debt,
+        non_controlling_interest=inp.non_controlling_interest,
         equity_value=equity_value,
         shares_outstanding=inp.shares_outstanding,
         per_share=per_share,

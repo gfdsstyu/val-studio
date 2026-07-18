@@ -28,6 +28,10 @@ class DcfSpineInput:
     non_operating_assets: float
     net_debt: float
     shares_outstanding: int
+    # 비지배지분(NCI, 연결) — EV→지분 브리지에서 차감(지배주주 귀속 지분가치). K-IFRS
+    # 정식 용어=비지배지분(구 소수주주지분). 비올·클래시스 실측 브리지: EV +비영업자산
+    # −순차입부채 −비지배지분 = 지분가치. 기본 0.
+    non_controlling_interest: float = 0.0
     # 중간연도 할인 컨벤션. 기본 0.5,1.5,... ; terminal 은 마지막 명시연도 factor 로 할인.
     mid_year_periods: list[float] | None = None
     terminal_discount_period: float | None = None
@@ -61,7 +65,8 @@ class DcfResult:
     enterprise_value: float
     non_operating_assets: float
     net_debt: float
-    equity_value: float
-    shares_outstanding: int
-    per_share: float
+    non_controlling_interest: float = 0.0    # 비지배지분(NCI) 차감액
+    equity_value: float = 0.0
+    shares_outstanding: int = 0
+    per_share: float = 0.0
     sensitivity: dict = field(default_factory=dict)

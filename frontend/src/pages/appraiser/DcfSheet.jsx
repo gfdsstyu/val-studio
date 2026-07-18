@@ -15,7 +15,7 @@ const DEMO = {
   dep_amort: "5000, 5000, 5000, 5000, 5000",
   capex: "5000, 5000, 5000, 5000, 5000",
   delta_nwc_cash_adj: "0, 0, 0, 0, 0",
-  non_operating_assets: "20000", net_debt: "10000",
+  non_operating_assets: "20000", net_debt: "10000", non_controlling_interest: "0",
   shares_outstanding: "10000000", claimed_per_share: "",
 };
 
@@ -101,6 +101,7 @@ export default function DcfSheet({ project, onSave }) {
       terminal_growth: Number(form.terminal_growth),
       non_operating_assets: Number(form.non_operating_assets),
       net_debt: Number(form.net_debt),
+      non_controlling_interest: Number(form.non_controlling_interest || 0),
       shares_outstanding: Number(form.shares_outstanding),
     };
     for (const [k] of FIELD_LABELS) body[k] = grid[k].map(Number);
@@ -172,6 +173,8 @@ export default function DcfSheet({ project, onSave }) {
               <input type="text" value={form.non_operating_assets} onChange={set("non_operating_assets")} /></div>
             <div className="row"><label>순차입부채 (백만원)</label>
               <input type="text" value={form.net_debt} onChange={set("net_debt")} /></div>
+            <div className="row"><label>비지배지분 NCI (연결, 백만원)</label>
+              <input type="text" value={form.non_controlling_interest} onChange={set("non_controlling_interest")} /></div>
             <div className="row"><label>발행주식수 (주)</label>
               <input type="text" value={form.shares_outstanding} onChange={set("shares_outstanding")} /></div>
             <div className="row"><label>주장 주당가치 (선택 — 감사인 괴리 진단)</label>
