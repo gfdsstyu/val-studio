@@ -60,6 +60,9 @@ function CoverSheet({ project }) {
   );
 }
 
+/** Task Pane 임베드 모드(?embed=1) — 좁은 폭(~350px) 대응. FR-M2.7. */
+const EMBED = new URLSearchParams(window.location.search).has("embed");
+
 function Workspace({ projectId, onHome }) {
   const [project, setProject] = useState(null);
   const [err, setErr] = useState(null);
@@ -100,19 +103,30 @@ function Workspace({ projectId, onHome }) {
   })();
 
   return (
-    <div className="shell">
+    <div className={`shell${EMBED ? " embed" : ""}`}>
       <div className="header">
         <img src="/logo@2x.png" alt="Val.Studio" className="logo-img"
           style={{ cursor: "pointer" }} onClick={onHome} title="홈으로" />
         <span className="screen">
-          {project.name}
+          {EMBED ? sheet.label : project.name}
+          {!EMBED && (
           <span className={`mode-badge ${project.mode}`} style={{ marginLeft: 8 }}>
             {MODE_LABEL[project.mode]}
           </span>
+          )}
         </span>
         <span className="mode">
+          {EMBED && !showByok && (
+            <select className="embed-stage" value={stage.id}
+              onChange={(e) => gotoStage(stages.find((s) => s.id === e.target.value))}>
+              {stages.map((st) => (
+                <option key={st.id} value={st.id}
+                  disabled={st.sheets.every((s) => s.soon)}>{st.label}</option>
+              ))}
+            </select>
+          )}
           <button className="linklike" onClick={() => setShowByok(!showByok)}>
-            {showByok ? "← 작업으로" : "설정(BYOK)"}
+            {showByok ? "←" : "BYOK"}
           </button>
         </span>
       </div>

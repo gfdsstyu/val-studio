@@ -186,3 +186,19 @@ tr.ok code { color: var(--ok); }
 tr.warn code { color: var(--warn); }
 tr.err code { color: var(--err); }
 .placeholder { color: var(--sub); padding: 40px 0; text-align: center; }
+
+/* ── Task Pane 임베드 모드(?embed=1) — 좁은 폭(~320px+) 대응 (FR-M2.7) ── */
+.shell.embed .lnb { display: none; }                 /* 세로 LNB 숨김 → 헤더 드롭다운으로 */
+.shell.embed .panel-toggle,
+.shell.embed .context-panel { display: none; }
+.shell.embed .header { padding: 6px 10px; }
+.shell.embed .logo-img { height: 20px; }
+.shell.embed .main-inner { padding: 8px; max-width: 100%; }
+.shell.embed .card { margin: 8px 0; }
+.embed-stage { font-size: 12px; padding: 2px 4px; margin-right: 8px;
+  max-width: 120px; }
+@media (max-width: 400px) {
+  .shell.embed .kpis { grid-template-columns: 1fr 1fr; }
+  .shell.embed .main-inner { padding: 6px; }
+  .shell.embed table { font-size: 12px; }
+}
