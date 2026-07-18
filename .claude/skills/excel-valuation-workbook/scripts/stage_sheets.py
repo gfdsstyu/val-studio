@@ -62,6 +62,38 @@ def build_fs_hist(wb, n: int = 5):
     return s
 
 
+# ── W2.5 FS_Disagg (손익 계정 세분화 + 합보존·구성비) ─────────────────────────
+def build_fs_disagg(wb, n: int = 5):
+    """W2.5 손익 세분 뼈대. 러프한 IS 라인을 성격별로 분해 — 원계정별 블록마다
+    자식 행 + 계(합보존) + 구성비 행. 값은 Claude 가 주석·세그먼트 근거로 채운다.
+    참조는 FS_Disagg → FS_Hist(뒤→앞). 하류 Fcst_Rev·Fcst_Cost 가 세분 라인 참조."""
+    s = wb.add_sheet("FS_Disagg")
+    _header(s, "FS_Disagg — 손익 계정 세분화(성격별) + 합보존·구성비")
+    s.text("B3", "세분 계 = FS_Hist 원계정(합보존 게이트: fs_disagg.py). "
+                 "원천자료(주석·세그먼트·제조원가명세서)가 지지하는 만큼만 세분 — 없으면 총액 유지 + [성격별 미확보].")
+    s.text("B4", "구성비 YoY 급변(>15%p)은 WARN(사업 변화/재분류 확인). 하류 Fcst_Rev·Fcst_Cost 가 세분 라인 참조.")
+
+    # (원계정, [성격별 자식], 원천자료 힌트)
+    blocks = [
+        ("매출액", ["제품매출", "상품매출", "용역매출", "기타매출"], "매출 세그먼트·품목 주석"),
+        ("매출원가", ["재료비", "노무비", "경비", "기타원가"], "제조원가명세서"),
+        ("판매관리비", ["급여", "감가상각비", "광고선전비", "기타판관비"], "판관비 성격별 주석"),
+        ("영업외손익", ["경상항목", "일회성항목"], "영업외 명세(경상/일회성)"),
+    ]
+    row = 6
+    for parent, children, src in blocks:
+        s.text(f"B{row}", f"── {parent} 세분 (원천: {src}) ──")
+        _years(s, row + 1, n)
+        r = row + 2
+        for ch in children:
+            s.text(f"B{r}", ch)           # 값=[입력] (Claude 가 주석 근거로 채움)
+            r += 1
+        s.text(f"B{r}", f"계 (= FS_Hist!{parent}) [수식·합보존]")
+        s.text(f"B{r + 1}", "구성비(%) [수식]")
+        row = r + 3                        # 블록 간 1행 여백
+    return s
+
+
 # ── W3 Reclass (평가목적 재분류 + _A/_F) ──────────────────────────────────────
 def build_reclass(wb, n: int = 5):
     s = wb.add_sheet("Reclass")
@@ -144,6 +176,7 @@ def build_wacc(wb, n: int = 5):
 STAGE_BUILDERS = {
     "W1": [build_research],
     "W2": [build_fs_hist],
+    "W2.5": [build_fs_disagg],
     "W3": [build_reclass],
     "W4": [build_fcst_rev, build_fcst_cost, build_capex_dep, build_wc],
     "W5": [build_wacc],
@@ -151,8 +184,8 @@ STAGE_BUILDERS = {
 
 
 def build_stage(wb, stage: str, n: int = 5) -> list[str]:
-    """stage(W1~W5) 시트 뼈대를 wb 에 추가. 생성된 시트명 리스트 반환."""
+    """stage(W1~W5, W2.5) 시트 뼈대를 wb 에 추가. 생성된 시트명 리스트 반환."""
     builders = STAGE_BUILDERS.get(stage.upper())
     if not builders:
-        raise ValueError(f"알 수 없는 단계: {stage} (W1~W5)")
+        raise ValueError(f"알 수 없는 단계: {stage} (W1~W5, W2.5)")
     return [b(wb, n).name for b in builders]

@@ -60,6 +60,7 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 | W0 | `DCF`(스파인) + `_VS_STATE` |
 | W1 | `Research` |
 | W2 | `FS_Hist`(Raw/Normalized/Map) |
+| W2.5 | `FS_Disagg`(손익 세분 + 합보존·구성비) |
 | W3 | `Reclass`(`_A/_F` 레이어) |
 | W4 | `Fcst_Rev`·`Fcst_Cost`·`Capex_Dep`·`WC` |
 | W5 | `WACC` |
@@ -67,7 +68,7 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 
 **정체성 원칙(중요)**: 시트명·레이아웃은 위 **자체 정의**를 따른다. **MSVALUE(H_FS/EBIT/BackData 등) 시트명·레이아웃을 복제하지 않는다.** MSVALUE·xDCF 지식은 "무엇을 계산·검증할지"로만 쓴다. 규약은 `references/template_conventions.md`.
 
-**단계 시트 뼈대 생성**: 각 단계에서 `scaffold.py --stage W1..W5`로 그 단계 시트의 뼈대(제목·범례·라벨·입력 placeholder·타시트 참조 스텁)를 결정론으로 찍고, 그 위에 값·수식·근거를 채운다. 뼈대가 색상·참조 규약을 강제하므로 손으로 시트를 그리는 것보다 일관되다. W1=Research, W2=FS_Hist, W3=Reclass, W4=Fcst_Rev·Fcst_Cost·Capex_Dep·WC, W5=WACC.
+**단계 시트 뼈대 생성**: 각 단계에서 `scaffold.py --stage W1..W5`(및 `W2.5`)로 그 단계 시트의 뼈대(제목·범례·라벨·입력 placeholder·타시트 참조 스텁)를 결정론으로 찍고, 그 위에 값·수식·근거를 채운다. 뼈대가 색상·참조 규약을 강제하므로 손으로 시트를 그리는 것보다 일관되다. W1=Research, W2=FS_Hist, W2.5=FS_Disagg, W3=Reclass, W4=Fcst_Rev·Fcst_Cost·Capex_Dep·WC, W5=WACC.
 
 - 참조 단방향(`뒤→앞`, 순환 금지). 색상 3색: Blue(입력)/Black(수식)/Green(타시트) + 핵심가정 yellow.
 - **hard number 승격**: 상류 시트가 생기면 DCF 가정 셀을 상류 참조(Green)로 교체하고, **교체 전후 per_share 불변(tie-out)**을 `roundtrip.py`로 확인.
@@ -85,6 +86,7 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 | **W0 시작** | 모드 판별·`scaffold.py` | `roundtrip.py` 왕복 재검증 | template_conventions |
 | **W1 리서치** | Company Brief 초안(가용 소스만) | 필수 슬롯·출처 누락 검사 | 기업리서치_양식·참고보고서_활용 |
 | **W2 과거 FS 정합성·무결성 + 이관** | `fs_clean.py`로 정규화·교차검증·재분류 추적 | FAIL 0·재분류 미해결 0·대차·tie-out | 모델링_실무_2강4강·account_dictionary |
+| **W2.5 손익 계정 세분화** | 러프한 IS 라인을 성격별로 분해(매출→제품/상품/용역, 원가·판관비→성격별) — `fs_disagg.py` | **세분합=원계정(합보존) FAIL 0**·구성비 YoY 급변 WARN 표면화 | account_dictionary·모델링_실무_2강4강 |
 | **W3 계정재분류** | PL 4유형·BS 6유형 태깅(모호는 표면화) | 분류합=원본 FS합(누락·중복 0) | xDCF_계정분류·msvalue_DCF_교육_정본 |
 | **W4 추정** | 드라이버 후보 제시→선택분 수식 구현 | projection_smoothness·wc_burn·가정 출처 완비 | msvalue_리포트예시·모델링_실무 |
 | **W5 WACC** | `wacc.py`(Kroll 제안·peer 근거) | β/ERP 정합·provenance·8~14% | wacc_할인율서식·베타·deloitte·PGR |
@@ -95,13 +97,15 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 
 **게이트 공통**: `앤트로픽_금융스킬_벤치마크.md §2`(audit-xls — BS부터·하드코딩 오버라이드·DCF 버그 5종).
 
+> **⚠️ W2/W2.5/W3은 같은 과거 IS를 다른 방향으로 만진다 (혼동 금지)**: **W2**=합이 맞나 **검증**(러프한 계정 그대로), **W2.5**=한 줄→여러 성격으로 **분해**(매출→제품/상품/용역, 원가→재료/노무/경비), **W3**=성격→평가유형으로 **집계**(Sales/COGS/SGA/NO). 세분화는 리서치(W1 제품·매출 구성)와 추정(W4 드라이버)을 잇는 다리 — IS가 통짜면 W4에서 P×Q·변동/고정을 걸 대상이 없다. **과립도는 원천자료(주석·세그먼트·제조원가명세서)가 지지하고 W4 드라이버에 연관되는 만큼만** — 자료 없으면 총액 유지 + `[성격별 미확보]` 표면화(억지 분해 금지).
+
 ---
 
 ## 자료 요청 (just-in-time)
 
 체크리스트를 앞에서 통째로 던지지 않는다. **각 단계에서 "지금 이 작업에 무엇이 빠졌나" 판단해, 결핍이 있을 때만 그것만 콕 집어 요청.** 미가용 소스로 가정을 지어내지 않는다 — 없으면 "X가 필요합니다; 없으면 Y 가정으로 진행하되 추정치 표기"로 표면화.
 
-단계별 필요 자료(내부 참조): W1=사업보고서(사업개요·주요제품·원재료/설비·매출/수주)+3개년 FS+주석 / W2=과거 FS 원문(당기·전기)+회계정책 변경 주석 / W3=세그먼트·원가명세서 / W4=드라이버 실데이터·CapEx 계획·경영진 추정 / W5=peer 시드·목표자본구조·Kd.
+단계별 필요 자료(내부 참조): W1=사업보고서(사업개요·주요제품·원재료/설비·매출/수주)+3개년 FS+주석 / W2=과거 FS 원문(당기·전기)+회계정책 변경 주석 / W2.5=매출 세그먼트·품목 주석·제조원가명세서(재료/노무/경비)·판관비 성격별 주석·영업외 명세 / W3=세그먼트·원가명세서 / W4=드라이버 실데이터·CapEx 계획·경영진 추정 / W5=peer 시드·목표자본구조·Kd.
 
 ---
 
@@ -115,10 +119,14 @@ echo '{...DcfSpineInput...}' | python scripts/scaffold.py --xlsx out.xlsx
 # W0 백지 스캐폴딩 (Claude for Excel — 셀 JSON 받아 기입)
 echo '{...}' | python scripts/scaffold.py --emit-cells
 # W1~W5 단계 시트 뼈대(stdin 불요; 워크북 성장)
+python scripts/scaffold.py --stage W2.5 --emit-cells   # FS_Disagg(손익 세분 뼈대)
 python scripts/scaffold.py --stage W4 --emit-cells     # Fcst_Rev·Fcst_Cost·Capex_Dep·WC
 
 # W2 과거 FS 무결성 (정규화·교차검증·재분류 추적; 미해결엔 account_dictionary 이관 힌트)
 echo '{"sources":[{"label":"FY2024","periods":{"2024":{"매출액":"1,234",...}}}]}' | python scripts/fs_clean.py
+
+# W2.5 손익 세분화 (세분합=원계정 합보존 게이트 + 구성비 YoY 추이)
+echo '{"blocks":[{"parent":"매출액","periods":{"2024":{"total":"1,234","children":{"제품매출":"800","상품매출":"434"}}}}]}' | python scripts/fs_disagg.py
 
 # W5 WACC (market_cap_musd 주면 Kroll 제안)
 echo '{"risk_free":0.03,"equity_risk_premium":0.08,"unlevered_beta":1.0,...}' | python scripts/wacc.py
@@ -154,7 +162,7 @@ python scripts/book_search.py "영구성장률 몇 퍼센트?"
 
 ## 상태 규약 (`_VS_STATE` 시트)
 
-세션은 무상태 → 워크북이 곧 상태. 숨김 시트 `_VS_STATE`에 기록: `skill_version·mode(A/B/C)·stage(W0~W9)·last_gate_passed·engine_tieout` + 가정 대장(provenance) + 계정 매핑 대장(W2 연도간 이관 이력 / W3 평가유형). 재진입 시 이 시트만 읽고 재개 지점 판별. 각 게이트 통과 시 갱신.
+세션은 무상태 → 워크북이 곧 상태. 숨김 시트 `_VS_STATE`에 기록: `skill_version·mode(A/B/C)·stage(W0·W1·W2·W2.5·W3~W9)·last_gate_passed·engine_tieout` + 가정 대장(provenance) + 계정 매핑 대장(W2 연도간 이관 이력 / W2.5 세분 대장 / W3 평가유형). 재진입 시 이 시트만 읽고 재개 지점 판별. 각 게이트 통과 시 갱신.
 
 ## 가정 출처(provenance)
 
@@ -162,7 +170,7 @@ python scripts/book_search.py "영구성장률 몇 퍼센트?"
 
 ## 추천 모델·난이도 승격
 
-단계 성격에 맞춰 권고(런타임별 실행력 다름 — Excel은 조언만, Claude Code/MAS는 서브에이전트 모델 지정 가능). W1·W3·W9=상위 모델·high, W6·W8=결정론이라 저비용. **애매하면(계정분류 모호·재분류 다대다·peer uncertain·audit FAIL) 상위 모델/high로 승격하고 평가인에게 표면화.**
+단계 성격에 맞춰 권고(런타임별 실행력 다름 — Excel은 조언만, Claude Code/MAS는 서브에이전트 모델 지정 가능). W1·W3·W9=상위 모델·high, W2.5=medium(과립도·성격 판정 시 승격), W6·W8=결정론이라 저비용. **애매하면(계정분류 모호·재분류 다대다·세분 과립도 불명·peer uncertain·audit FAIL) 상위 모델/high로 승격하고 평가인에게 표면화.**
 
 ---
 
