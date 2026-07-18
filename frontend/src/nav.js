@@ -14,13 +14,13 @@ export const NAV = {
       { id: "bs", label: "BS 매핑(NOA/IBD)", soon: true },
     ]},
     { id: "assumptions", label: "2. 가정", sheets: [
-      { id: "revenue", label: "매출(트리)", soon: true },
+      { id: "revenue", label: "매출(트리)" },
       { id: "costs", label: "원가·판관비", soon: true },
       { id: "fa", label: "FA", soon: true },
       { id: "wc", label: "WC", soon: true },
     ]},
     { id: "discount", label: "3. 할인율", sheets: [
-      { id: "peer", label: "유사회사 4-step", soon: true },
+      { id: "peer", label: "유사회사 4-step" },
       { id: "wacc", label: "WACC 빌드업" },
     ]},
     { id: "valuation", label: "4. 밸류에이션", sheets: [
@@ -28,7 +28,7 @@ export const NAV = {
       { id: "scenario", label: "시나리오" },
     ]},
     { id: "output", label: "5. 산출물", sheets: [
-      { id: "report", label: "리포트", soon: true },
+      { id: "report", label: "리포트" },
       { id: "export", label: "xlsx Export" },
       { id: "diff", label: "왕복 diff" },
     ]},

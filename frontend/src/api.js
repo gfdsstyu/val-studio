@@ -20,6 +20,9 @@ export const api = {
   // 복붙 문자열(예 "3.45%")은 서버가 커넥터로 통과시켜 range 게이트를 건다.
   wacc: { assemble: (body) => j("POST", "/api/wacc/assemble", body) },
   dcfAssemble: (body) => j("POST", "/api/dcf/assemble", body),
+  revenueBuild: (body) => j("POST", "/api/revenue/build", body),
+  peerSelect: (body) => j("POST", "/api/peer/select", body),
+  ksicSearch: (q) => j("GET", `/api/ksic/search?q=${encodeURIComponent(q)}`),
   validateGeminiKey: (key) =>
     j("POST", "/api/keys/validate", undefined, { "X-Gemini-Key": key }),
   projects: {

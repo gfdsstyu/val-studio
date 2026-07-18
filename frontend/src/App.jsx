@@ -6,6 +6,9 @@ import ByokPanel from "./pages/Byok.jsx";
 import DcfSheet from "./pages/appraiser/DcfSheet.jsx";
 import DiscountSheet from "./pages/appraiser/DiscountSheet.jsx";
 import ScenarioSheet from "./pages/appraiser/ScenarioSheet.jsx";
+import RevenueSheet from "./pages/appraiser/RevenueSheet.jsx";
+import PeerSheet from "./pages/appraiser/PeerSheet.jsx";
+import ReportSheet from "./pages/appraiser/ReportSheet.jsx";
 import Roundtrip from "./pages/appraiser/Roundtrip.jsx";
 
 /* 셸(ia_ux_architecture.md §3): 헤더(정체성+상태, 액션 無) · LNB=단계 축 ·
@@ -140,8 +143,14 @@ function Workspace({ projectId, onHome }) {
   const body = (() => {
     if (showByok) return <ByokPanel />;
     if (stage.id === "cover") return <CoverSheet project={project} />;
+    if (stage.id === "assumptions" && sheet.id === "revenue")
+      return <RevenueSheet project={project} onSave={saveData} />;
+    if (stage.id === "discount" && sheet.id === "peer")
+      return <PeerSheet project={project} onSave={saveData} />;
     if (stage.id === "discount" && sheet.id === "wacc")
       return <DiscountSheet project={project} onSave={saveData} />;
+    if (stage.id === "output" && sheet.id === "report")
+      return <ReportSheet project={project} />;
     if (stage.id === "valuation" && sheet.id === "dcf")
       return <DcfSheet project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "scenario")

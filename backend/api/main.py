@@ -343,6 +343,105 @@ async def dcf_assemble_endpoint(request: Request) -> dict:
     }
 
 
+# ── 매출 트리 (bottom_up P×Q / top_down CAGR) ────────────────────────────────
+def _revenue_node(d: dict):
+    """dict → RevenueNode 재귀 조립(프론트 트리 UI → 서버 검증)."""
+    from calc_core.revenue import RevenueNode
+    return RevenueNode(
+        name=d.get("name", "?"),
+        children=[_revenue_node(c) for c in (d.get("children") or [])],
+        price=d.get("price"), qty=d.get("qty"),
+        base=d.get("base"), growth=d.get("growth"),
+        provenance=d.get("provenance"),
+    )
+
+
+@app.post("/api/revenue/build")
+async def revenue_build(request: Request) -> dict:
+    """매출 추정 → 연도별 벡터 + 합계검증. bottom_up(트리) | top_down(CAGR).
+
+    bottom_up: {method:"bottom_up", years, tree:{name,children[],price[],qty[],base,growth}}
+      → 총매출 + 최상위 자식별 분해 + validate_tree_sums(내부노드=자식합) 위반 목록.
+    top_down: {method:"top_down", years, params:{market_size,share,cagr,share_path?}}.
+    """
+    from calc_core.revenue import bottom_up, top_down, validate_tree_sums
+    d = await request.json()
+    years = int(d.get("years", 5))
+    if d.get("method") == "top_down":
+        p = d.get("params") or {}
+        try:
+            vec = top_down(float(p["market_size"]), float(p["share"]), float(p["cagr"]),
+                           years, p.get("share_path"))
+        except (KeyError, TypeError, ValueError) as e:
+            raise HTTPException(422, f"top_down 파라미터 오류: {e}") from e
+        return {"revenue": vec, "errors": [], "breakdown": {}}
+    root = _revenue_node(d.get("tree") or {})
+    try:
+        vec = bottom_up(root, years)
+    except ValueError as e:
+        raise HTTPException(422, f"트리 리프 오류: {e}") from e
+    return {
+        "revenue": vec,
+        "errors": validate_tree_sums(root, years),
+        "breakdown": {c.name: c.revenue(years) for c in root.children},
+    }
+
+
+# ── 유사회사 4-step 선정 퍼널 ────────────────────────────────────────────────
+@app.post("/api/peer/select")
+async def peer_select(request: Request) -> dict:
+    """4-step 퍼널 실행 → 확정 peer + ⚖️ 애매 큐(needs_review) + 탈락 사유 전량.
+
+    body: {candidates:[{ticker,name,industry_code?,revenue_share_related?,listed_years?,
+    suspended?}], target_industry_codes?:[...], judgments?:[{ticker,similar,reason,uncertain?}],
+    revenue_share_threshold?, min_listed_years?}. Step2 무근거 판정은 422(검증 게이트).
+    """
+    from ingest.peer_selection import PeerCandidate, Step2Judgment, select_peers
+    d = await request.json()
+    try:
+        cands = [PeerCandidate(
+            ticker=c["ticker"], name=c.get("name", c["ticker"]),
+            industry_code=c.get("industry_code"),
+            revenue_share_related=c.get("revenue_share_related"),
+            listed_years=c.get("listed_years"), suspended=bool(c.get("suspended", False)),
+        ) for c in (d.get("candidates") or [])]
+        judgments = [Step2Judgment(
+            ticker=j["ticker"], similar=bool(j["similar"]), reason=j.get("reason", ""),
+            uncertain=bool(j.get("uncertain", False)),
+        ) for j in (d.get("judgments") or [])] or None
+    except (KeyError, TypeError) as e:
+        raise HTTPException(422, f"candidates/judgments 형식 오류: {e}") from e
+    codes = set(d.get("target_industry_codes") or []) or None
+    kw = {}
+    if "revenue_share_threshold" in d:
+        kw["revenue_share_threshold"] = float(d["revenue_share_threshold"])
+    if "min_listed_years" in d:
+        kw["min_listed_years"] = float(d["min_listed_years"])
+    try:
+        res = select_peers(cands, target_industry_codes=codes, judgments=judgments, **kw)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    return {
+        "funnel": res.funnel,
+        "selected": [{"ticker": c.ticker, "name": c.name} for c in res.selected],
+        "needs_review": [{"ticker": t.candidate.ticker, "name": t.candidate.name,
+                          "reason": t.review_reason} for t in res.needs_review],
+        "dropped": [{"ticker": t.candidate.ticker, "name": t.candidate.name,
+                     "dropped_at": t.dropped_at, "reason": t.reason}
+                    for t in res.traces if t.dropped_at],
+        "warnings": [f"{t.candidate.name}: {w}" for t in res.traces for w in t.warnings],
+        "size_note": res.size_note(),
+        "markdown": res.to_markdown(),
+    }
+
+
+@app.get("/api/ksic/search")
+def ksic_search(q: str) -> dict:
+    """KSIC 산업코드 검색(모집단 코드 조회 보조). q=키워드(공백=AND)."""
+    from ingest import ksic
+    return {"results": [{"code": c, "name": n} for c, n in ksic.search(q)]}
+
+
 @app.get("/api/method/options")
 def method_options() -> dict:
     """위저드 선택지 — 목적·거래유형 카탈로그(프론트 하드코딩 방지, SSOT=백엔드)."""
