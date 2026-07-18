@@ -160,7 +160,7 @@ cd frontend && npm run dev
 1. **US-01** Excel Online에서 “Val-Studio DCF” Add-in을 연다.
 2. **US-02** Task Pane에 WACC·5년 FCFF 등을 입력하고 “DCF 계산”을 누른다.
 3. **US-03** 주당가치·EV·TV 비중·audit findings(WARN/FAIL)를 확인한다.
-4. **US-04** 5×5 민감도표에서 base 셀(중앙)이 base 가정과 일치함을 확인한다.
+4. **US-04** 3×3 민감도표(WACC×g, 엔진 내장)에서 base 셀(중앙)이 base 가정과 일치함을 확인한다.
 5. **US-05** (Should) “xlsx 내보내기”로 수식 live 파일을 받아 같은 워크북 또는 새 파일에서 연다.
 
 ### 5.3 v1.2 사용자 스토리 (Office.js)
@@ -242,8 +242,10 @@ Excel에 **“Task Pane URL = 우리 HTTPS 앱”** 을 등록한다. Add-in 본
 | FR-M2.2 | 연도 수 불일치 클라이언트 검증 | Must |
 | FR-M2.3 | 결과: `per_share`, `enterprise_value`, `equity_value`, `tv_weight` | Must |
 | FR-M2.4 | `findings[]` severity별 표시 (pass 제외 또는 접기) | Must |
-| FR-M2.5 | 민감도 5×5, 중앙 셀 base 하이라이트 (`center-cell` CSS) | Must |
+| FR-M2.5 | 민감도 3×3(WACC×g, 엔진 `dcf.run` 내장, step ±1%p), 중앙 셀 base 하이라이트 (`center-cell` CSS) | Must |
 | FR-M2.6 | `claimed_per_share` 입력 시 `gap_diagnosis` 표시 | Must |
+
+> **민감도 3×3 vs 5×5 (엔진 내장 ≠ 워크북 리포트)**: 엔진 `dcf.run`의 내장 민감도는 **3×3(WACC×g)** — 중심셀 == base 자기일관성 검증용(내부 앵커). 반면 `excel-valuation-workbook` 스킬이 워크북에 만드는 리포트 그리드는 **5×5(WACC×PGR) 살아있는 수식**으로, 외곽 셀은 Excel recalc가 검증한다. Add-in Task Pane은 엔진 3×3을 표시. 상세: [skill_excel_workflow_spec.md](skill_excel_workflow_spec.md) §1.4c.
 | FR-M2.7 | `?embed=1` 시 LNB/헤더 축소, min-width ~320px | Should |
 
 ### 7.3 FR-M3 — API 및 배포
@@ -354,11 +356,13 @@ v2에서 LNB 단계를 Task Pane 탭으로 확장.
 ### 10.3 CORS 설정 (FastAPI)
 
 ```python
-# 프로덕션 예시 — manifest AppDomains + 프론트 origin
+# 프로덕션 예시 — 프론트 origin(=SourceLocation 도메인)
+# 주의: Task Pane fetch 의 Origin 은 SourceLocation URL(우리 앱 도메인)이지 excel.office.com 이 아니다.
+#   → allow_origins 의 핵심은 자기 프론트 origin. excel.office.com/outlook.office.com 은 보통 불필요
+#   (무해하나 오해 소지). manifest <AppDomains> 는 CORS 가 아니라 Task Pane 내 내비게이션 허용 목록.
 allow_origins=[
-    "https://app.valstudio.example",
-    "https://excel.office.com",
-    "https://outlook.office.com",  # 일부 호스트 리다이렉트
+    "https://app.valstudio.example",   # ← 우리 앱(SourceLocation) — 필수
+    # "https://excel.office.com",      # 대개 불필요(호스트가 fetch Origin 아님)
 ]
 allow_headers=["*", "X-Gemini-Key", "X-Anthropic-Key"]
 ```
@@ -518,6 +522,7 @@ v3.0       ──► AppSource, 감사인 full track, RAG ingest in Add-in
 | [앤트로픽_금융스킬_벤치마크](reference/앤트로픽_금융스킬_벤치마크.md) | Office.js vs openpyxl 이중 환경, audit-xls |
 | [xDCF_계정분류_모델아키텍처](reference/xDCF_계정분류_모델아키텍처.md) | 경쟁 서비스(이메일 xlsx) — 우리는 Add-in+API |
 | [모델링_워크플로우_기초](reference/모델링_워크플로우_기초.md) | 입력셀 1곳·색상 규약 → template_schema |
+| [excel-valuation-workbook 스킬](skill_excel_workflow_spec.md) | **Claude for Excel 공존·스킬 브리지** — 범용 AI 조작(Claude for Excel) + Val-Studio 결정론 검증(스킬)은 경쟁 아닌 보완. 스킬이 워크북을 결정론 게이트로 감사하고, "미검증" 워크북을 로컬 import→재검증(페이즈2) |
 | Yeoman `generator-office` | P1 스캐폴드 (선택) |
 
 ---
