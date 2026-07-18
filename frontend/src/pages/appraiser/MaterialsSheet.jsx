@@ -1,9 +1,88 @@
 import React, { useState } from "react";
 import { api, fileToBase64 } from "../../api.js";
+import { loadKey } from "../Byok.jsx";
 
 /* 0.자료·Brief — files(자료함)·brief(Company Brief).
    업로드/파싱 파이프라인·LLM 자동 브리프는 후속(백엔드 인제스트 미배선) — 지금은
    자료 메타·메모와 수기 브리프를 project.data 에 보존(감사추적·컨텍스트 관리 기초). */
+
+const won2 = (v) => (v == null ? "-" : Math.round(v).toLocaleString("ko-KR"));
+
+/** DART API 재무제표 조회 → 계정을 매핑 시트로 전송(fs_mapper 자동분류 → NOA/IBD 브리지). */
+function DartFetchPanel({ project, onSave }) {
+  const [corp, setCorp] = useState(project?.data?.dart_query?.corp_code || "");
+  const [year, setYear] = useState(project?.data?.dart_query?.year || "2023");
+  const [fsDiv, setFsDiv] = useState("CFS");
+  const [res, setRes] = useState(project?.data?.dart_financials || null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const key = loadKey("dart");
+
+  const fetch = async () => {
+    if (!key) { setErr("BYOK 탭에서 DART API 키를 먼저 저장하세요."); return; }
+    if (!corp.trim()) { setErr("corp_code(8자리)를 입력하세요."); return; }
+    setBusy(true); setErr(null);
+    try {
+      const d = await api.dartFinancials(key, { corp_code: corp.trim(), year: year.trim(), fs_div: fsDiv });
+      setRes(d);
+      onSave?.({ dart_query: { corp_code: corp.trim(), year: year.trim() }, dart_financials: d });
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const toMapping = (statement) => {
+    if (!res) return;
+    const isBs = statement === "bs";
+    const wanted = isBs ? ["BS"] : ["IS", "CIS"];
+    const rows = res.accounts
+      .filter((a) => wanted.includes(a.sj_div) && a.value != null)
+      .map((a) => ({ account: a.name, amount: String(Math.round(a.value)),
+        bucket: isBs ? "WC(운전자본)" : "Sales" }));
+    onSave?.({ [isBs ? "mapping_bs" : "mapping_pl"]: rows });
+  };
+
+  const byDiv = res ? res.accounts.reduce((m, a) => {
+    (m[a.sj_div] = m[a.sj_div] || []).push(a); return m; }, {}) : {};
+
+  return (
+    <div className="card">
+      <h2>DART 재무제표 조회 <span className="muted">— OpenDART fnlttSinglAcntAll(BYOK 키)</span></h2>
+      <div className="pad">
+        {!key && <div className="finding warn">BYOK 탭에서 OpenDART API 키를 저장해야 조회됩니다.</div>}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div className="row" style={{ margin: 0 }}><label>corp_code (8자리)</label>
+            <input type="text" value={corp} onChange={(e) => setCorp(e.target.value)} placeholder="00126380" style={{ width: 110 }} /></div>
+          <div className="row" style={{ margin: 0 }}><label>사업연도</label>
+            <input type="text" value={year} onChange={(e) => setYear(e.target.value)} style={{ width: 70 }} /></div>
+          <div className="row" style={{ margin: 0 }}><label>연결/별도</label>
+            <select value={fsDiv} onChange={(e) => setFsDiv(e.target.value)} style={{ fontSize: 12 }}>
+              <option value="CFS">연결(CFS)</option><option value="OFS">별도(OFS)</option></select></div>
+          <button className="primary" onClick={fetch} disabled={busy}>{busy ? "조회 중…" : "재무제표 조회"}</button>
+        </div>
+        {err && <div className="err" style={{ marginTop: 8 }}>{err}</div>}
+
+        {res && (
+          <div style={{ marginTop: 12 }}>
+            <div className="muted">{res.corp_code} · {res.year} · 계정 {res.count}건</div>
+            <div style={{ margin: "8px 0" }}>
+              <button className="ghost" onClick={() => toMapping("pl")}>손익 계정 → 손익 매핑</button>{" "}
+              <button className="ghost" onClick={() => toMapping("bs")}>BS 계정 → BS 매핑</button>
+              <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                매핑으로 보낸 뒤 1.계정분류에서 '자동 분류 제안'(fs_mapper) → NOA/IBD 브리지.</div>
+            </div>
+            {["BS", "IS", "CIS", "CF"].filter((k) => byDiv[k]).map((div) => (
+              <details key={div} style={{ marginTop: 6 }}>
+                <summary style={{ cursor: "pointer", fontSize: 13 }}>{div} ({byDiv[div].length})</summary>
+                <table><tbody>{byDiv[div].slice(0, 30).map((a, i) => (
+                  <tr key={i}><td style={{ textAlign: "left" }}>{a.name}</td>
+                    <td style={{ textAlign: "right" }}>{won2(a.value)}</td></tr>))}</tbody></table>
+              </details>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function FilesSheet({ project, onSave }) {
   const [rows, setRows] = useState(project?.data?.materials || []);
@@ -15,12 +94,14 @@ function FilesSheet({ project, onSave }) {
   const save = () => onSave?.({ materials: rows });
 
   return (
+    <>
+    <DartFetchPanel project={project} onSave={onSave} />
     <div className="card">
-      <h2>자료함 <span className="muted">— 자료 메타·메모(업로드 파이프라인은 후속)</span></h2>
+      <h2>자료함 <span className="muted">— 자료 메타·메모</span></h2>
       <div className="pad">
         <div className="muted" style={{ marginBottom: 8 }}>
-          평가에 사용한 자료의 출처·성격을 기록합니다(감사추적). 파일 업로드·DART 인제스트·
-          RAG 는 후속 배선 — 지금은 메타데이터·메모 관리.</div>
+          평가에 사용한 자료의 출처·성격을 기록합니다(감사추적). 위 DART 조회 외 IR·의견서
+          등 자료의 메타데이터·메모 관리.</div>
         <div style={{ overflowX: "auto" }}>
           <table>
             <thead><tr><th>자료명</th><th>종류</th><th>메모</th><th>링크</th><th></th></tr></thead>
@@ -42,6 +123,7 @@ function FilesSheet({ project, onSave }) {
         <button className="primary" onClick={save}>저장</button>
       </div>
     </div>
+    </>
   );
 }
 

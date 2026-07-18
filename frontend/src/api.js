@@ -28,6 +28,10 @@ export const api = {
   briefFromXbrl: (body) => j("POST", "/api/brief/from_xbrl", body),
   validateGeminiKey: (key) =>
     j("POST", "/api/keys/validate", undefined, { "X-Gemini-Key": key }),
+  validateDartKey: (key) =>
+    j("POST", "/api/dart/validate", undefined, { "X-Dart-Key": key }),
+  dartFinancials: (key, body) =>
+    j("POST", "/api/dart/financials", body, { "X-Dart-Key": key }),
   projects: {
     list: () => j("GET", "/api/projects"),
     create: (body) => j("POST", "/api/projects", body),

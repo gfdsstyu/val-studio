@@ -2,19 +2,21 @@ import React, { useState } from "react";
 import { api } from "../api.js";
 
 /** BYOK: 키는 localStorage 에만 — 서버는 요청 헤더로 통과만 받는다. */
-const KEYS = { gemini: "byok_gemini_key", anthropic: "byok_anthropic_key" };
+const KEYS = { gemini: "byok_gemini_key", anthropic: "byok_anthropic_key", dart: "byok_dart_key" };
 export const loadKey = (k) => localStorage.getItem(KEYS[k]) || "";
 const saveKey = (k, v) => localStorage.setItem(KEYS[k], v);
 
 export default function ByokPanel() {
   const [gemini, setGemini] = useState(loadKey("gemini"));
   const [anthropic, setAnthropic] = useState(loadKey("anthropic"));
+  const [dart, setDart] = useState(loadKey("dart"));
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const save = () => {
     saveKey("gemini", gemini.trim());
     saveKey("anthropic", anthropic.trim());
+    saveKey("dart", dart.trim());
     setStatus({ msg: "저장됨 (이 브라우저 localStorage 에만)", ok: true });
   };
 
@@ -25,6 +27,20 @@ export default function ByokPanel() {
       setStatus(d.valid
         ? { msg: "Gemini 키 유효 ✓", ok: true }
         : { msg: `Gemini 키 무효 (HTTP ${d.status ?? "?"})`, ok: false });
+    } catch (e) {
+      setStatus({ msg: `검증 실패: ${e.message}`, ok: false });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const validateDart = async () => {
+    setBusy(true); setStatus(null);
+    try {
+      const d = await api.validateDartKey(dart.trim());
+      setStatus(d.valid
+        ? { msg: "DART 키 유효 ✓", ok: true }
+        : { msg: `DART 키 무효 (status ${d.status ?? "?"} ${d.message ?? ""})`, ok: false });
     } catch (e) {
       setStatus({ msg: `검증 실패: ${e.message}`, ok: false });
     } finally {
@@ -47,10 +63,18 @@ export default function ByokPanel() {
             <input type="password" value={anthropic} placeholder="sk-ant-…"
               onChange={(e) => setAnthropic(e.target.value)} />
           </div>
+          <div className="row">
+            <label>OpenDART API Key (재무제표 조회)</label>
+            <input type="password" value={dart} placeholder="opendart.fss.or.kr 발급 키"
+              onChange={(e) => setDart(e.target.value)} />
+          </div>
         </div>
         <button className="primary" onClick={save}>저장</button>{" "}
         <button className="ghost" onClick={validate} disabled={busy || !gemini.trim()}>
           {busy ? "검증 중…" : "Gemini 키 검증"}
+        </button>{" "}
+        <button className="ghost" onClick={validateDart} disabled={busy || !dart.trim()}>
+          {busy ? "검증 중…" : "DART 키 검증"}
         </button>
         {status && <div className={status.ok ? "ok" : "bad"} style={{ marginTop: 8 }}>{status.msg}</div>}
       </div>

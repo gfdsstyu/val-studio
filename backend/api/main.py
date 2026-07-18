@@ -546,6 +546,59 @@ async def brief_from_xbrl(request: Request) -> dict:
     }
 
 
+# ── DART API 재무제표 (BYOK: X-Dart-Key 헤더 통과, 서버 미저장) ───────────────
+@app.post("/api/dart/validate")
+def dart_validate(x_dart_key: str | None = Header(default=None)) -> dict:
+    """BYOK DART 키 검증 — company.json 1회 조회(status '000'=유효, '020'=키오류)."""
+    if not x_dart_key:
+        raise HTTPException(400, "X-Dart-Key 헤더 없음")
+    import json as _j
+    import urllib.parse
+    qs = urllib.parse.urlencode({"crtfc_key": x_dart_key, "corp_code": "00126380"})
+    try:
+        with urllib.request.urlopen(  # noqa: S310
+                f"https://opendart.fss.or.kr/api/company.json?{qs}", timeout=15) as r:
+            d = _j.loads(r.read().decode("utf-8"))
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
+    return {"valid": d.get("status") == "000", "status": d.get("status"),
+            "message": d.get("message")}
+
+
+@app.post("/api/dart/financials")
+async def dart_financials(request: Request,
+                          x_dart_key: str | None = Header(default=None)) -> dict:
+    """{corp_code, year, reprt_code?, fs_div?} + X-Dart-Key → 계정별 값(백만원·출처).
+
+    fnlttSinglAcntAll(단일회사 전체 재무제표). sj_div(BS/IS/CF/CIS)로 손익·BS 분리 가능
+    → 매핑 시트로 보내 fs_mapper 자동 분류 → NOA/IBD 브리지. reprt_code 기본=사업보고서.
+    """
+    if not x_dart_key:
+        raise HTTPException(400, "X-Dart-Key 헤더 없음")
+    from ingest.dart_client import DartClient, DartError
+    d = await request.json()
+    corp, year = str(d.get("corp_code", "")).strip(), str(d.get("year", "")).strip()
+    if not (corp and year):
+        raise HTTPException(422, "corp_code, year 필요")
+    client = DartClient(api_key=x_dart_key)
+    try:
+        res = client.financial_statements(
+            corp, year, reprt_code=d.get("reprt_code", "11011"),
+            fs_div=d.get("fs_div", "CFS"))
+    except DartError as e:
+        raise HTTPException(422, f"DART 오류: {e.status} {e.message}") from e
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
+    accounts = []
+    for pv in res.values:
+        sj, _, nm = pv.field_name.partition(":")
+        accounts.append({"field": pv.field_name, "sj_div": sj, "name": nm or pv.field_name,
+                         "value": float(pv.value) if pv.value is not None else None,
+                         "account_id": pv.provenance.locator.account_id})
+    return {"accounts": accounts, "count": len(accounts), "ok": res.report.ok,
+            "corp_code": corp, "year": year}
+
+
 @app.get("/api/method/options")
 def method_options() -> dict:
     """위저드 선택지 — 목적·거래유형 카탈로그(프론트 하드코딩 방지, SSOT=백엔드)."""
