@@ -43,3 +43,8 @@ var/
 
 # 스킬 빌드 산출(vendoring·zip은 build_excel_skill.py 로 재생성) — dist/ 는 위에서 커버
 .claude/skills/*/scripts/vendor/
+
+# 커버리지 산출(pytest-cov)
+.coverage
+coverage.xml
+htmlcov/
