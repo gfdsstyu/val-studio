@@ -63,6 +63,9 @@ def assemble_dcf_inputs(
     shares_outstanding: int,
     mid_year_periods: list[float] | None = None,
     terminal_discount_period: float | None = None,
+    maintenance_capex_by_class: dict | None = None,
+    maintenance_depreciates: bool = True,
+    terminal_wc_ratio: float | None = None,
     long_term_gdp: float = 0.02,
 ) -> DcfAssembly:
     """WACC 어셈블리 + 운영가정 → 검증된 ModelConfig → (게이트 통과 시) DcfResult.
@@ -89,12 +92,17 @@ def assemble_dcf_inputs(
         shares_outstanding=shares_outstanding,
         mid_year_periods=mid_year_periods,
         terminal_discount_period=terminal_discount_period,
+        maintenance_capex_by_class=maintenance_capex_by_class,
+        maintenance_depreciates=maintenance_depreciates,
+        terminal_wc_ratio=terminal_wc_ratio,
     )
     wacc_val = wacc.result.wacc if wacc.result is not None else wacc.inputs.risk_free
 
     # (2) 실행 전 게이트 — PGR≥WACC(Gordon 발산)면 dcf_run 무의미 → 차단
     check_terminal_growth(terminal_growth, wacc_val,
-                          long_term_gdp=long_term_gdp, report=report)
+                          long_term_gdp=long_term_gdp,
+                          reinvestment_modeled=terminal_wc_ratio is not None,
+                          report=report)
     check_projection_smoothness(list(revenue), name="revenue", report=report)
     if not report.ok:
         return DcfAssembly(config=cfg, report=report, provenance=prov)

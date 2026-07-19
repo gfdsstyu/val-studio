@@ -34,6 +34,11 @@ class ModelConfig:
     shares_outstanding: int
     mid_year_periods: list[float] | None = None
     terminal_discount_period: float | None = None
+    # CAPEX 신규/유지보수 분리 — 유지보수는 현금유출 항상, 감가는 옵션(fa.project_fixed_assets).
+    maintenance_capex_by_class: dict[str, list[float]] | None = None
+    maintenance_depreciates: bool = True
+    # 터미널 정규화 운전자본 재조정(정본 공식): 터미널 ΔWC = 추정말매출 × g × 이 비율.
+    terminal_wc_ratio: float | None = None
 
 
 def build_spine(cfg: ModelConfig) -> DcfSpineInput:
@@ -44,7 +49,10 @@ def build_spine(cfg: ModelConfig) -> DcfSpineInput:
     """
     n = len(cfg.revenue)
     eb = ebit_mod.build_ebit_from_ratios(cfg.revenue, cfg.cogs_pct, cfg.sga_pct)
-    fa_res = fa_mod.project_fixed_assets(cfg.asset_classes, cfg.new_capex_by_class)
+    fa_res = fa_mod.project_fixed_assets(
+        cfg.asset_classes, cfg.new_capex_by_class,
+        cfg.maintenance_capex_by_class,
+        maintenance_depreciates=cfg.maintenance_depreciates)
     wc_res = wc_mod.project_working_capital(
         cfg.wc_items, cfg.wc_driver_by_item, cfg.base_net_working_capital
     )
@@ -64,6 +72,7 @@ def build_spine(cfg: ModelConfig) -> DcfSpineInput:
         shares_outstanding=cfg.shares_outstanding,
         mid_year_periods=cfg.mid_year_periods,
         terminal_discount_period=cfg.terminal_discount_period,
+        terminal_wc_ratio=cfg.terminal_wc_ratio,
     )
 
 

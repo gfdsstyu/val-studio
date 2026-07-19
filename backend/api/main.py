@@ -314,6 +314,12 @@ async def dcf_assemble_endpoint(request: Request) -> dict:
             asset_classes=_asset_classes(ops.get("asset_classes") or []),
             new_capex_by_class={k: [float(x) for x in v]
                                 for k, v in (ops.get("new_capex_by_class") or {}).items()},
+            maintenance_capex_by_class={k: [float(x) for x in v]
+                                        for k, v in (ops.get("maintenance_capex_by_class")
+                                                     or {}).items()} or None,
+            maintenance_depreciates=bool(ops.get("maintenance_depreciates", True)),
+            terminal_wc_ratio=(float(ops["terminal_wc_ratio"])
+                               if ops.get("terminal_wc_ratio") is not None else None),
             wc_items=_wc_items(ops.get("wc_items") or []),
             wc_driver_by_item={k: [float(x) for x in v]
                                for k, v in (ops.get("wc_driver_by_item") or {}).items()},
@@ -352,6 +358,11 @@ def _revenue_node(d: dict):
         children=[_revenue_node(c) for c in (d.get("children") or [])],
         price=d.get("price"), qty=d.get("qty"),
         base=d.get("base"), growth=d.get("growth"),
+        # razor-and-blades: 소모품 = 장비 누적 설치base × 대당매출
+        equipment_new=d.get("equipment_new"),
+        consumable_per_unit=d.get("consumable_per_unit"),
+        installed_base0=d.get("installed_base0", 0.0),
+        retirement_rate=d.get("retirement_rate", 0.0),
         provenance=d.get("provenance"),
     )
 
@@ -539,6 +550,97 @@ async def assumptions_lease(request: Request) -> dict:
     return {"liability_open": r.liability_open, "interest": r.interest,
             "principal": r.principal, "payment": r.payment,
             "liability_close": r.liability_close, "rou_depreciation": r.rou_depreciation}
+
+
+@app.post("/api/footnote/costs")
+async def footnote_costs_endpoint(request: Request) -> dict:
+    """성격별 원가/판관비 주석표 → 성격별 금액 추출 + 드라이버 제안 + tie-out(계정세분화 ①단).
+
+    body: {text(복붙 표), note_no?, unit?('백만원'등), source_id?, year?(tie-out 기준연도),
+    stated_sga?, stated_cogs?(IS 표기 판관비/매출원가 → Σ성격별 tie-out)}.
+    → {natures:[{name,category,method,confidence,uncertain,amounts,note}], drafts(CostLine 초안),
+    years, extraction(추출 findings), tieout(Σ 검증 findings), ok}. 추출=결정론, 드라이버=제안.
+    """
+    from decimal import Decimal
+
+    from ingest.footnote_costs import (
+        FootnoteCostParser, costs_tieout, to_cost_line_drafts,
+    )
+    d = await request.json()
+    text = d.get("text") or ""
+    if not str(text).strip():
+        raise HTTPException(422, "text 필요")
+    p = FootnoteCostParser(d.get("source_id", "주석"),
+                           note_no=d.get("note_no"), unit=d.get("unit"))
+    p.extract(text)
+    natures, years = p.natures, p.years
+
+    tieout: list[dict] = []
+    s_sga, s_cogs = d.get("stated_sga"), d.get("stated_cogs")
+    if (s_sga is not None or s_cogs is not None) and years:
+        rpt = costs_tieout(
+            natures, year=str(d.get("year") or years[0]),
+            stated_sga=Decimal(str(s_sga)) if s_sga is not None else None,
+            stated_cogs=Decimal(str(s_cogs)) if s_cogs is not None else None)
+        tieout = _findings(rpt)
+
+    def _nd(n) -> dict:
+        return {"name": n.name, "category": n.category, "method": n.method,
+                "confidence": n.method_confidence, "uncertain": n.uncertain,
+                "amounts": {k: float(v) for k, v in n.amounts.items()}, "note": n.note}
+
+    return {
+        "natures": [_nd(n) for n in natures],
+        "drafts": to_cost_line_drafts(natures, years),
+        "years": years,
+        "extraction": _findings(p.result.report),
+        "tieout": tieout,
+        "ok": p.result.report.ok,
+    }
+
+
+@app.post("/api/dart/employee")
+async def dart_employee_endpoint(request: Request,
+                                 x_dart_key: str | None = Header(default=None)) -> dict:
+    """{corp_code, bsns_year, reprt_code?} + X-Dart-Key → 직원현황 집계 + headcount CostLine.
+
+    노무비 headcount 드라이버 실측 시드(인원×인당급여). 성장률 주면 CostLine 벡터까지 전개.
+    cross-source tie-out(주석 급여 vs DART 급여총액)은 /api/footnote/costs 결과와 조합.
+    """
+    if not x_dart_key:
+        raise HTTPException(400, "X-Dart-Key 헤더 없음")
+    from ingest.dart_client import DartClient, DartError
+    from ingest.dart_employee import to_headcount_costline
+    d = await request.json()
+    corp = str(d.get("corp_code", "")).strip()
+    year = str(d.get("bsns_year", "")).strip()
+    if not (corp and year):
+        raise HTTPException(422, "corp_code, bsns_year 필요")
+    client = DartClient(api_key=x_dart_key)
+    try:
+        snap = client.employee_status(corp, year, reprt_code=d.get("reprt_code", "11011"))
+    except DartError as e:
+        raise HTTPException(422, f"DART 오류: {e.status} {e.message}") from e
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
+    costline = to_headcount_costline(
+        snap, name=d.get("name", "노무비"), category=d.get("category", "sga"),
+        years=int(d.get("years", 5)),
+        headcount_growth=float(d.get("headcount_growth", 0.0)),
+        wage_growth=float(d.get("wage_growth", 0.0)),
+        bonus_rate=float(d.get("bonus_rate", 0.0)),
+        severance_rate=float(d.get("severance_rate", 0.0)))
+    return {
+        "headcount": float(snap.headcount),
+        "total_salary": float(snap.total_salary),
+        "avg_wage": float(snap.avg_wage) if snap.avg_wage is not None else None,
+        "by_division": {k: {kk: float(vv) for kk, vv in v.items()}
+                        for k, v in snap.by_division.items()},
+        "costline": costline,
+        "findings": _findings(snap.report),
+        "ok": snap.report.ok,
+        "corp_code": corp, "year": year,
+    }
 
 
 @app.post("/api/fs/classify")
