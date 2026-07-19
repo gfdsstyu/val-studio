@@ -36,7 +36,8 @@ export default function CostsSheet({ project, onSave }) {
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  const cpi = parseSeries(project?.data?.macro_cpi || "");           // 외주비 CPI(있으면)
+  const cpi = parseSeries(project?.data?.macro_cpi || "");           // 2.가정 › 거시에서 확정
+  const cpiLines = lines.filter((l) => l.method === "cpi");          // CPI 부재 시 경고 대상
   const faDep = project?.data?.fa_built?.dep_amort || null;          // 감가상각 배분원
   const dartKey = loadKey("dart");
 
@@ -156,6 +157,14 @@ export default function CostsSheet({ project, onSave }) {
           <div className="muted" style={{ marginBottom: 8 }}>
             성격별(원재료·노무비·외주비·감가상각·인건비·지급수수료…)로 각자 투영합니다.
             매출 {years}개 연도{cpi.length ? " · CPI 연동 有" : ""}{faDep ? " · FA 감가상각 배분 有" : ""}.</div>
+          {/* cpi 드라이버는 CPI 부재 시 엔진이 누적계수 1.0(=물가상승 0%)으로 조용히
+              계산한다. 조용한 오답을 막기 위해 여기서 표면화한다(감사 §3.2-4). */}
+          {cpiLines.length > 0 && !cpi.length && (
+            <div className="warn-box" style={{ marginBottom: 10 }}>
+              <b>물가연동 드라이버에 CPI가 없습니다</b> — {cpiLines.map((l) => l.name).join(", ")}{" "}
+              항목이 <b>물가상승 0%</b>로 계산됩니다. 2.가정 › <b>거시</b> 에서 CPI를 확정하세요.
+            </div>
+          )}
           <div style={{ overflowX: "auto" }}>
             <table>
               <thead><tr><th>항목</th><th>구분</th><th>방법</th><th>파라미터</th><th></th></tr></thead>

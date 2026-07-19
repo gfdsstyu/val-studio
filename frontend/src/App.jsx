@@ -7,6 +7,7 @@ import DcfSheet from "./pages/appraiser/DcfSheet.jsx";
 import DiscountSheet from "./pages/appraiser/DiscountSheet.jsx";
 import ScenarioSheet from "./pages/appraiser/ScenarioSheet.jsx";
 import RelativeSheet from "./pages/appraiser/RelativeSheet.jsx";
+import MacroSheet from "./pages/appraiser/MacroSheet.jsx";
 import RevenueSheet from "./pages/appraiser/RevenueSheet.jsx";
 import PeerSheet from "./pages/appraiser/PeerSheet.jsx";
 import ReportSheet from "./pages/appraiser/ReportSheet.jsx";
@@ -17,13 +18,26 @@ import MaterialsSheet from "./pages/appraiser/MaterialsSheet.jsx";
 import MappingSheet from "./pages/appraiser/MappingSheet.jsx";
 import Dashboard from "./pages/appraiser/Dashboard.jsx";
 import Roundtrip from "./pages/appraiser/Roundtrip.jsx";
+import OpinionIngest from "./pages/auditor/OpinionIngest.jsx";
+import IndependentRecalc from "./pages/auditor/IndependentRecalc.jsx";
+import GapDiagnosis from "./pages/auditor/GapDiagnosis.jsx";
+import Findings from "./pages/auditor/Findings.jsx";
 
 /* 셸(ia_ux_architecture.md §3): 헤더(정체성+상태, 액션 無) · LNB=단계 축 ·
    하단 시트탭=단계 내 시트 축 · 우측 접이식 패널(근거·AI 제안 자리) · 본문.
    라우팅: home ↔ project 워크스페이스 ↔ 설정(BYOK 오버레이). */
 
 function CoverSheet({ project }) {
-  const s = project?.data?.dcf_result_summary;
+  const auditor = project.mode === "auditor";
+  const d = project?.data || {};
+  // 감사인은 독립 재계산 결과가 요약 대상(평가인의 dcf_result_summary 와 데이터 격리).
+  const s = auditor
+    ? (d.audit_result && {
+        per_share: d.audit_result.per_share,
+        warn: (d.audit_result.findings || []).filter((f) => f.severity !== "pass").length,
+      })
+    : d.dcf_result_summary;
+  const claimed = d.audit_claimed;
   const setup = project?.setup || {};
   const rec = setup.method_recommendation;
   const methodLabel = rec
@@ -38,11 +52,18 @@ function CoverSheet({ project }) {
           <div className="kpis">
             <div className="kpi"><div className="v">{MODE_LABEL[project.mode]}</div><div className="k">모드</div></div>
             <div className="kpi"><div className="v">{project.company || "-"}</div><div className="k">대상회사</div></div>
-            <div className="kpi"><div className="v">{s ? Math.round(s.per_share).toLocaleString("ko-KR") + " 원" : "-"}</div><div className="k">최근 주당가치</div></div>
+            <div className="kpi"><div className="v">{s ? Math.round(s.per_share).toLocaleString("ko-KR") + " 원" : "-"}</div><div className="k">{auditor ? "독립 추정 주당가치" : "최근 주당가치"}</div></div>
+            {auditor && (
+              <div className="kpi"><div className="v">{claimed != null ? Math.round(claimed).toLocaleString("ko-KR") + " 원" : "-"}</div><div className="k">의견서 주장</div></div>
+            )}
             <div className="kpi"><div className="v">{s ? s.warn : "-"}</div><div className="k">audit 경고</div></div>
           </div>
           <div className="muted" style={{ marginTop: 12 }}>
-            다음 할 일: {s ? "가정 근거 보강 후 시나리오·리포트로" : "4. 밸류에이션 > DCF 에서 첫 계산을 실행하세요"}
+            다음 할 일: {auditor
+              ? (!d.opinion_extract ? "1. 의견서 인제스트에서 의견서를 투입하세요"
+                : !d.audit_result ? "2. 독립 재계산에서 감사인 추정을 세우세요"
+                : "3. 괴리 진단 → 4. 발견사항으로 조서를 마무리하세요")
+              : (s ? "가정 근거 보강 후 시나리오·리포트로" : "4. 밸류에이션 > DCF 에서 첫 계산을 실행하세요")}
           </div>
         </div>
       </div>
@@ -158,6 +179,8 @@ function Workspace({ projectId, onHome }) {
       return <MaterialsSheet project={project} sheet={sheet.id} onSave={saveData} />;
     if (stage.id === "mapping")
       return <MappingSheet project={project} sheet={sheet.id} onSave={saveData} />;
+    if (stage.id === "assumptions" && sheet.id === "macro")
+      return <MacroSheet project={project} onSave={saveData} />;
     if (stage.id === "assumptions" && sheet.id === "revenue")
       return <RevenueSheet project={project} onSave={saveData} />;
     if (stage.id === "assumptions" && sheet.id === "costs")
@@ -180,6 +203,15 @@ function Workspace({ projectId, onHome }) {
       return <RelativeSheet project={project} onSave={saveData} />;
     if (stage.id === "output" && (sheet.id === "export" || sheet.id === "diff"))
       return <Roundtrip project={project} sheet={sheet.id} onSave={saveData} />;
+    // 감사인 트랙 — 평가인 트랙과 데이터·화면 모두 격리(모드는 생성 시 1회 확정).
+    if (stage.id === "ingest")
+      return <OpinionIngest project={project} sheet={sheet.id} onSave={saveData} />;
+    if (stage.id === "recalc")
+      return <IndependentRecalc project={project} sheet={sheet.id} onSave={saveData} />;
+    if (stage.id === "diagnosis")
+      return <GapDiagnosis project={project} sheet={sheet.id} />;
+    if (stage.id === "findings")
+      return <Findings project={project} sheet={sheet.id} onSave={saveData} />;
     return <div className="placeholder">'{stage.label} › {sheet.label}' 화면은 준비중입니다.</div>;
   })();
 

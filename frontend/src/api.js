@@ -49,6 +49,11 @@ export const api = {
   uploadSheet: (body) => j("POST", "/api/upload/sheet", body),
   damodaranCrp: (country) => j("GET", `/api/damodaran/crp${country ? `?country=${encodeURIComponent(country)}` : ""}`),
   relativeValue: (body) => j("POST", "/api/relative/value", body),
+  // 감사인 트랙: 외부평가의견서 → 유의적 가정 후보(고정양식 앵커, 확정은 감사인).
+  opinionExtract: (body) => j("POST", "/api/opinion/extract", body),
+  // 거시 시계열: 복붙(항상) 또는 ECOS(키 있을 때). base_date 주면 look-ahead 가드.
+  macroSeries: (body, ecosKey) =>
+    j("POST", "/api/macro/series", body, ecosKey ? { "X-Ecos-Key": ecosKey } : {}),
   projects: {
     list: () => j("GET", "/api/projects"),
     create: (body) => j("POST", "/api/projects", body),
@@ -71,6 +76,9 @@ export const api = {
       return r.blob();
     },
     import: (xlsx_b64) => j("POST", "/api/xlsx/import", { xlsx_b64 }),
+    // 기준선 2방식: 저장된 프로젝트에서 재생성(권장 — 왕복 루프가 닫힘) 또는 원본 업로드.
+    diffVsProject: (project_id, after_b64) =>
+      j("POST", "/api/xlsx/diff", { project_id, after_b64 }),
     diff: (before_b64, after_b64) =>
       j("POST", "/api/xlsx/diff", { before_b64, after_b64 }),
   },

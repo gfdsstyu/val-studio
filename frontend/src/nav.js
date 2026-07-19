@@ -14,6 +14,7 @@ export const NAV = {
       { id: "bs", label: "BS 매핑(NOA/IBD)" },
     ]},
     { id: "assumptions", label: "2. 가정", sheets: [
+      { id: "macro", label: "거시" },
       { id: "revenue", label: "매출(트리)" },
       { id: "costs", label: "원가·판관비" },
       { id: "fa", label: "FA" },
@@ -30,28 +31,28 @@ export const NAV = {
     ]},
     { id: "output", label: "5. 산출물", sheets: [
       { id: "report", label: "리포트" },
-      { id: "export", label: "xlsx Export" },
-      { id: "diff", label: "왕복 diff" },
+      { id: "export", label: "xlsx 내보내기·되읽기" },
+      { id: "diff", label: "엑셀 왕복 diff" },
     ]},
   ],
   auditor: [
     { id: "cover", label: "개요",
       sheets: [{ id: "summary", label: "검증 현황" }] },
     { id: "ingest", label: "1. 의견서 인제스트", sheets: [
-      { id: "file", label: "파일", soon: true },
-      { id: "extracted", label: "추출 가정 확인", soon: true },
+      { id: "file", label: "의견서 투입" },
+      { id: "extracted", label: "추출 가정 확인" },
     ]},
     { id: "recalc", label: "2. 독립 재계산", sheets: [
-      { id: "inputs", label: "입력 재구성", soon: true },
-      { id: "result", label: "재계산 vs 주장", soon: true },
+      { id: "inputs", label: "입력 재구성" },
+      { id: "result", label: "재계산 vs 주장" },
     ]},
     { id: "diagnosis", label: "3. 괴리 진단", sheets: [
-      { id: "structural", label: "구조버그 가설", soon: true },
-      { id: "sensitivity", label: "민감도 추적", soon: true },
+      { id: "structural", label: "구조버그 가설" },
+      { id: "sensitivity", label: "민감도 추적" },
     ]},
     { id: "findings", label: "4. 발견사항", sheets: [
-      { id: "list", label: "finding 리스트", soon: true },
-      { id: "narrative", label: "서사 리포트", soon: true },
+      { id: "list", label: "finding 리스트" },
+      { id: "narrative", label: "서사 리포트" },
     ]},
   ],
 };
