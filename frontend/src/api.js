@@ -26,6 +26,8 @@ export const api = {
   assumptionsBuild: (body) => j("POST", "/api/assumptions/build", body),
   assumptionsBuildCosts: (body) => j("POST", "/api/assumptions/costs-build", body),
   assumptionsLease: (body) => j("POST", "/api/assumptions/lease", body),
+  // 성격별 원가 주석표 → 추출(charspan)+드라이버 제안+tie-out+CostLine 초안. 추출=결정론.
+  footnoteCosts: (body) => j("POST", "/api/footnote/costs", body),
   fsClassify: (body) => j("POST", "/api/fs/classify", body),
   briefFromXbrl: (body) => j("POST", "/api/brief/from_xbrl", body),
   validateGeminiKey: (key) =>
@@ -38,6 +40,9 @@ export const api = {
     j("POST", "/api/dart/corp-search", { q, listed_only: !!listedOnly }, { "X-Dart-Key": key }),
   dartFilings: (key, body) =>
     j("POST", "/api/dart/filings", body, { "X-Dart-Key": key }),
+  // 직원현황 → 인원·인당급여 집계 + headcount CostLine(노무비 드라이버 실측 시드).
+  dartEmployee: (key, body) =>
+    j("POST", "/api/dart/employee", body, { "X-Dart-Key": key }),
   priceBeta: (body) => j("POST", "/api/price/beta", body),
   priceMarketcap: (body) => j("POST", "/api/price/marketcap", body),
   priceFx: (body) => j("POST", "/api/price/fx", body),

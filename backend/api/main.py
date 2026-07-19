@@ -486,11 +486,16 @@ async def assumptions_build(request: Request) -> dict:
             out["ebit"] = {"cogs": eb.cogs, "sga": eb.sga,
                            "gross_profit": eb.gross_profit, "ebit": eb.ebit}
         if d.get("asset_classes"):
+            maint = {k: [float(x) for x in v]
+                     for k, v in (d.get("maintenance_capex_by_class") or {}).items()} or None
             fa_res = project_fixed_assets(
                 _asset_classes(d["asset_classes"]),
                 {k: [float(x) for x in v]
-                 for k, v in (d.get("new_capex_by_class") or {}).items()})
-            out["fa"] = {"dep_amort": fa_res.dep_amort, "capex": fa_res.capex}
+                 for k, v in (d.get("new_capex_by_class") or {}).items()},
+                maint,
+                maintenance_depreciates=bool(d.get("maintenance_depreciates", True)))
+            out["fa"] = {"dep_amort": fa_res.dep_amort, "capex": fa_res.capex,
+                         "detail": fa_res.detail}
         if d.get("wc_items"):
             wc_res = project_working_capital(
                 _wc_items(d["wc_items"]),

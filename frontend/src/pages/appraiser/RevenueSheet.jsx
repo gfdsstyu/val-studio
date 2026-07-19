@@ -13,20 +13,24 @@ const fmt = (v) => (v == null || Number.isNaN(v) ? "-" : Math.round(v).toLocaleS
 
 const DEMO_TREE = {
   id: uid(), name: "총매출", mode: "internal", children: [
-    { id: uid(), name: "장비", mode: "growth", base: "1000", growth: "0.10, 0.10, 0.10", children: [] },
-    { id: uid(), name: "소모품", mode: "internal", children: [
-      { id: uid(), name: "RF소모품", mode: "pxq", price: "10, 11, 12", qty: "50, 55, 60", children: [] },
-      { id: uid(), name: "HIFU소모품", mode: "pxq", price: "20, 21, 22", qty: "30, 33, 36", children: [] },
-    ]},
+    // 장비(razor) 판매 = P×Q. 소모품(blade)은 이 장비의 누적 설치base 에 연동.
+    { id: uid(), name: "장비", mode: "pxq", price: "50, 50, 50", qty: "10, 20, 30", children: [] },
+    { id: uid(), name: "소모품", mode: "razor", equipment_new: "10, 20, 30",
+      consumable_per_unit: "3, 3, 3", installed_base0: "0", retirement_rate: "0", children: [] },
   ],
 };
 
-/** 트리 → 서버 페이로드(재귀). 리프 모드별로 price×qty | base+growth. */
+/** 트리 → 서버 페이로드(재귀). 리프 모드별로 price×qty | base+growth | razor(설치base 연동). */
 function toPayload(n) {
   if (n.mode === "internal")
     return { name: n.name, children: n.children.map(toPayload) };
   if (n.mode === "pxq")
     return { name: n.name, price: parseSeries(n.price), qty: parseSeries(n.qty) };
+  if (n.mode === "razor")
+    return { name: n.name, equipment_new: parseSeries(n.equipment_new),
+      consumable_per_unit: parseSeries(n.consumable_per_unit),
+      installed_base0: Number(n.installed_base0) || 0,
+      retirement_rate: Number(n.retirement_rate) || 0 };
   return { name: n.name, base: Number(n.base), growth: parseSeries(n.growth) };
 }
 
@@ -41,7 +45,9 @@ function Node({ node, onChange, onRemove, depth }) {
   const addChild = (mode) =>
     patch({ children: [...node.children, mode === "internal"
       ? { id: uid(), name: "새 그룹", mode: "internal", children: [] }
-      : { id: uid(), name: "새 항목", mode, price: "0", qty: "0", base: "0", growth: "0", children: [] }] });
+      : { id: uid(), name: "새 항목", mode, price: "0", qty: "0", base: "0", growth: "0",
+          equipment_new: "0", consumable_per_unit: "0", installed_base0: "0",
+          retirement_rate: "0", children: [] }] });
 
   return (
     <div style={{ marginLeft: depth * 16, borderLeft: depth ? "1px solid var(--line)" : "none",
@@ -54,6 +60,7 @@ function Node({ node, onChange, onRemove, depth }) {
           <option value="internal">그룹(자식합계)</option>
           <option value="pxq">리프 P×Q</option>
           <option value="growth">리프 성장률</option>
+          <option value="razor">리프 소모품(장비 설치base 연동)</option>
         </select>
         {node.mode === "pxq" && (
           <>
@@ -71,6 +78,22 @@ function Node({ node, onChange, onRemove, depth }) {
             <span className="muted" style={{ fontSize: 11 }}>×(1+g)</span>
             <input type="text" value={node.growth} onChange={(e) => patch({ growth: e.target.value })}
               placeholder="성장률(연도별)" style={{ width: 120 }} />
+          </>
+        )}
+        {node.mode === "razor" && (
+          <>
+            <span className="muted" style={{ fontSize: 11 }}>장비판매</span>
+            <input type="text" value={node.equipment_new} onChange={(e) => patch({ equipment_new: e.target.value })}
+              placeholder="신규대수(연도별)" style={{ width: 110 }} />
+            <span className="muted" style={{ fontSize: 11 }}>×대당</span>
+            <input type="text" value={node.consumable_per_unit} onChange={(e) => patch({ consumable_per_unit: e.target.value })}
+              placeholder="대당 소모품매출(연도별)" style={{ width: 130 }} />
+            <span className="muted" style={{ fontSize: 11 }}>기초base</span>
+            <input type="text" value={node.installed_base0} onChange={(e) => patch({ installed_base0: e.target.value })}
+              placeholder="0" style={{ width: 54 }} />
+            <span className="muted" style={{ fontSize: 11 }}>폐기율</span>
+            <input type="text" value={node.retirement_rate} onChange={(e) => patch({ retirement_rate: e.target.value })}
+              placeholder="0" style={{ width: 44 }} />
           </>
         )}
         {depth > 0 && <button className="ghost xs" title="삭제" onClick={() => onRemove()}>✕</button>}
@@ -126,7 +149,8 @@ export default function RevenueSheet({ project, onSave }) {
           </div>
           <div className="muted" style={{ margin: "8px 0" }}>
             리프의 단가/수량/성장률은 <b>연도별 콤마 구분</b>(길이=추정연수). 내부 그룹은
-            자식 합계로 자동 검증됩니다.
+            자식 합계로 자동 검증됩니다. <b>소모품 리프</b>는 장비 누적 설치base(폐기율 차감)에
+            연동돼 razor-and-blades 동학을 반영합니다.
           </div>
           <Node node={tree} depth={0} onChange={setTree} onRemove={() => {}} />
           <button className="primary" onClick={build} disabled={busy} style={{ marginTop: 12 }}>

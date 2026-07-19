@@ -9,7 +9,8 @@ const parseSeries = (s) => String(s).split(/[\s,]+/).filter(Boolean).map(Number)
 const fmt = (v) => (v == null || Number.isNaN(v) ? "-" : Math.round(v).toLocaleString("ko-KR"));
 
 const DEMO = [
-  { name: "설비", opening_net_book: "300", remaining_life: "3", useful_life: "10", capex: "50, 50, 50" },
+  { name: "설비", opening_net_book: "300", remaining_life: "3", useful_life: "10",
+    capex: "50, 50, 50", maintenance: "20, 20, 20" },
 ];
 
 export default function FaSheet({ project, onSave }) {
@@ -39,17 +40,22 @@ export default function FaSheet({ project, onSave }) {
     const next = rows.slice(); next[i] = { ...next[i], [k]: e.target.value }; setRows(next);
   };
   const addRow = () => setRows([...rows, { name: "", opening_net_book: "0",
-    remaining_life: "5", useful_life: "10", capex: "0" }]);
+    remaining_life: "5", useful_life: "10", capex: "0", maintenance: "0" }]);
   const rmRow = (i) => setRows(rows.filter((_, j) => j !== i));
 
   const build = async () => {
     setBusy(true); setErr(null); setRes(null);
     try {
+      // 유지보수 CAPEX 있으면 분리 전달(신규=성장 빈티지, 유지보수=자본유지). detail 반환.
+      const maint = Object.fromEntries(rows
+        .filter((r) => (r.maintenance || "").trim())
+        .map((r) => [r.name || "자산", parseSeries(r.maintenance)]));
       const d = await api.assumptionsBuild({
         asset_classes: rows.map((r) => ({ name: r.name || "자산",
           opening_net_book: Number(r.opening_net_book),
           remaining_life: Number(r.remaining_life), useful_life: Number(r.useful_life) })),
         new_capex_by_class: Object.fromEntries(rows.map((r) => [r.name || "자산", parseSeries(r.capex)])),
+        maintenance_capex_by_class: Object.keys(maint).length ? maint : undefined,
       });
       setRes(d.fa);
       onSave?.({ fa_input: rows, fa_built: d.fa });
@@ -79,18 +85,20 @@ export default function FaSheet({ project, onSave }) {
         <h2>감가상각·CAPEX <span className="muted">— 기존자산 상각 + 신규 CAPEX 빈티지</span></h2>
         <div className="pad">
           <div className="muted" style={{ marginBottom: 8 }}>
-            신규 CAPEX 는 연도별 콤마 구분(길이=추정연수). 내용연수는 정액법 기준.</div>
+            CAPEX 는 연도별 콤마 구분(길이=추정연수). 신규(성장)=새 빈티지 상각,
+            유지보수=자본유지(terminal 년 ≈ D&A 정규화). 내용연수는 정액법 기준.</div>
           <div style={{ overflowX: "auto" }}>
             <table>
               <thead><tr><th>자산군</th><th>기초순장부</th><th>잔여내용연수</th>
-                <th>신규내용연수</th><th>신규 CAPEX(연도별)</th><th></th></tr></thead>
+                <th>신규내용연수</th><th>신규(성장) CAPEX</th><th>유지보수 CAPEX</th><th></th></tr></thead>
               <tbody>{rows.map((r, i) => (
                 <tr key={i}>
                   <td><input type="text" value={r.name} onChange={setRow(i, "name")} style={{ width: 80 }} /></td>
                   <td><input type="text" value={r.opening_net_book} onChange={setRow(i, "opening_net_book")} style={{ width: 72 }} /></td>
                   <td><input type="text" value={r.remaining_life} onChange={setRow(i, "remaining_life")} style={{ width: 52 }} /></td>
                   <td><input type="text" value={r.useful_life} onChange={setRow(i, "useful_life")} style={{ width: 52 }} /></td>
-                  <td><input type="text" value={r.capex} onChange={setRow(i, "capex")} style={{ width: 120 }} /></td>
+                  <td><input type="text" value={r.capex} onChange={setRow(i, "capex")} style={{ width: 110 }} /></td>
+                  <td><input type="text" value={r.maintenance || ""} onChange={setRow(i, "maintenance")} style={{ width: 110 }} placeholder="선택" /></td>
                   <td><button className="ghost xs" onClick={() => rmRow(i)}>✕</button></td>
                 </tr>))}</tbody>
             </table>
@@ -110,8 +118,17 @@ export default function FaSheet({ project, onSave }) {
             <tbody>
               <tr><th style={{ textAlign: "left" }}>감가상각비 D&A</th>
                 {res.dep_amort.map((v, i) => <td key={i}>{fmt(v)}</td>)}</tr>
-              <tr><th style={{ textAlign: "left" }}>CAPEX</th>
+              {res.detail?.maint_dep?.some((v) => v) && (
+                <tr><td style={{ textAlign: "left", paddingLeft: 12 }} className="muted">↳ 유지보수분 상각</td>
+                  {res.detail.maint_dep.map((v, i) => <td key={i} className="muted">{fmt(v)}</td>)}</tr>)}
+              <tr><th style={{ textAlign: "left" }}>CAPEX 계</th>
                 {res.capex.map((v, i) => <td key={i}>{fmt(v)}</td>)}</tr>
+              {res.detail?.new_capex && (
+                <tr><td style={{ textAlign: "left", paddingLeft: 12 }} className="muted">↳ 신규(성장)</td>
+                  {res.detail.new_capex.map((v, i) => <td key={i} className="muted">{fmt(v)}</td>)}</tr>)}
+              {res.detail?.maintenance_capex?.some((v) => v) && (
+                <tr><td style={{ textAlign: "left", paddingLeft: 12 }} className="muted">↳ 유지보수</td>
+                  {res.detail.maintenance_capex.map((v, i) => <td key={i} className="muted">{fmt(v)}</td>)}</tr>)}
             </tbody>
           </table>
           <button className="primary" onClick={pushToDcf} style={{ marginTop: 12 }}>

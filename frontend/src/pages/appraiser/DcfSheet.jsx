@@ -16,7 +16,7 @@ const DEMO = {
   capex: "5000, 5000, 5000, 5000, 5000",
   delta_nwc_cash_adj: "0, 0, 0, 0, 0",
   non_operating_assets: "20000", net_debt: "10000", non_controlling_interest: "0",
-  shares_outstanding: "10000000", claimed_per_share: "",
+  shares_outstanding: "10000000", claimed_per_share: "", terminal_wc_ratio: "",
 };
 
 const FIELD_LABELS = [
@@ -106,6 +106,8 @@ export default function DcfSheet({ project, onSave }) {
     };
     for (const [k] of FIELD_LABELS) body[k] = grid[k].map(Number);
     if (form.claimed_per_share.trim()) body.claimed_per_share = Number(form.claimed_per_share);
+    // 터미널 정규화 WC 재조정(정본): 있으면 터미널 ΔWC=추정말매출×g×비율(과대계상 방어).
+    if (form.terminal_wc_ratio?.trim()) body.terminal_wc_ratio = Number(form.terminal_wc_ratio);
     try {
       const d = await api.dcf(body);
       setRes(d);
@@ -137,6 +139,12 @@ export default function DcfSheet({ project, onSave }) {
               )}</div>
             <div className="row"><label>영구성장률 PGR (소수)</label>
               <input type="text" value={form.terminal_growth} onChange={set("terminal_growth")} /></div>
+            <div className="row"><label>터미널 운전자본비율 (선택 — 정규화 WC/매출)</label>
+              <input type="text" value={form.terminal_wc_ratio} onChange={set("terminal_wc_ratio")}
+                placeholder="예 0.30 (비우면 ΔWC=0)" />
+              <div className="muted" style={{ fontSize: "0.8rem", marginTop: 2 }}>
+                터미널 ΔWC = 추정말매출 × PGR × 이 비율 (정본 과대계상 방어). 비우면 g&gt;2%서 F1 경고.
+              </div></div>
           </div>
           <label style={{ marginTop: 6 }}>추정 시계열 (백만원, 연도=열)</label>
           <div style={{ overflowX: "auto" }}>

@@ -131,6 +131,20 @@ def test_dcf_maintenance_lowers_fcff_vs_none():
     assert withm["per_share"] < base["per_share"]
 
 
+def test_assumptions_build_maintenance_split():
+    # /api/assumptions/build fa 분기가 유지보수 CAPEX 분리 + detail 반환(FaSheet 소비)
+    r = C.post("/api/assumptions/build", json={
+        "asset_classes": [{"name": "설비", "opening_net_book": 300,
+                           "remaining_life": 3, "useful_life": 10}],
+        "new_capex_by_class": {"설비": [50, 50, 50]},
+        "maintenance_capex_by_class": {"설비": [20, 20, 20]}})
+    assert r.status_code == 200, r.text
+    fa = r.json()["fa"]
+    assert fa["capex"][0] == 70.0                        # 신규50 + 유지20
+    assert fa["detail"]["maintenance_capex"][0] == 20.0
+    assert fa["detail"]["new_capex"][0] == 50.0
+
+
 def test_dcf_endpoint_terminal_wc_ratio_passthrough():
     # /api/dcf 는 _parse_input 필드 필터로 terminal_wc_ratio 자동 통과
     body = {
