@@ -66,7 +66,15 @@ export default function DiscountSheet({ project, onSave }) {
   const saved = project?.data?.wacc_input;
   const baseDate = project?.setup?.valuation_date;
   const [form, setForm] = useState(saved?.form || DEMO);
-  const [peers, setPeers] = useState(saved?.peers || DEMO_PEERS);
+  // 유사회사 선정(PeerSheet)에서 확정된 peer 를 프리필 — 선정→무부채화 흐름 연결(재입력 방지).
+  // β·D/E 는 비워두고 "주가로 β 계산"(종목코드) 또는 수기 입력.
+  const _selected = project?.data?.peer_selected;
+  const [peers, setPeers] = useState(
+    saved?.peers ||
+    (_selected?.length
+      ? _selected.map((p) => ({ ticker: p.ticker, levered_beta: "", debt_to_equity: "", tax_rate: "0.22" }))
+      : DEMO_PEERS),
+  );
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -172,6 +180,11 @@ export default function DiscountSheet({ project, onSave }) {
           </div>
 
           <h2 style={{ marginTop: 14, fontSize: "0.95rem" }}>유사회사 (레버드 β → 무부채화)</h2>
+          {!saved?.peers && _selected?.length > 0 && (
+            <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
+              유사회사 선정(4-step)에서 확정된 {_selected.length}사를 불러왔습니다 — β·D/E 입력 또는 "주가로 β 계산".
+            </div>
+          )}
           <table>
             <thead><tr><th>회사</th><th>레버드 β</th><th>D/E</th><th>세율</th><th></th></tr></thead>
             <tbody>
