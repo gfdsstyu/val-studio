@@ -5,6 +5,7 @@
   ① 입력 변경(input_changes, safe)  → auto_apply: 자동 반영 + 재계산 (로직만, LLM 불요)
   ② 수식 변경(formula_changes)      → review_queue: LLM 해설 → 평가인 승인 후 반영
   ③ 구조 변경(structure_changes)    → blocked: 차단 + 경고 (템플릿 불일치)
+  ④ 상태·로그(state_changes)        → state: 모델 반영 대상 아님, 감사증적으로 이관·표시
 
 이 모듈은 **분류만** 한다(순수 diff 로직, calc_core 미의존). 재계산은 API가 safe 일 때
 import→run 으로 수행. 역할 3분할: 자동반영은 결정론, 수식변경 채택은 평가인 판단.
@@ -29,6 +30,7 @@ class ApplyPlan:
     auto_apply: list[dict] = field(default_factory=list)     # ① 자동 반영(입력)
     review_queue: list[dict] = field(default_factory=list)   # ② 승인 대기(수식)
     blocked: list[dict] = field(default_factory=list)        # ③ 차단(구조)
+    state: list[dict] = field(default_factory=list)          # ④ 상태·로그(증적)
     row_warnings: list[str] = field(default_factory=list)    # 외딴 편집 감지
     summary_markdown: str = ""
 
@@ -38,10 +40,12 @@ class ApplyPlan:
             "auto_apply": self.auto_apply,
             "review_queue": self.review_queue,
             "blocked": self.blocked,
+            "state": self.state,
             "row_warnings": self.row_warnings,
             "counts": {"auto_apply": len(self.auto_apply),
                        "review_queue": len(self.review_queue),
-                       "blocked": len(self.blocked)},
+                       "blocked": len(self.blocked),
+                       "state": len(self.state)},
             "summary_markdown": self.summary_markdown,
         }
 
@@ -60,6 +64,7 @@ def build_apply_plan(diff: WorkbookDiff) -> ApplyPlan:
         auto_apply=[_ser(ch) for ch in diff.input_changes],
         review_queue=[_ser(ch) for ch in diff.formula_changes],
         blocked=blocked,
+        state=[_ser(ch) for ch in diff.state_changes],
         row_warnings=list(diff.row_uniformity_warnings),
         summary_markdown=diff.to_markdown(),
     )

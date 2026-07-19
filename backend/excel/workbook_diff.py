@@ -6,6 +6,9 @@
   ② 수식 변경  — 수식 문자열 자체가 바뀜(모델 로직 변경). ⚠️ 리뷰 필요.
   ③ 구조 변경  — 시트/셀 추가·삭제, 앵커(고정 입력셀) 이동. 🔴 템플릿 불일치 위험.
 
+  ④ 상태 시트  — `_VS_STATE`(스킬 상태 규약)·`Claude Log`(Claude for Excel 세션 로깅).
+     모델 로직이 아니라 **감사증적**이라 위 3버킷과 층위가 다르다. 별도 분류.
+
 추가 검사(공식 anthropics xlsx 스킬 채록): "행 중간의 외딴 수식 편집(lone edited
 cell mid-row)이 가장 흔한 조용한 오류" → 행 내 수식 균일성 검사(R1C1 정규화 후
 같은 행의 연속 수식 셀이 동일 패턴인지).
@@ -19,6 +22,17 @@ import re
 from dataclasses import dataclass, field
 
 _REF = re.compile(r"(\$?)([A-Z]{1,3})(\$?)([0-9]{1,7})")
+
+# 상태·로그 시트(모델 로직 아님 — 감사증적). 스킬 워크북 ⇄ 웹 왕복의 전제:
+# 이 시트들이 구조변경으로 잡히면 병용 시 자동반영이 영구 차단된다(마찰 1호).
+#   _VS_STATE  : excel-valuation-workbook 스킬의 워크북=상태 규약(SKILL.md 1.7)
+#   Claude Log : Claude for Excel 세션 로깅이 턴별 작업을 기록하는 탭
+STATE_SHEETS = ("vsstate", "claudelog")
+
+
+def is_state_sheet(name: str) -> bool:
+    """상태·로그 시트인가(공백·언더스코어·대소문자 무시 비교)."""
+    return name.replace("_", "").replace(" ", "").lower() in STATE_SHEETS
 
 
 def _col_num(col: str) -> int:
@@ -69,11 +83,16 @@ class WorkbookDiff:
     input_changes: list[CellChange] = field(default_factory=list)     # ① 정상 경로
     formula_changes: list[CellChange] = field(default_factory=list)   # ② 리뷰 필요
     structure_changes: list[CellChange] = field(default_factory=list) # ③ 위험
+    state_changes: list[CellChange] = field(default_factory=list)     # ④ 상태·로그(증적)
     row_uniformity_warnings: list[str] = field(default_factory=list)
 
     @property
     def safe(self) -> bool:
-        """입력 변경만 있는가(자동 재계산해도 되는가)."""
+        """입력 변경만 있는가(자동 재계산해도 되는가).
+
+        ④ 상태·로그 시트 변경은 판정에서 제외 — 모델 로직이 아니라 감사증적이라
+        스킬 워크북을 왕복시켜도 자동반영이 막히지 않아야 한다.
+        """
         return not (self.sheets_added or self.sheets_removed
                     or self.formula_changes or self.structure_changes)
 
@@ -84,7 +103,8 @@ class WorkbookDiff:
             lines.append(f"- 시트: +{self.sheets_added} −{self.sheets_removed}")
         for title, changes in [("① 입력 변경(정상)", self.input_changes),
                                ("② 수식 변경(리뷰)", self.formula_changes),
-                               ("③ 구조 변경(위험)", self.structure_changes)]:
+                               ("③ 구조 변경(위험)", self.structure_changes),
+                               ("④ 상태·로그(증적)", self.state_changes)]:
             if changes:
                 lines.append(f"### {title} — {len(changes)}건")
                 for ch in changes[:30]:
@@ -117,13 +137,30 @@ def diff_workbooks(
     파일에서 그 자리에 그대로 있는지 검사(이동/삭제 = 구조 변경, 최우선 경고).
     """
     d = WorkbookDiff()
-    d.sheets_added = sorted(set(new) - set(old))
-    d.sheets_removed = sorted(set(old) - set(new))
+    # 상태·로그 시트는 시트 추가/삭제조차 구조변경이 아니다 — ④로 뺀다.
+    for s in sorted(set(new) - set(old)):
+        if is_state_sheet(s):
+            d.state_changes.append(
+                CellChange(s, "-", "sheet_added", "(없음)", "(새 상태·로그 시트)"))
+        else:
+            d.sheets_added.append(s)
+    for s in sorted(set(old) - set(new)):
+        if is_state_sheet(s):
+            d.state_changes.append(
+                CellChange(s, "-", "sheet_removed", "(상태·로그 시트)", "(삭제됨)"))
+        else:
+            d.sheets_removed.append(s)
 
     for sheet in sorted(set(old) & set(new)):
         o, n = old[sheet], new[sheet]
+        state = is_state_sheet(sheet)
         for ref in sorted(set(o) | set(n), key=lambda r: (_split_ref(r)[1], _split_ref(r)[0])):
             oc, nc = o.get(ref), n.get(ref)
+            if state:
+                if _fmt(oc) != _fmt(nc):
+                    d.state_changes.append(
+                        CellChange(sheet, ref, "state", _fmt(oc), _fmt(nc)))
+                continue
             if oc is None or nc is None:
                 # 빈칸↔값 전이: 둘 다 수식 아니면 입력 취급, 수식 관여 시 구조
                 gone, came = _fmt(oc), _fmt(nc)
@@ -169,6 +206,8 @@ def check_formula_hardcodes(wb: dict[str, dict]) -> list[str]:
     """
     warnings: list[str] = []
     for sheet, cells in wb.items():
+        if is_state_sheet(sheet):
+            continue                       # 상태·로그 시트는 모델 로직 아님
         for ref, c in cells.items():
             if not c.formula:
                 continue
@@ -191,6 +230,8 @@ def check_row_uniformity(wb: dict[str, dict], *, min_run: int = 3) -> list[str]:
     """
     warnings: list[str] = []
     for sheet, cells in wb.items():
+        if is_state_sheet(sheet):
+            continue                       # 상태·로그 시트는 모델 로직 아님
         rows: dict[int, list[tuple[int, str, str]]] = {}
         for ref, c in cells.items():
             if not c.formula:
