@@ -39,6 +39,7 @@ from ingest.macro_client import (  # noqa: E402
 from ingest.parsers.pdf import confidence_from_garble, pdftotext_layout  # noqa: E402
 from ingest.profiles.opinion_template import extract_opinion  # noqa: E402
 from ingest.validators import ValidationReport  # noqa: E402
+from report import lint_report  # noqa: E402
 from excel.workbook_diff import diff_workbooks  # noqa: E402
 from calc_core import fa as _fa, wc as _wc  # noqa: E402
 from calc_core.checks import audit_dcf, diagnose_dcf_gap  # noqa: E402
@@ -984,6 +985,29 @@ def _cells_to_grid(cells: dict) -> list[list]:
     for row, col, val in parsed:
         grid[row - 1][col - 1] = val
     return grid
+
+
+@app.post("/api/report/lint")
+async def report_lint(request: Request) -> dict:
+    """{"text"?, "notes"?} → 서사 표현 규칙 위반(WARN) 목록.
+
+    숫자에는 게이트가 여럿인데 텍스트 산출물에는 없던 구멍을 메운다. 검사 대상은
+    ① 근거 없는 단정(감사 trail 없이 결론 확정) ② 순환설명 ③ 무설명 상투어
+    ④ 뭉뚱그리기 ⑤ Driver/Outlook/Action 슬롯 공란.
+
+    **LLM 산출물 전용이 아니다** — 사람이 쓴 조서에도 같은 규범이 적용된다.
+    전부 WARN: 표현이 나빠도 계산이 무효는 아니므로 진행을 막지 않고 표면화만 한다.
+    """
+    d = await request.json()
+    rep = lint_report(d.get("text") or "", notes=d.get("notes") or {},
+                      where=d.get("where") or "리포트")
+    warns = [f for f in rep.findings if f.severity.value != "pass"]
+    return {
+        "ok": not warns,
+        "count": len(warns),
+        "findings": [{"rule": f.rule, "severity": f.severity.value,
+                      "message": f.message, "detail": f.detail} for f in warns],
+    }
 
 
 # ── 거시 가정 (2.가정 › 거시) ─────────────────────────────────────────────

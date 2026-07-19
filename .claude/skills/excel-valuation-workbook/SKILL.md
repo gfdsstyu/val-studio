@@ -95,7 +95,7 @@ W4/W5 시트는 살아있는 수식: Capex_Dep(기말=기초+CAPEX−상각·정
 | **W6 DCF** | 스파인 입력셀→Fcst 계 참조 승격(`promote.py`) + `dcf.py` 재계산 | **승격 tie-out(per_share 불변)**·워크북 vs 엔진 rel_tol 1e-6·audit 전규칙·gap_diagnosis | engine_spec·검증_클래시스 |
 | **W7 시나리오** | `scenario.py`(구성=판단) → Scenario 시트(가중 SUMPRODUCT·합=1 게이트 살아있는 수식) | 가중치 완전일치·합=1 | msvalue_리포트예시 부록F |
 | **W8 민감도** | `sensitivity.py`로 WACC×PGR 5×5 살아있는 수식 그리드(셀마다 독립 DCF 재계산) | 워크북 중심 == 엔진 3×3 중심 == base·(설치 시)recalc 게이트 | 앤트로픽_금융스킬_벤치마크 §1 |
-| **W9 리포트(선택)** | 주요가정 표·차이 서사 | audit findings 누락 없이 반영 | msvalue_리포트예시·장표_작성법 |
+| **W9 리포트(선택)** | 주요가정 표·차이 서사 | audit findings 누락 없이 반영 · **`lint_report.py` 표현 가드**(근거 없는 단정·순환설명·무설명·뭉뚱그리기·Driver/Outlook/Action 공란) | msvalue_리포트예시·장표_작성법·앤트로픽_금융스킬_벤치마크 §4 |
 
 **게이트 공통**: `앤트로픽_금융스킬_벤치마크.md §2`(audit-xls — BS부터·하드코딩 오버라이드·DCF 버그 5종).
 
@@ -158,6 +158,10 @@ echo '{...DcfSpineInput...}' | python scripts/sensitivity.py --emit-cells
 
 # 감사인 트랙 — 독립 재계산 + 주장값 대조
 python scripts/audit.py inputs.json <주장주당가치>
+
+# W9 서사 표현 가드 — 조서·리포트 텍스트의 결정론 린터(전부 WARN, 차단 아님)
+echo '{"text":"...","notes":{"gap":{"driver":"...","action":"..."}}}' | python scripts/lint_report.py
+python scripts/lint_report.py --text "본 건은 분식입니다."
 
 # 지식 폴백(단계 바인딩에 없는 비정형 질문만)
 python scripts/book_search.py "영구성장률 몇 퍼센트?"
