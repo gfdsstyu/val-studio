@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { api } from "../../api.js";
 
 /* 감사인 4. 발견사항 — 게이트·진단 결과를 감사조서 항목으로 확정하고 서사로 쓴다.
 
@@ -182,23 +183,62 @@ function buildNarrative(project) {
   return L.join("\n");
 }
 
+/** 표현 가드 결과 — 숫자 게이트와 같은 층위의 텍스트 게이트(전부 WARN, 차단 아님). */
+function LintPanel({ lint }) {
+  if (!lint) return null;
+  if (lint.ok)
+    return (
+      <div className="ok" style={{ marginBottom: 10 }}>
+        ✅ 표현 규칙 위반 없음 — 단정·순환설명·무설명·뭉뚱그리기 및 필수 슬롯 통과
+      </div>
+    );
+  return (
+    <div className="warn-box" style={{ marginBottom: 10 }}>
+      <b>표현 규칙 위반 {lint.count}건</b>
+      <ul>
+        {lint.findings.map((f, i) => (
+          <li key={i}>
+            {f.message}
+            {f.detail?.context && <> <code>…{f.detail.context}…</code></>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function NarrativeSheet({ project }) {
   const [copied, setCopied] = useState(false);
+  const [lint, setLint] = useState(null);
   const md = buildNarrative(project);
+  const notes = project?.data?.audit_finding_notes || {};
+
+  // 조서가 바뀔 때마다 자동 린트 — 별도 버튼을 누르게 하면 아무도 안 누른다.
+  useEffect(() => {
+    let alive = true;
+    api.reportLint({ text: md, notes, where: "조서" })
+      .then((d) => { if (alive) setLint(d); })
+      .catch(() => { if (alive) setLint(null); });
+    return () => { alive = false; };
+  }, [md]);                       // notes 는 md 에 반영되므로 md 변화로 충분
+
   const copy = () => {
     navigator.clipboard?.writeText(md).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     });
   };
+
   return (
     <div className="card">
       <h2>서사 리포트 <span className="muted">— 조서 초안(variance 서사 규격)</span></h2>
       <div className="pad">
         <div className="muted" style={{ marginBottom: 10 }}>
           "예상보다 높음"(순환설명)·"timing"(무설명)·"기타 소액 항목"(뭉뚱그리기)은
-          금지 표현입니다. Driver 는 원인, Action 은 조치를 구체적으로 적으세요.
+          금지 표현입니다. 근거 없는 단정("분식입니다")도 감사 위험이므로
+          "가능성/확인 필요/권고"로 표현하세요 — 아래 가드가 결정론으로 검사합니다.
         </div>
+        <LintPanel lint={lint} />
         <button className="primary" onClick={copy}>{copied ? "복사됨 ✓" : "마크다운 복사"}</button>
         <pre style={{ marginTop: 12, whiteSpace: "pre-wrap" }}>{md}</pre>
       </div>

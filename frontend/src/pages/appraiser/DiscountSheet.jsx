@@ -1,10 +1,47 @@
 import React, { useEffect, useState } from "react";
 import { api, fileToBase64 } from "../../api.js";
+import { loadKey } from "../Byok.jsx";
 
 /* 3.할인율 > WACC 빌드업 — 커넥터 어셈블리(/api/wacc/assemble) 소비.
    Rf·MRP·Kd 는 복붙(문자열) → 서버가 range 게이트. peers 무부채화·Kroll size·
    β/MRP 시장정합까지 서버 결정론. 여기선 폼이 JSON 만들고 응답(blocked/findings/
    provenance/WACC)을 그린다. 계산 로직 0줄. 확정 WACC 는 프로젝트에 저장돼 DCF 로 흐른다. */
+
+/** Rf 를 한국은행 ECOS(국고채 10년)에서 조회해 **제안**한다.
+
+    자동 주입이 아니라 프리필이다 — 확정은 평가인 몫이고, 채택 시 조회 기간을
+    provenance 로 남겨 F3 게이트·가정 대장이 근거를 갖는다(역할 3분할).
+    ECOS 키가 없으면 버튼을 숨긴다(복붙 경로가 기본). */
+function RfFromEcos({ baseDate, onPick }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const key = loadKey("ecos");
+  if (!key) return null;
+
+  const fetchRf = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const end = baseDate || new Date().toISOString().slice(0, 10);
+      const d = await api.macroSeries(
+        { indicator: "risk_free_10y", start: end.slice(0, 4), end,
+          base_date: baseDate || undefined }, key);
+      const last = d.observations?.[d.observations.length - 1];
+      if (!last) { setErr("가드 통과 관측치 없음 — 복붙을 쓰세요."); return; }
+      onPick(`${(last.value * 100).toFixed(2)}%`,
+             { period: last.period, source: last.source || "ECOS", indicator: d.indicator });
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <>
+      <button className="ghost" disabled={busy} onClick={fetchRf}
+        title="한국은행 ECOS 국고채 10년 — 조회 후 평가인이 확정">
+        {busy ? "조회 중…" : "ECOS 국고채 조회"}
+      </button>
+      {err && <span className="err" style={{ fontSize: 12 }}>{err}</span>}
+    </>
+  );
+}
 
 const DEMO = {
   risk_free: "3.45%", mrp: "8",
@@ -81,6 +118,7 @@ export default function DiscountSheet({ project, onSave }) {
   const [country, setCountry] = useState(saved?.country || "한국");
   const [countries, setCountries] = useState([]);
   const [crp, setCrp] = useState(null);
+  const [rfMeta, setRfMeta] = useState(saved?.rf_meta || null);   // ECOS Rf provenance
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
@@ -144,7 +182,7 @@ export default function DiscountSheet({ project, onSave }) {
       setRes(d);
       if (!d.blocked) {
         onSave?.({
-          wacc_input: { form, peers, country },
+          wacc_input: { form, peers, country, rf_meta: rfMeta },
           wacc_result: {
             wacc: d.wacc, cost_of_equity: d.cost_of_equity,
             relevered_beta: d.relevered_beta,
@@ -174,7 +212,15 @@ export default function DiscountSheet({ project, onSave }) {
 
           <div className="grid2">
             <div className="row"><label>무위험이자율 Rf (복붙, 예 3.45%)</label>
-              <input type="text" value={form.risk_free} onChange={set("risk_free")} placeholder="3.45%" /></div>
+              <input type="text" value={form.risk_free} onChange={set("risk_free")} placeholder="3.45%" />
+              <RfFromEcos baseDate={baseDate}
+                onPick={(v, meta) => { setForm({ ...form, risk_free: v }); setRfMeta(meta); }} />
+              {rfMeta && (
+                <span className="muted" style={{ fontSize: 12 }}>
+                  ↳ ECOS 국고채 10년 {rfMeta.period} 조회값 — 평가인 확정 필요
+                </span>
+              )}
+            </div>
             <div className="row"><label>시장위험프리미엄 MRP (복붙, 예 8)</label>
               <input type="text" value={form.mrp} onChange={set("mrp")} placeholder="8 또는 8%" /></div>
           </div>

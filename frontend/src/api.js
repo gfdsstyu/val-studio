@@ -54,6 +54,8 @@ export const api = {
   // 거시 시계열: 복붙(항상) 또는 ECOS(키 있을 때). base_date 주면 look-ahead 가드.
   macroSeries: (body, ecosKey) =>
     j("POST", "/api/macro/series", body, ecosKey ? { "X-Ecos-Key": ecosKey } : {}),
+  // 서사 표현 가드: 단정·순환설명·무설명·뭉뚱그리기 + 필수 슬롯 공란(전부 WARN).
+  reportLint: (body) => j("POST", "/api/report/lint", body),
   projects: {
     list: () => j("GET", "/api/projects"),
     create: (body) => j("POST", "/api/projects", body),
