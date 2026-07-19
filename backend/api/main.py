@@ -32,6 +32,13 @@ from calc_core import DcfSpineInput, run  # noqa: E402
 from excel import build_dcf_sheet, import_dcf_model, read_workbook  # noqa: E402
 from excel.apply_policy import build_apply_plan  # noqa: E402
 from excel.dcf_import import DcfModelImportError  # noqa: E402
+from excel.vs_state import parse_vs_state  # noqa: E402
+from ingest.macro_client import (  # noqa: E402
+    CPI_INFLATION, EcosProvider, check_macro_vintage, parse_paste_table, usable_as_of,
+)
+from ingest.parsers.pdf import confidence_from_garble, pdftotext_layout  # noqa: E402
+from ingest.profiles.opinion_template import extract_opinion  # noqa: E402
+from ingest.validators import ValidationReport  # noqa: E402
 from excel.workbook_diff import diff_workbooks  # noqa: E402
 from calc_core import fa as _fa, wc as _wc  # noqa: E402
 from calc_core.checks import audit_dcf, diagnose_dcf_gap  # noqa: E402
@@ -133,6 +140,34 @@ def _write_temp_xlsx(data: bytes) -> str:
     return path
 
 
+def _baseline_from_project(pid: str) -> str:
+    """저장된 프로젝트의 dcf_input → export 재생성(before 기준선) 임시파일 경로.
+
+    왕복 루프를 닫는 핵심: 평가인이 before 원본 파일을 손수 보관·업로드하지 않아도
+    되도록, 서버가 로컬 모델에서 기준선을 **결정론적으로 재생성**한다(export 는
+    입력의 순수 함수라 같은 입력이면 같은 워크북).
+    """
+    proj = _load_project(pid)
+    saved = (proj.get("data") or {}).get("dcf_input")
+    if not saved:
+        raise HTTPException(422,
+                            "프로젝트에 저장된 DCF 입력이 없습니다 — 먼저 4.밸류에이션 › DCF 에서 계산·저장하세요.")
+    inp = _parse_input(saved)
+    path = _write_temp_xlsx(b"")
+    build_dcf_sheet(inp, run(inp)).save(path)
+    return path
+
+
+def _skill_state_payload(path: str) -> dict | None:
+    """워크북의 `_VS_STATE`·`Claude Log` → 이관용 dict(없으면 None).
+
+    Claude for Excel 스킬 세션의 증적(단계·게이트·가정 대장·작업 로그)을 웹
+    프로젝트로 넘긴다. 없으면 조용히 None — 웹 단독 워크북도 정상 경로.
+    """
+    st = parse_vs_state(read_workbook(path))
+    return st.to_dict() if st.present else None
+
+
 @app.post("/api/xlsx/export")
 async def xlsx_export(request: Request) -> Response:
     """DcfSpineInput JSON → 수식 live .xlsx 다운로드(감사 추적·재편집 가능)."""
@@ -162,37 +197,54 @@ async def xlsx_import(request: Request) -> dict:
         raise HTTPException(422, "xlsx_b64 필요")
     path = _write_temp_xlsx(_decode_xlsx(data["xlsx_b64"]))
     try:
-        inp = import_dcf_model(path)
-    except DcfModelImportError as e:
-        raise HTTPException(422, f"DCF 모델 import 실패(표준 레이아웃 아님?): {e}") from e
+        state = _skill_state_payload(path)          # 스킬 증적은 import 실패해도 살린다
+        try:
+            inp = import_dcf_model(path)
+        except DcfModelImportError as e:
+            raise HTTPException(422, f"DCF 모델 import 실패(표준 레이아웃 아님?): {e}") from e
     finally:
         os.unlink(path)
-    return {"input": {f: getattr(inp, f) for f in _FIELDS}, "result": _result_payload(inp)}
+    return {"input": {f: getattr(inp, f) for f in _FIELDS},
+            "result": _result_payload(inp), "skill_state": state}
 
 
 @app.post("/api/xlsx/diff")
 async def xlsx_diff(request: Request) -> dict:
-    """{"before_b64", "after_b64"} → 3버킷 diff + apply-정책 계획.
+    """편집본 → 4버킷 diff + apply-정책 계획.
 
-    safe(입력 변경만)면 after 를 import·재계산해 new_result 동봉(자동 반영 가능).
-    수식/구조 변경은 review_queue/blocked 로 표면화(평가인 승인·차단).
+    before 지정 2방식(택1):
+      - `project_id`: **저장된 로컬 모델에서 기준선 재생성**(권장 — 왕복 루프가 닫힘,
+        평가인이 원본 파일을 보관·업로드할 필요 없음)
+      - `before_b64`: 원본 파일 직접 업로드(외부 워크북끼리 비교할 때)
+
+    입력 변경이 있으면 safe 여부와 무관하게 after 를 import·재계산해 new_input/
+    new_result 를 동봉한다 — 수식 변경이 섞여도 **입력분만 부분 반영**할 수 있어야
+    하기 때문(수식 변경은 review_queue 에 남아 승인 대기).
     """
     data = await request.json()
-    if "before_b64" not in data or "after_b64" not in data:
-        raise HTTPException(422, "before_b64, after_b64 필요")
-    p_before = _write_temp_xlsx(_decode_xlsx(data["before_b64"]))
+    if "after_b64" not in data:
+        raise HTTPException(422, "after_b64 필요")
+    if "before_b64" in data:
+        p_before = _write_temp_xlsx(_decode_xlsx(data["before_b64"]))
+    elif data.get("project_id"):
+        p_before = _baseline_from_project(str(data["project_id"]))
+    else:
+        raise HTTPException(422, "before_b64 또는 project_id 필요")
     p_after = _write_temp_xlsx(_decode_xlsx(data["after_b64"]))
     try:
         diff = diff_workbooks(read_workbook(p_before), read_workbook(p_after))
         plan = build_apply_plan(diff)
         out = plan.to_dict()
-        if plan.safe:
+        out["baseline"] = "project" if "before_b64" not in data else "upload"
+        out["skill_state"] = _skill_state_payload(p_after)
+        out["new_result"] = out["new_input"] = None
+        if plan.auto_apply or plan.safe:
             try:
                 inp = import_dcf_model(p_after)
                 out["new_result"] = _result_payload(inp)
                 out["new_input"] = {f: getattr(inp, f) for f in _FIELDS}
             except DcfModelImportError:
-                out["new_result"] = None  # 표준 레이아웃 아니면 재계산 생략(diff 만)
+                pass                        # 표준 레이아웃 아니면 재계산 생략(diff 만)
     finally:
         os.unlink(p_before)
         os.unlink(p_after)
@@ -934,6 +986,115 @@ def _cells_to_grid(cells: dict) -> list[list]:
     return grid
 
 
+# ── 거시 가정 (2.가정 › 거시) ─────────────────────────────────────────────
+@app.post("/api/macro/series")
+async def macro_series(request: Request,
+                       x_ecos_key: str | None = Header(None)) -> dict:
+    """거시 시계열 → 연율 시리즈 + vintage 가드 findings.
+
+    두 경로:
+      - `text`(복붙): EIU·전망보고서 '기간 값' 표 → `parse_paste_table`. stdlib, 항상 가능.
+        예측 스냅샷이라 `vintage`(발행일)를 함께 받아 그 시점 전망으로 고정 보존한다.
+      - ECOS(`X-Ecos-Key` + start/end): 한국은행 실적. **개정치만 반환**하므로 예측·
+        최근연도는 복붙 경로가 정본(macro_client EcosProvider docstring 규칙).
+
+    `base_date` 를 주면 look-ahead 가드를 건다 — 평가기준일 이후에 공표된 값은
+    usable 에서 제외(기준일에 알 수 없던 정보로 과거를 평가하지 않는다).
+    """
+    d = await request.json()
+    indicator = d.get("indicator") or CPI_INFLATION
+    base_date = d.get("base_date")
+    report = ValidationReport()
+
+    if d.get("text"):
+        series = parse_paste_table(
+            d["text"], indicator,
+            vintage=d.get("vintage") or (base_date or ""),
+            is_forecast_from=d.get("is_forecast_from"),
+            source=d.get("source") or "붙여넣기",
+            report=report,
+        )
+    elif x_ecos_key:
+        try:
+            series = EcosProvider(api_key=x_ecos_key).fetch(
+                indicator, str(d.get("start") or ""), str(d.get("end") or ""))
+        except (ValueError, OSError, urllib.error.URLError) as e:
+            raise HTTPException(422, f"ECOS 조회 실패: {e}") from e
+    else:
+        raise HTTPException(422, "text(복붙) 또는 X-Ecos-Key 헤더 필요")
+
+    findings = list(report.findings)
+    dropped: list[str] = []
+    if base_date:
+        findings.extend(check_macro_vintage(series, base_date))
+        usable = usable_as_of(series, base_date)
+        # 가드에 걸려 빠진 기간을 명시 — 조용히 사라지면 사용자는 전망을 넣었다고
+        # 믿는데 값이 없는 상태가 된다(예: is_forecast_from 미기재 시 미래연도 전량).
+        kept = {o.period for o in usable.observations}
+        dropped = [o.period for o in series.observations if o.period not in kept]
+        series = usable
+
+    obs = [{"period": o.period, "value": o.value, "vintage": o.vintage,
+            "source": o.source, "is_forecast": o.is_forecast}
+           for o in series.observations]
+    # 연도별 대표값(같은 해 복수 관측이면 마지막) — cost_build 의 cpi 연율 리스트용.
+    annual: dict[str, float] = {}
+    for o in series.observations:
+        if o.period[:4].isdigit():
+            annual[o.period[:4]] = o.value
+    return {
+        "indicator": series.indicator, "unit": series.unit,
+        "observations": obs, "annual": annual, "dropped_periods": dropped,
+        "findings": [{"rule": f.rule, "severity": f.severity.value, "message": f.message}
+                     for f in findings],
+    }
+
+
+# ── 감사인 트랙 ────────────────────────────────────────────────────────────
+@app.post("/api/opinion/extract")
+async def opinion_extract(request: Request) -> dict:
+    """{"text"} 또는 {"pdf_b64"} → 외부평가의견서 유의적 가정 후보(고정양식 앵커).
+
+    감사인 트랙 입구. 한글 라벨이 CID 로 깨져도 영문·수식 앵커(`WACC = Ke`,
+    `(1+B)`, `Size Risk Premium`, iso4217)는 생존한다는 전제 — 뽑힌 값은 **후보**이며
+    confidence·note 로 신뢰도를 표기한다(확정은 감사인 판단, 역할 3분할).
+
+    pdf_b64 는 pdftotext 바이너리가 있을 때만. 없으면 의견서 텍스트를 복사해
+    text 로 넣으라고 안내(로컬 환경 의존성을 조용히 삼키지 않는다).
+    """
+    d = await request.json()
+    text = d.get("text")
+    confidence = 1.0
+    if not text and d.get("pdf_b64"):
+        fd, path = tempfile.mkstemp(suffix=".pdf")
+        with os.fdopen(fd, "wb") as f:
+            f.write(_decode_xlsx(d["pdf_b64"]))         # base64 디코드 공통 헬퍼
+        try:
+            pages = pdftotext_layout(path)
+        except (OSError, RuntimeError) as e:
+            raise HTTPException(
+                422, f"PDF 텍스트 추출 실패(pdftotext 미설치?): {e} — "
+                     "의견서 텍스트를 복사해 붙여넣으세요") from e
+        finally:
+            os.unlink(path)
+        text = "\n".join(p.text for p in pages)
+        confidence = confidence_from_garble(text)
+    if not text:
+        raise HTTPException(422, "text 또는 pdf_b64 필요")
+
+    ex = extract_opinion(text, garble_confidence=confidence)
+    return {
+        "entity_count": ex.entity_count,
+        "terminal_growths": ex.terminal_growths,
+        "size_premiums": ex.size_premiums,
+        "currencies": ex.currencies,
+        "is_sotp": ex.is_sotp,
+        "confidence": ex.confidence,
+        "note": ex.note,
+        "chars": len(text),
+    }
+
+
 @app.post("/api/upload/sheet")
 async def upload_sheet(request: Request) -> dict:
     """{csv} 또는 {xlsx_b64} → 탭 구분 텍스트(+2D rows). 복붙 textarea 에 드롭용.
@@ -1081,11 +1242,33 @@ def _proj_path(pid: str) -> Path:
     return _PROJECTS_DIR / f"{pid}.json"
 
 
+# 구용어 마이그레이션: ERP(주식위험프리미엄) → MRP(시장위험프리미엄) 개명 이전에
+# 저장된 프로젝트의 provenance 키. 값 필드(`mrp`)는 이미 개명됐고 출처 2개만 남았다.
+# 정규화하지 않으면 프론트가 `mrp_source` 를 못 찾아 빈 값으로 조립 → **F3(β/MRP
+# 시장 정합) 게이트가 판정 근거를 잃는다**(조용한 provenance 유실).
+_LEGACY_RENAMES = {"erp_source": "mrp_source", "erp_market": "mrp_market"}
+
+
+def _migrate(obj):
+    """저장본 읽기 시 구용어 키를 현행 키로 정규화(재귀). 현행 키가 있으면 보존."""
+    if isinstance(obj, list):
+        return [_migrate(v) for v in obj]
+    if not isinstance(obj, dict):
+        return obj
+    out = {}
+    for k, v in obj.items():
+        new_k = _LEGACY_RENAMES.get(k, k)
+        if new_k != k and new_k in obj:
+            continue                                  # 현행 키가 이미 있으면 구키 버림
+        out[new_k] = _migrate(v)
+    return out
+
+
 def _load_project(pid: str) -> dict:
     p = _proj_path(pid)
     if not p.exists():
         raise HTTPException(404, f"프로젝트 없음: {pid}")
-    return _json.loads(p.read_text(encoding="utf-8"))
+    return _migrate(_json.loads(p.read_text(encoding="utf-8")))
 
 
 def _save_project(proj: dict) -> None:
