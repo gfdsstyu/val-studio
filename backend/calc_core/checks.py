@@ -708,6 +708,232 @@ def check_cross_method_bridge(
     return out
 
 
+# 3표 정합 허용오차(백만원 단위 0.001 = 1천원).
+# ⚠️ 정확일치 비교 금지: 모델링 교재의 예시조차 `=IF(A−B=0,"OK","ERROR")` 인데, 이는
+# 부동소수 노이즈로 맞는 연도를 ERROR 로 만든다(모델러스 §4 D1 실측 -7.1e-14).
+#
+# 워크북 CHECK 행의 `excel.template_schema.CHECK_TOL` 과 **같은 값**이어야 한다(같은 개념).
+# 그런데 import 로 묶지는 않는다 — `excel → calc_core` 가 확립된 의존 방향이고
+# (excel/dcf_export·dcf_import·sensitivity_grid 가 calc_core 를 참조), 순수 엔진이
+# 워크북 레이아웃 모듈을 역참조하면 방향이 뒤집힌다. 값이 갈라지지 않게 테스트로 고정한다.
+THREE_STATEMENT_TOL = 0.001
+
+
+def check_three_statement_integrity(
+    result,
+    *,
+    tol: float = None,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """3표 무결성 종합 — 대차·현금연결·이익잉여금 롤포워드·순환 해결.
+
+    사양 정본: 앤트로픽_금융스킬_벤치마크 §2 audit-xls "모델 스코프 무결성".
+
+    ⭐ **심각도 순서 원칙**(같은 문서): "**BS 안 맞으면 그것부터 — 나머지는 전부 의심**".
+    대차가 깨지면 이하 finding 의 detail 에 `bs_unreliable=True` 를 달아, 현금연결이
+    PASS 여도 그걸 근거로 안심하지 않게 한다(대차가 깨진 모델의 부분 PASS 는 무의미).
+
+    잔차는 **플러그 없이** 원본 그대로 읽는다 — 엔진이 차액을 메우지 않는 것이 전제다.
+    """
+    tol = THREE_STATEMENT_TOL if tol is None else tol
+    out: list[Finding] = []
+
+    def _worst(seq: list[float]) -> tuple[int, float]:
+        """최대 |잔차| 의 (연도 인덱스, 값). 빈 리스트는 (-1, 0.0)."""
+        if not seq:
+            return -1, 0.0
+        i = max(range(len(seq)), key=lambda k: abs(seq[k]))
+        return i, seq[i]
+
+    # ── ⓪ 기초 BS 자체 대차(사전조건) ──
+    op_res = getattr(result, "opening_balance_residual", 0.0)
+    if abs(op_res) > tol:
+        out.append(Finding(
+            "ts_opening_balance", Severity.FAIL,
+            f"기초 BS 대차 불일치 {op_res:+,.4f} — 이 불균형이 전 추정기간에 상수로 "
+            f"지속된다(추정 로직이 아니라 기초 자료를 먼저 고쳐야 함)",
+            {"opening_balance_residual": op_res, "tol": tol}))
+    else:
+        out.append(Finding("ts_opening_balance", Severity.PASS,
+                           "기초 BS 대차 일치", {"opening_balance_residual": op_res}))
+
+    # ── ① 대차(전 기간) — 최우선 ──
+    bi, bv = _worst(result.balance_residual)
+    bs_ok = abs(bv) <= tol
+    if not bs_ok:
+        out.append(Finding(
+            "ts_balance_sheet", Severity.FAIL,
+            f"대차 불일치 — 최대 잔차 {bv:+,.4f} (t={bi}). 자산 ≠ 부채+자본이면 조립 "
+            f"배관이 틀린 것(기초 BS·D&A↔FA 롤·ΔNWC↔NWC 잔액 중 하나)",
+            {"worst_year": bi, "worst_residual": bv,
+             "residuals": list(result.balance_residual), "tol": tol}))
+    else:
+        out.append(Finding("ts_balance_sheet", Severity.PASS,
+                           f"대차 일치(최대 잔차 {bv:+.2e})",
+                           {"worst_residual": bv, "tol": tol}))
+
+    def _add(f: Finding) -> None:
+        """대차가 깨졌으면 하위 finding 을 신뢰불가로 표시(audit-xls 순서 원칙)."""
+        if not bs_ok:
+            f.detail["bs_unreliable"] = True
+        out.append(f)
+
+    # ── ② 현금연결: Δ현금 = CFO+CFI+CFF ──
+    ci, cv = _worst(result.cash_tie_residual)
+    if abs(cv) > tol:
+        _add(Finding(
+            "ts_cash_tie", Severity.FAIL,
+            f"현금연결 불일치 — 최대 잔차 {cv:+,.4f} (t={ci}). CF 순증감이 BS 현금 변화와 "
+            f"어긋난다",
+            {"worst_year": ci, "worst_residual": cv,
+             "residuals": list(result.cash_tie_residual), "tol": tol}))
+    else:
+        _add(Finding("ts_cash_tie", Severity.PASS,
+                     f"현금연결 일치(최대 잔차 {cv:+.2e})", {"worst_residual": cv}))
+
+    # ── ③ 이익잉여금 롤포워드: 기초 + NI − 배당 = 기말 ──
+    ri, rv = _worst(result.re_rollforward_residual)
+    if abs(rv) > tol:
+        _add(Finding(
+            "ts_re_rollforward", Severity.FAIL,
+            f"이익잉여금 롤포워드 불일치 — 최대 잔차 {rv:+,.4f} (t={ri})",
+            {"worst_year": ri, "worst_residual": rv, "tol": tol}))
+    else:
+        _add(Finding("ts_re_rollforward", Severity.PASS,
+                     f"이익잉여금 롤포워드 일치(최대 잔차 {rv:+.2e})",
+                     {"worst_residual": rv}))
+
+    # ── ④ 순환 해결 상태(R14) ──
+    basis = getattr(result, "interest_basis", "opening")
+    enabled = getattr(result, "circularity_enabled", True)
+    iters = list(getattr(result, "iterations", []))
+    detail = {"interest_basis": basis, "circularity_enabled": enabled,
+              "iterations": iters, "converged": result.converged}
+    if not enabled:
+        # Circuit Switch OFF 를 **조용히 지나가면 안 된다** — 이자수익 0이라 NI 과소.
+        _add(Finding(
+            "ts_circularity", Severity.WARN,
+            "순환 스위치 OFF — 이자수익을 0으로 강제해 고리를 끊었다. 순이익이 과소되므로 "
+            "진단·대조 용도로만 쓰고 최종 산출에는 쓰지 말 것", detail))
+    elif not result.converged:
+        _add(Finding(
+            "ts_circularity", Severity.FAIL,
+            f"순환 반복 미수렴(basis={basis}, 최대 {max(iters) if iters else 0}회) — "
+            f"결과 무효. 이자율·배당성향이 비현실적이지 않은지 확인",
+            detail))
+    elif basis == "opening":
+        _add(Finding("ts_circularity", Severity.PASS,
+                     "기초잔액 기준 — 순환 미발생(1패스 결정론)", detail))
+    else:
+        _add(Finding("ts_circularity", Severity.PASS,
+                     f"평균잔액 기준 — 고정점 반복 수렴(최대 {max(iters)}회)", detail))
+
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out
+
+
+def check_three_statement_vs_spine(
+    spine: DcfSpineInput,
+    result,
+    *,
+    tol: float = None,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """3표가 **DCF 스파인과 같은 영업 벡터**로 조립됐는지 대사 — 검증의 전제조건.
+
+    ⚠️ 왜 필요한가: 대차 항등식은 D&A·CAPEX 불일치를 **흡수한다**. `ΔAssets` 유도에서
+    D&A 는 CFO(+)와 FA 롤(−)에 같은 크기로 들어가 상쇄되기 때문이다. 즉 D&A 를 잘못
+    넣어도 대차는 여전히 0이다(실측 확인). 그래서 audit-xls 가 'D&A(CF=IS)'·
+    'CapEx(CF=PP&E 롤포워드)' 를 **별도 항목**으로 둔 것이다.
+
+    3표를 스파인과 다른 숫자로 만들면 "다른 모델을 검증하는" 꼴이라 전체가 무의미해진다.
+    이 검사가 그 전제를 지킨다: ebit(=매출−원가−판관비)·dep_amort·capex·ΔNWC 4계열 대사.
+    """
+    tol = THREE_STATEMENT_TOL if tol is None else tol
+    n = min(len(spine.revenue), len(result.ebit))
+    spine_ebit = [spine.revenue[t] - spine.cogs[t] - spine.sga[t] for t in range(n)]
+    # 스파인의 delta_nwc_cash_adj 는 현금조정 부호(−ΔNWC) → 3표의 ΔNWC 와 부호 반대.
+    spine_dnwc = [-spine.delta_nwc_cash_adj[t] for t in range(n)]
+
+    series = {
+        "ebit": (spine_ebit, result.ebit[:n]),
+        "dep_amort": (list(spine.dep_amort[:n]), result._dep_amort[:n]),
+        "capex": (list(spine.capex[:n]), [result.capex_at(t) for t in range(n)]),
+        "delta_nwc": (spine_dnwc, result.delta_nwc[:n]),
+    }
+    mismatches = {}
+    for key, (a, b) in series.items():
+        if len(a) != len(b):
+            mismatches[key] = {"reason": "길이 불일치", "spine_n": len(a), "ts_n": len(b)}
+            continue
+        worst = max(range(len(a)), key=lambda k: abs(a[k] - b[k])) if a else -1
+        if a and abs(a[worst] - b[worst]) > tol:
+            mismatches[key] = {"year": worst, "spine": a[worst], "three_statement": b[worst],
+                               "delta": b[worst] - a[worst]}
+
+    detail = {"mismatches": mismatches, "tol": tol, "n_years": n}
+    if mismatches:
+        parts = [f"{k}(t={v.get('year','?')}, Δ{v.get('delta', 0):+,.4f})"
+                 for k, v in mismatches.items()]
+        f = Finding("ts_vs_spine", Severity.FAIL,
+                    "3표가 DCF 스파인과 다른 영업 벡터로 조립됨 — " + " · ".join(parts)
+                    + " → 다른 모델을 검증하는 셈이라 3표 정합 결과 전체가 무의미",
+                    detail)
+    else:
+        f = Finding("ts_vs_spine", Severity.PASS,
+                    f"3표 ↔ 스파인 영업 벡터 일치({n}개년 · ebit·D&A·CAPEX·ΔNWC)", detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
+def check_fcff_vs_cashflow(
+    spine_fcff: list[float],
+    result,
+    *,
+    tax_rate: float | None = None,
+    tol: float = 0.01,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """DCF 스파인 FCFF ↔ CF표 역산 FCFF 대사 — **unlevered 위반 탐지**.
+
+        FCFF = CFO − (이자수익 − 이자비용)×(1−τ) − CAPEX
+
+    FCFF 는 무차입 기준이라 이자 손익이 섞이면 안 된다. 두 값이 어긋나면 스파인의
+    FCF 에 금융효과가 새어들었다는 신호 — audit-xls "DCF 특화 버그 5종" 중
+    *FCF 에 이자 포함(unlevered 위반)* 을 자동 검사로 승격한 것이다.
+
+    ⚠️ **구간세율 caveat**: 정률(`effective_tax_rate`)이면 정확히 대사되지만, 구간세율은
+    스파인이 `corporate_tax(EBIT)`·3표가 `corporate_tax(EBT)` 로 **과세표준이 달라**
+    잔차가 남는다(모델 오류가 아니라 세제 비선형성). 그 경우 finding 에 명시한다.
+    """
+    cf_fcff = result.fcff_from_cashflow(tax_rate)
+    n = min(len(spine_fcff), len(cf_fcff))
+    diffs = [cf_fcff[t] - spine_fcff[t] for t in range(n)]
+    scale = max([abs(x) for x in spine_fcff[:n]] + [1.0])
+    worst = max(range(n), key=lambda k: abs(diffs[k])) if n else -1
+    detail = {"spine_fcff": list(spine_fcff[:n]), "cashflow_fcff": cf_fcff[:n],
+              "diffs": diffs, "worst_year": worst, "tol": tol,
+              "bracket_tax": tax_rate is None}
+    if n == 0:
+        f = Finding("fcff_vs_cashflow", Severity.WARN, "비교할 FCFF 계열 없음", detail)
+    elif abs(diffs[worst]) / scale <= tol:
+        f = Finding("fcff_vs_cashflow", Severity.PASS,
+                    f"FCFF ↔ CF표 대사 일치(최대 편차 {diffs[worst]:+,.2f})", detail)
+    else:
+        f = Finding("fcff_vs_cashflow", Severity.WARN,
+                    f"FCFF ↔ CF표 편차 {diffs[worst]:+,.2f} (t={worst}, 허용 {tol:.0%}) — "
+                    f"FCF 에 이자 손익이 섞였는지(unlevered 위반) 확인"
+                    + ("; 구간세율은 과세표준(EBIT vs EBT) 차이로 잔차가 정상"
+                       if tax_rate is None else ""),
+                    detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
 def audit_dcf(
     inp: DcfSpineInput,
     result: DcfResult,
