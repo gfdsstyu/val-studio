@@ -1164,6 +1164,32 @@ def damodaran_crp(country: str | None = None) -> dict:
 
 
 # ── 상대가치평가 (peer 배수 → 내재가치) ──────────────────────────────────────
+@app.post("/api/bridge/check")
+async def bridge_check(request: Request) -> dict:
+    """{dcf:{net_debt,non_operating_assets,non_controlling_interest,shares_outstanding},
+    relative:{net_debt,shares_outstanding,...}} → 교차방법 브리지 정합 findings.
+
+    DCF 와 상대가치의 주당가치를 나란히 비교하기 전에 **브리지·주식수가 같은지** 검사.
+    다르면 결과 차이가 관점 차이인지 정의 차이인지 분간 불가(모델러스 D3).
+    """
+    from calc_core.checks import bridge_net_position, check_cross_method_bridge
+    d = await request.json()
+    dcf, rel = d.get("dcf") or {}, d.get("relative") or {}
+    if not dcf or not rel:
+        raise HTTPException(422, "dcf·relative 브리지 양쪽 필요")
+    try:
+        findings = check_cross_method_bridge(dcf, rel)
+    except (TypeError, ValueError) as e:
+        raise HTTPException(422, f"브리지 형식 오류: {e}") from e
+    return {
+        "ok": all(f.severity.value != "warn" for f in findings),
+        "dcf_net_position": bridge_net_position(dcf),
+        "relative_net_position": bridge_net_position(rel),
+        "findings": [{"rule": f.rule, "severity": f.severity.value,
+                      "message": f.message, "detail": f.detail} for f in findings],
+    }
+
+
 @app.post("/api/relative/value")
 async def relative_value(request: Request) -> dict:
     """{peers:[{name,per?,pbr?,ev_ebitda?}], target_eps?, target_bps?, target_ebitda?,

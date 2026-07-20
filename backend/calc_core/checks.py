@@ -565,6 +565,86 @@ def check_bridge_consistency(
     return f
 
 
+_BRIDGE_COMPONENTS = ("net_debt", "non_operating_assets", "non_controlling_interest")
+
+
+def bridge_net_position(bridge: dict) -> float:
+    """지분브리지 **순포지션** = EV 에서 차감되는 총액.
+
+        순포지션 = 순차입부채 − 비영업자산 + 비지배지분
+        지분가치 = EV − 순포지션
+
+    항목 분해 방식이 달라도(DCF 는 3분해, 상대가치는 net_debt 스칼라 1개) 이 스칼라는
+    **항상 비교 가능**하다 → 오탐 없는 1차 신호.
+    """
+    return (float(bridge.get("net_debt", 0.0))
+            - float(bridge.get("non_operating_assets", 0.0))
+            + float(bridge.get("non_controlling_interest", 0.0)))
+
+
+def check_cross_method_bridge(
+    dcf_bridge: dict,
+    relative_bridge: dict,
+    *,
+    tol: float = BRIDGE_RECON_TOL,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """DCF ↔ 상대가치 **교차방법 정합**(R3 실배선) — 순포지션 + 주식수.
+
+    두 방법의 주당가치를 나란히 놓고 비교하려면 **EV→지분 브리지와 주식수가 같아야**
+    한다. 다르면 결과 차이가 밸류에이션 관점 차이인지 브리지 정의 차이인지 분간 불가
+    → 교차검증이 무의미(모델러스 §4 D3: 같은 워크북에서 순현금 426B vs 순부채 27B).
+
+    **판정 설계(오탐 방지)**: 상대가치는 보통 `net_debt` 스칼라 하나만 쓰고 비영업자산을
+    거기에 접어 넣는다. 항목별로 곧장 대조하면 "비영업자산 누락" 오탐이 상시 발생하므로,
+    1차 신호는 **순포지션 스칼라**로 잡는다. 상대가치가 항목을 명시 선언한 경우에만
+    항목별 엄격 대조(`check_bridge_consistency`)를 추가로 돌린다.
+    """
+    out: list[Finding] = []
+
+    a, b = bridge_net_position(dcf_bridge), bridge_net_position(relative_bridge)
+    scale = max(abs(a), abs(b), 1.0)
+    detail = {"dcf_net_position": a, "relative_net_position": b, "delta": a - b,
+              "tol": tol, "dcf": dcf_bridge, "relative": relative_bridge}
+    if abs(a - b) / scale > tol:
+        out.append(Finding(
+            "cross_method_bridge", Severity.WARN,
+            f"지분브리지 순포지션 불일치 — DCF {a:,.0f} vs 상대가치 {b:,.0f} "
+            f"(Δ{a - b:+,.0f}) → 두 방법의 주당가치 비교가 무의미. 브리지 정의를 통일하라",
+            detail))
+    else:
+        out.append(Finding(
+            "cross_method_bridge", Severity.PASS,
+            f"지분브리지 순포지션 일치({a:,.0f})", detail))
+
+    # 주식수 — 브리지가 같아도 주식수가 다르면 주당가치가 어긋난다(자기주식·희석 처리 차이).
+    ds, rs = dcf_bridge.get("shares_outstanding"), relative_bridge.get("shares_outstanding")
+    if ds and rs:
+        ds, rs = float(ds), float(rs)
+        if abs(ds - rs) / max(abs(ds), abs(rs), 1.0) > tol:
+            out.append(Finding(
+                "cross_method_shares", Severity.WARN,
+                f"주식수 불일치 — DCF {ds:,.0f}주 vs 상대가치 {rs:,.0f}주 "
+                f"(자기주식 차감·희석 처리 차이 확인)",
+                {"dcf_shares": ds, "relative_shares": rs}))
+        else:
+            out.append(Finding("cross_method_shares", Severity.PASS,
+                               f"주식수 일치({ds:,.0f}주)",
+                               {"dcf_shares": ds, "relative_shares": rs}))
+
+    # 상대가치가 항목을 명시 선언했을 때만 항목별 엄격 대조(선언 안 했으면 오탐 방지 위해 생략)
+    if any(k in relative_bridge for k in _BRIDGE_COMPONENTS[1:]):
+        out.append(check_bridge_consistency(
+            {k: dcf_bridge.get(k, 0.0) for k in _BRIDGE_COMPONENTS},
+            {k: relative_bridge.get(k, 0.0) for k in _BRIDGE_COMPONENTS},
+            tol=tol))
+
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out
+
+
 def audit_dcf(
     inp: DcfSpineInput,
     result: DcfResult,

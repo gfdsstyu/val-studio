@@ -198,6 +198,96 @@ def test_terminal_period_alternative_accounts_for_fade():
     assert f.detail["delta_pct"] < 0
 
 
+# ── R3 실배선: 교차방법 브리지(순포지션 + 주식수) ────────────────────────────
+def test_net_position_formula():
+    """순포지션 = 순차입부채 − 비영업자산 + 비지배지분 (EV 에서 빼는 총액)."""
+    from calc_core.checks import bridge_net_position
+    assert bridge_net_position({"net_debt": 100.0}) == 100.0
+    assert bridge_net_position({"net_debt": 100.0, "non_operating_assets": 30.0}) == 70.0
+    assert bridge_net_position(
+        {"net_debt": 100.0, "non_operating_assets": 30.0,
+         "non_controlling_interest": 20.0}) == 90.0
+    assert bridge_net_position({}) == 0.0
+
+
+def test_scalar_relative_bridge_no_false_positive():
+    """상대가치가 net_debt 스칼라로만 선언해도, 순포지션이 같으면 PASS(오탐 방지).
+
+    DCF: 순차입 100 − 비영업 30 = 순포지션 70
+    상대: net_debt 70 (비영업자산을 이미 접어 넣은 실무 관행)
+    """
+    from calc_core.checks import check_cross_method_bridge
+    fs = check_cross_method_bridge(
+        {"net_debt": 100.0, "non_operating_assets": 30.0},
+        {"net_debt": 70.0})
+    bridge = next(f for f in fs if f.rule == "cross_method_bridge")
+    assert bridge.severity.name == "PASS", bridge.message
+    # 항목 미선언 → 항목별 엄격 대조는 돌지 않는다(오탐 방지)
+    assert not any(f.rule == "bridge_consistency" for f in fs)
+
+
+def test_cross_method_reproduces_modellers_d3():
+    """모델러스 D3: DCF 순현금 426,191 vs Trading 순부채 26,518 → WARN."""
+    from calc_core.checks import check_cross_method_bridge
+    fs = check_cross_method_bridge(
+        {"net_debt": 97_796.0, "non_operating_assets": 523_987.0,
+         "non_controlling_interest": 0.0},
+        {"net_debt": 26_518.0})
+    bridge = next(f for f in fs if f.rule == "cross_method_bridge")
+    assert bridge.severity.name == "WARN"
+    assert bridge.detail["dcf_net_position"] == -426_191.0     # 순현금
+    assert bridge.detail["relative_net_position"] == 26_518.0  # 순부채
+    assert "무의미" in bridge.message
+
+
+def test_declared_components_trigger_strict_compare():
+    """상대가치가 항목을 명시 선언하면 항목별 엄격 대조가 추가로 돈다."""
+    from calc_core.checks import check_cross_method_bridge
+    fs = check_cross_method_bridge(
+        {"net_debt": 100.0, "non_operating_assets": 30.0, "non_controlling_interest": 0.0},
+        {"net_debt": 100.0, "non_operating_assets": 30.0, "non_controlling_interest": 20.0})
+    assert any(f.rule == "bridge_consistency" for f in fs)
+    # NCI 20 차이 → 순포지션도 어긋남
+    assert next(f for f in fs if f.rule == "cross_method_bridge").severity.name == "WARN"
+
+
+def test_shares_mismatch_flagged():
+    """브리지가 같아도 주식수가 다르면 주당가치가 어긋난다(자기주식·희석)."""
+    from calc_core.checks import check_cross_method_bridge
+    fs = check_cross_method_bridge(
+        {"net_debt": 100.0, "shares_outstanding": 10_000_000},
+        {"net_debt": 100.0, "shares_outstanding": 9_500_000})
+    sh = next(f for f in fs if f.rule == "cross_method_shares")
+    assert sh.severity.name == "WARN"
+    assert "자기주식" in sh.message
+
+
+def test_shares_absent_is_skipped():
+    """한쪽이라도 주식수가 없으면 판정하지 않는다(추측 금지)."""
+    from calc_core.checks import check_cross_method_bridge
+    fs = check_cross_method_bridge({"net_debt": 100.0}, {"net_debt": 100.0})
+    assert not any(f.rule == "cross_method_shares" for f in fs)
+
+
+def test_d7_share_count_discrepancy_reproduced():
+    """D7 실측: DCF 발행주식수 12,385,455 vs Trading 시총/주가 역산 11,214,141.
+
+    자기주식 약 1.17M주(9.5%) 차이 → 주당가치 10.4% 괴리. 게이트가 문서 초안에
+    없던 이 결함을 사후 발견했다.
+    """
+    from calc_core.checks import check_cross_method_bridge
+    fs = check_cross_method_bridge(
+        {"net_debt": 97_796.0, "non_operating_assets": 523_987.0,
+         "shares_outstanding": 12_385_455},
+        {"net_debt": 26_518.0, "shares_outstanding": 11_214_141})
+    rules = {f.rule: f for f in fs}
+    assert rules["cross_method_bridge"].severity.name == "WARN"
+    assert rules["cross_method_shares"].severity.name == "WARN"
+    # 두 오차는 방향이 반대라 서로를 가릴 수 있다 — 별개 finding 으로 분리 보고되어야
+    assert rules["cross_method_shares"].detail["dcf_shares"] == 12_385_455
+    assert rules["cross_method_shares"].detail["relative_shares"] == 11_214_141
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

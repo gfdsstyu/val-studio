@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { MODE_LABEL } from "../../nav.js";
+import { api } from "../../api.js";
 
 /* 개요 대시보드 — 각 시트가 project.data 에 남긴 산출물을 교차 종합.
    ① 밸류에이션 요약(hero) ② 방식별 가치 비교(DCF·상대가치·시나리오) ③ 워크플로우 진행
@@ -20,6 +21,58 @@ function collectValues(d) {
   if (d.relative_summary?.pbr != null)
     out.push({ label: "상대가치 PBR", value: d.relative_summary.pbr, tone: "" });
   return out;
+}
+
+
+/** 교차방법 브리지 정합(R3) — DCF·상대가치를 나란히 비교하기 전에 브리지·주식수가
+    같은지 서버 결정론 게이트로 확인. 산식은 클라에서 재구현하지 않는다.
+    근거: 모델러스_통합모델_5.4 §4 D3 — 브리지가 다르면 방식 비교 자체가 무의미. */
+function useBridgeCheck(d) {
+  const [res, setRes] = useState(null);
+  const dcf = d.dcf_input, rel = d.relative_target;
+  const key = JSON.stringify([dcf?.net_debt, dcf?.non_operating_assets,
+    dcf?.non_controlling_interest, dcf?.shares_outstanding, rel?.net_debt, rel?.shares]);
+  useEffect(() => {
+    if (!dcf || !rel) { setRes(null); return; }
+    let alive = true;
+    api.bridgeCheck({
+      dcf: {
+        net_debt: Number(dcf.net_debt) || 0,
+        non_operating_assets: Number(dcf.non_operating_assets) || 0,
+        non_controlling_interest: Number(dcf.non_controlling_interest) || 0,
+        shares_outstanding: Number(dcf.shares_outstanding) || 0,
+      },
+      relative: {
+        net_debt: Number(rel.net_debt) || 0,
+        shares_outstanding: Number(rel.shares) || 0,
+      },
+    }).then((r) => alive && setRes(r)).catch(() => alive && setRes(null));
+    return () => { alive = false; };
+  }, [key]);          // eslint-disable-line react-hooks/exhaustive-deps
+  return res;
+}
+
+/** 브리지 불일치 배너 — 방식 비교 바로 위에 붙여 "비교해도 되는지"를 먼저 알린다. */
+function BridgeBanner({ check }) {
+  if (!check) return null;
+  const warns = (check.findings || []).filter((f) => f.severity === "warn");
+  if (!warns.length) return (
+    <div className="pad muted" style={{ fontSize: "0.82rem" }}>
+      ✓ 교차방법 브리지·주식수 일치 — 방식별 비교 유효
+      (순포지션 {Math.round(check.dcf_net_position).toLocaleString("ko-KR")})
+    </div>
+  );
+  return (
+    <div className="pad" style={{ fontSize: "0.82rem" }}>
+      {warns.map((f, i) => (
+        <div key={i} style={{ color: "var(--warn, #c49b47)", marginBottom: 4 }}>
+          ⚠ {f.message}
+        </div>
+      ))}
+      <div className="muted">브리지 정의가 다르면 아래 방식별 차이가 <b>관점 차이인지 정의
+        차이인지 분간할 수 없다</b> — 먼저 통일하라.</div>
+    </div>
+  );
 }
 
 /** 방식별 가치 비교 — CSS 가로 막대(차트 라이브러리 없이 자기완결). */
@@ -104,6 +157,7 @@ export default function Dashboard({ project, onNavigate }) {
   const s = d.dcf_result_summary;
   const w = d.wacc_result;
   const values = collectValues(d);
+  const bridge = useBridgeCheck(d);
   const findings = [...(d.wacc_findings || []), ...(d.dcf_findings || [])];
   const fails = findings.filter((f) => f.severity === "fail").length;
   const warns = findings.filter((f) => f.severity === "warn").length;
@@ -125,6 +179,7 @@ export default function Dashboard({ project, onNavigate }) {
 
       <div className="card">
         <h2>방식별 가치 비교 <span className="muted">— 자본시장법 종합평가</span></h2>
+        <BridgeBanner check={bridge} />
         <ValueComparison values={values} />
       </div>
 
