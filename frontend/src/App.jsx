@@ -100,7 +100,8 @@ function ContextPanel({ project }) {
   const d = project?.data || {};
   const prov = d.wacc_provenance || {};
   const provKeys = Object.keys(prov);
-  const findings = [...(d.wacc_findings || []), ...(d.dcf_findings || [])];
+  const findings = [...(d.wacc_findings || []), ...(d.dcf_findings || []),
+    ...(d.three_statement_findings || [])];
   const empty = !provKeys.length && !findings.length;
   return (
     <aside className="context-panel">

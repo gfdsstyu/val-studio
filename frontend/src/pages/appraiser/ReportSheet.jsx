@@ -18,7 +18,9 @@ export default function ReportSheet({ project }) {
   const w = d.wacc_result;
   const s = d.dcf_result_summary;
   const sc = d.scenario_summary;
-  const findings = [...(d.wacc_findings || []), ...(d.dcf_findings || [])];
+  const ts = d.three_statement_summary;
+  const findings = [...(d.wacc_findings || []), ...(d.dcf_findings || []),
+    ...(d.three_statement_findings || [])];
   const [copied, setCopied] = useState(false);
 
   const markdown = useMemo(() => {
@@ -44,6 +46,13 @@ export default function ReportSheet({ project }) {
     if (s) {
       L.push("## 3. DCF 결과", "");
       L.push(`주당가치 **${won(s.per_share)}** · TV 비중 ${pct(s.tv_weight, 1)}`, "");
+    }
+    if (ts) {
+      // 조립 배관 검증 결과 — 밸류에이션 숫자의 신뢰 근거라 의견서에 남긴다.
+      L.push("## 3.5 모델 정합성 (3표 연결)", "");
+      L.push(ts.ok && ts.converged
+        ? "대차·현금연결·이익잉여금 롤포워드 정합 확인(허용오차 내). 순환참조는 고정점 반복으로 수렴."
+        : "⚠️ 3표 정합성 불일치 — 조립 배관 재확인 필요. 아래 검증 항목 참조.", "");
     }
     if (sc) {
       L.push("## 4. 시나리오", "");
@@ -82,6 +91,7 @@ export default function ReportSheet({ project }) {
             <Section ok={done.wacc}>WACC</Section>
             <Section ok={done.revenue}>매출</Section>
             <Section ok={done.dcf}>DCF</Section>
+            <Section ok={!!ts}>3표 정합성</Section>
             <Section ok={done.scenario}>시나리오</Section>
           </div>
           <button className="primary" onClick={copy}>{copied ? "복사됨 ✓" : "마크다운 복사"}</button>

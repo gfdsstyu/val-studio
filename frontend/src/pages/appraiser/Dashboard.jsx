@@ -77,6 +77,30 @@ function BridgeBanner({ check }) {
   );
 }
 
+/** 3표 정합성 요약 — 조립 배관이 검증됐는지 방식 비교 **전에** 알린다.
+    대차가 깨진 모델의 밸류에이션 숫자는 신뢰할 수 없다. */
+function ThreeStatementBanner({ ts }) {
+  if (!ts) return (
+    <div className="pad muted" style={{ fontSize: "0.82rem" }}>
+      3표 정합성 미검증 — 4.밸류에이션 › <b>3표 정합성</b>에서 조립 배관(대차·현금연결)을
+      확인하면 여기에 표시됩니다.
+    </div>
+  );
+  const ok = ts.ok && ts.converged;
+  return (
+    <div className="pad" style={{ fontSize: "0.82rem",
+      color: ok ? undefined : "var(--warn,#c49b47)" }}>
+      {ok ? "✓ 3표 정합 — 대차·현금연결·이익잉여금 롤포워드 통과"
+          : "⚠ 3표 정합성 불일치 — 조립 배관 확인 필요"}
+      <span className="muted">
+        {" "}(최대 대차잔차 {Math.abs(ts.worst_balance ?? 0) < 0.001
+          ? "0" : Math.round(ts.worst_balance).toLocaleString("ko-KR")}
+        {ts.converged === false ? " · 순환 미수렴" : ""})
+      </span>
+    </div>
+  );
+}
+
 /** 방식별 가치 비교 — CSS 가로 막대(차트 라이브러리 없이 자기완결). */
 function ValueComparison({ values }) {
   if (!values.length) return (
@@ -115,7 +139,7 @@ const STAGES = [
   { id: "mapping", label: "1. 계정분류", keys: ["mapping_pl", "mapping_bs"] },
   { id: "assumptions", label: "2. 가정", keys: ["revenue_built", "costs_built", "fa_built", "wc_built"] },
   { id: "discount", label: "3. 할인율", keys: ["wacc_result", "peer_selected"] },
-  { id: "valuation", label: "4. 밸류에이션", keys: ["dcf_result_summary", "scenario_summary", "relative_summary"] },
+  { id: "valuation", label: "4. 밸류에이션", keys: ["dcf_result_summary", "three_statement_summary", "scenario_summary", "relative_summary"] },
   { id: "output", label: "5. 산출물", keys: [] },
 ];
 
@@ -160,7 +184,8 @@ export default function Dashboard({ project, onNavigate }) {
   const w = d.wacc_result;
   const values = collectValues(d);
   const bridge = useBridgeCheck(d);
-  const findings = [...(d.wacc_findings || []), ...(d.dcf_findings || [])];
+  const findings = [...(d.wacc_findings || []), ...(d.dcf_findings || []),
+    ...(d.three_statement_findings || [])];
   const fails = findings.filter((f) => f.severity === "fail").length;
   const warns = findings.filter((f) => f.severity === "warn").length;
 
@@ -182,6 +207,7 @@ export default function Dashboard({ project, onNavigate }) {
       <div className="card">
         <h2>방식별 가치 비교 <span className="muted">— 자본시장법 종합평가</span></h2>
         <BridgeBanner check={bridge} />
+        <ThreeStatementBanner ts={d.three_statement_summary} />
         <ValueComparison values={values} />
       </div>
 
