@@ -337,6 +337,90 @@ def test_capex_and_nwc_divergence_caught():
     assert {"capex", "delta_nwc"} <= set(f.detail["mismatches"])
 
 
+# ══ ⑦ 기본값 = 평균잔액 (정확도 우선) ════════════════════════════════════════
+def test_default_basis_is_average_for_accuracy():
+    """⭐ 기본은 **정확도**(평균잔액)다 — 순환 회피는 구현 편의이지 정확성 논거가 아니다.
+
+    솔버를 만들어 놓고 편의를 위해 정확도를 포기하면 앞뒤가 안 맞는다.
+    """
+    from calc_core.three_statement import DEFAULT_INTEREST_BASIS
+    assert DEFAULT_INTEREST_BASIS == "average"
+    assert _input().interest_basis == "average"
+    assert project_three_statements(_input()).interest_basis == "average"
+
+
+def test_average_is_the_better_approximation_of_accrued_interest():
+    """평균잔액이 왜 더 정확한지 수치로 고정한다.
+
+    이자는 연중 잔액에 붙는다. 기초잔액만 쓰면 **좌단점 직사각형 근사**라 연중 변화를
+    통째로 무시하고, 평균잔액은 **사다리꼴 근사**라 선형 변화를 정확히 담는다.
+    잔액이 선형으로 변하면 사다리꼴이 참값과 일치한다 → 그 성질로 검증한다.
+    """
+    o = project_three_statements(_input(interest_basis="opening"))
+    a = project_three_statements(_input(interest_basis="average"))
+    r_cash = 0.03
+    iba0 = 500.0 + 200.0
+    iba1_avg = a.cash[0] + a.short_term_investments[0]
+
+    # 사다리꼴: 잔액이 iba0 → iba1 로 균등 변화할 때의 정확한 연간 이자
+    trapezoid = r_cash * (iba0 + iba1_avg) / 2.0
+    assert abs(a.interest_income[0] - trapezoid) < 1e-8          # 평균 = 사다리꼴 ✓
+    # 좌단점: 연중 증가분을 전부 누락 → 과소
+    assert o.interest_income[0] < trapezoid
+    # 누락분 = r × (기말−기초)/2 (기하학적으로 삼각형 넓이)
+    missed = r_cash * (iba1_avg - iba0) / 2.0
+    assert abs((trapezoid - o.interest_income[0]) - missed) < 1e-8
+
+
+def test_opening_basis_remains_available_as_baseline():
+    """기초잔액도 유효한 선택지로 남는다 — 반복의 초기값이자 대조용 기준선."""
+    r = project_three_statements(_input(interest_basis="opening"))
+    assert r.iterations == [1, 1, 1]
+    assert _sev(check_three_statement_integrity(r), "ts_circularity") == "PASS"
+
+
+# ══ ⑦ 기본값 = 평균잔액 (정확도 우선) ════════════════════════════════════════
+def test_default_basis_is_average_for_accuracy():
+    """⭐ 기본은 **정확도**(평균잔액)다 — 순환 회피는 구현 편의이지 정확성 논거가 아니다.
+
+    솔버를 만들어 놓고 편의를 위해 정확도를 포기하면 앞뒤가 안 맞는다.
+    """
+    from calc_core.three_statement import DEFAULT_INTEREST_BASIS
+    assert DEFAULT_INTEREST_BASIS == "average"
+    assert _input().interest_basis == "average"
+    assert project_three_statements(_input()).interest_basis == "average"
+
+
+def test_average_is_the_better_approximation_of_accrued_interest():
+    """평균잔액이 왜 더 정확한지 수치로 고정한다.
+
+    이자는 연중 잔액에 붙는다. 기초잔액만 쓰면 **좌단점 직사각형 근사**라 연중 변화를
+    통째로 무시하고, 평균잔액은 **사다리꼴 근사**라 선형 변화를 정확히 담는다.
+    잔액이 선형으로 변하면 사다리꼴이 참값과 일치한다 → 그 성질로 검증한다.
+    """
+    o = project_three_statements(_input(interest_basis="opening"))
+    a = project_three_statements(_input(interest_basis="average"))
+    r_cash = 0.03
+    iba0 = 500.0 + 200.0
+    iba1_avg = a.cash[0] + a.short_term_investments[0]
+
+    # 사다리꼴: 잔액이 iba0 → iba1 로 균등 변화할 때의 정확한 연간 이자
+    trapezoid = r_cash * (iba0 + iba1_avg) / 2.0
+    assert abs(a.interest_income[0] - trapezoid) < 1e-8          # 평균 = 사다리꼴 ✓
+    # 좌단점: 연중 증가분을 전부 누락 → 과소
+    assert o.interest_income[0] < trapezoid
+    # 누락분 = r × (기말−기초)/2 (기하학적으로 삼각형 넓이)
+    missed = r_cash * (iba1_avg - iba0) / 2.0
+    assert abs((trapezoid - o.interest_income[0]) - missed) < 1e-8
+
+
+def test_opening_basis_remains_available_as_baseline():
+    """기초잔액도 유효한 선택지로 남는다 — 반복의 초기값이자 대조용 기준선."""
+    r = project_three_statements(_input(interest_basis="opening"))
+    assert r.iterations == [1, 1, 1]
+    assert _sev(check_three_statement_integrity(r), "ts_circularity") == "PASS"
+
+
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -348,3 +432,6 @@ if __name__ == "__main__":
         fn()
         print(f"  ok  {fn.__name__}")
     print(f"{len(fns)}/{len(fns)} passed")
+
+
+

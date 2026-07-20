@@ -6,6 +6,7 @@ import ByokPanel from "./pages/Byok.jsx";
 import DcfSheet from "./pages/appraiser/DcfSheet.jsx";
 import DiscountSheet from "./pages/appraiser/DiscountSheet.jsx";
 import ScenarioSheet from "./pages/appraiser/ScenarioSheet.jsx";
+import ModelSheet from "./pages/appraiser/ModelSheet.jsx";
 import RelativeSheet from "./pages/appraiser/RelativeSheet.jsx";
 import MacroSheet from "./pages/appraiser/MacroSheet.jsx";
 import RevenueSheet from "./pages/appraiser/RevenueSheet.jsx";
@@ -197,6 +198,8 @@ function Workspace({ projectId, onHome }) {
       return <ReportSheet project={project} />;
     if (stage.id === "valuation" && sheet.id === "dcf")
       return <DcfSheet project={project} onSave={saveData} />;
+    if (stage.id === "valuation" && sheet.id === "model")
+      return <ModelSheet project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "scenario")
       return <ScenarioSheet project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "relative")

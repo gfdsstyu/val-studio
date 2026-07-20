@@ -364,6 +364,160 @@ def _wc_items(items: list) -> list:
         raise HTTPException(422, f"wc_items 형식 오류: {e}") from e
 
 
+def _opening_bs(d: dict):
+    """dict → OpeningBalanceSheet. 빈 문자열은 0 으로 접는다(폼 문자열 유입 방어)."""
+    from calc_core.three_statement import OpeningBalanceSheet
+    def f(k):
+        v = d.get(k)
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return 0.0
+        return float(v)
+    try:
+        return OpeningBalanceSheet(
+            cash=f("cash"), short_term_investments=f("short_term_investments"),
+            net_working_capital=f("net_working_capital"),
+            net_fixed_assets=f("net_fixed_assets"), other_assets=f("other_assets"),
+            interest_bearing_debt=f("interest_bearing_debt"),
+            other_liabilities=f("other_liabilities"),
+            paid_in_capital=f("paid_in_capital"),
+            retained_earnings=f("retained_earnings"), other_equity=f("other_equity"))
+    except (TypeError, ValueError) as e:
+        raise HTTPException(422, f"opening(기초 BS) 형식 오류: {e}") from e
+
+
+def _financing(d: dict, n: int):
+    """dict → FinancingPlan. 리스트는 n 개년으로 패딩(짧으면 0)."""
+    from calc_core.three_statement import FinancingPlan
+    def vec(k):
+        raw = d.get(k) or []
+        out = []
+        for i in range(n):
+            v = raw[i] if i < len(raw) else 0.0
+            out.append(0.0 if (v is None or (isinstance(v, str) and not v.strip()))
+                       else float(v))
+        return out
+    def num(k, default=0.0):
+        v = d.get(k)
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return default
+        return float(v)
+    try:
+        payout = d.get("dividend_payout_ratio", 0.0)
+        if isinstance(payout, list):
+            payout = [float(x or 0.0) for x in payout]
+        else:
+            payout = num("dividend_payout_ratio")
+        return FinancingPlan(
+            debt_issuance=vec("debt_issuance"), debt_repayment=vec("debt_repayment"),
+            interest_rate_debt=num("interest_rate_debt"),
+            interest_rate_cash=num("interest_rate_cash"),
+            dividend_payout_ratio=payout,
+            other_income_expense=vec("other_income_expense")
+            if d.get("other_income_expense") else None)
+    except (TypeError, ValueError) as e:
+        raise HTTPException(422, f"financing 형식 오류: {e}") from e
+
+
+@app.post("/api/three-statement")
+async def three_statement_endpoint(request: Request) -> dict:
+    """3표(IS·BS·CF) 조립 + **모델 정합성 게이트**.
+
+    우리 DCF 는 무차입 FCFF 라 3표가 가치산정엔 불필요하다 — 이 엔드포인트의 목적은
+    `자산=부채+자본`·`Δ현금=CFO+CFI+CFF` 항등식으로 **상류 모듈 조립 배관을 검증**하는 것.
+
+    입력 `{ebit[], dep_amort[], capex[], net_working_capital[], opening{}, financing{},
+    effective_tax_rate?, interest_basis?, circularity_enabled?, spine?}`.
+    `spine`(DcfSpineInput)을 함께 주면 **3표 ↔ 스파인 영업벡터 대사** + FCFF 대사까지 돈다.
+
+    ⚠️ 잔차는 플러그 없이 그대로 반환한다 — 차액을 메우면 검증기가 죽는다.
+    """
+    from calc_core.checks import (
+        check_fcff_vs_cashflow, check_three_statement_integrity,
+        check_three_statement_vs_spine,
+    )
+    from calc_core.three_statement import (
+        DEFAULT_INTEREST_BASIS, ThreeStatementInput, project_three_statements,
+    )
+
+    d = await request.json()
+
+    def vec(key: str) -> list[float]:
+        raw = d.get(key) or []
+        try:
+            return [float(x) for x in raw]
+        except (TypeError, ValueError) as e:
+            raise HTTPException(422, f"{key} 형식 오류: {e}") from e
+
+    ebit = vec("ebit")
+    if not ebit:
+        raise HTTPException(422, "ebit 계열 필요")
+    n = len(ebit)
+    tax_rate = d.get("effective_tax_rate")
+    if isinstance(tax_rate, str) and not tax_rate.strip():
+        tax_rate = None
+
+    try:
+        inp = ThreeStatementInput(
+            ebit=ebit, dep_amort=vec("dep_amort"), capex=vec("capex"),
+            net_working_capital=vec("net_working_capital"),
+            opening=_opening_bs(d.get("opening") or {}),
+            financing=_financing(d.get("financing") or {}, n),
+            effective_tax_rate=None if tax_rate is None else float(tax_rate),
+            interest_basis=str(d.get("interest_basis") or DEFAULT_INTEREST_BASIS),
+            circularity_enabled=bool(d.get("circularity_enabled", True)),
+        )
+        res = project_three_statements(inp)
+    except (TypeError, ValueError) as e:
+        raise HTTPException(422, f"3표 입력 오류: {e}") from e
+
+    findings = check_three_statement_integrity(res)
+    if d.get("spine"):
+        spine = _parse_input(dict(d["spine"]))
+        findings.append(check_three_statement_vs_spine(spine, res))
+        spine_fcff = run(spine).fcff
+        findings.append(check_fcff_vs_cashflow(
+            spine_fcff, res, tax_rate=inp.effective_tax_rate))
+
+    return {
+        "income_statement": {
+            "ebit": res.ebit, "interest_income": res.interest_income,
+            "interest_expense": res.interest_expense,
+            "other_income_expense": res.other_income_expense,
+            "ebt": res.ebt, "tax": res.tax, "net_income": res.net_income,
+        },
+        "balance_sheet": {
+            "cash": res.cash, "short_term_investments": res.short_term_investments,
+            "net_working_capital": res.net_working_capital,
+            "net_fixed_assets": res.net_fixed_assets, "other_assets": res.other_assets,
+            "interest_bearing_debt": res.interest_bearing_debt,
+            "other_liabilities": res.other_liabilities,
+            "paid_in_capital": res.paid_in_capital,
+            "retained_earnings": res.retained_earnings, "other_equity": res.other_equity,
+            "total_assets": res.total_assets, "total_liabilities": res.total_liabilities,
+            "total_equity": res.total_equity,
+        },
+        "cash_flow": {
+            "cfo": res.cfo, "cfi": res.cfi, "cff": res.cff,
+            "net_change_in_cash": res.net_change_in_cash,
+            "dividends": res.dividends, "delta_nwc": res.delta_nwc,
+        },
+        "residuals": {
+            "opening_balance": res.opening_balance_residual,
+            "balance": res.balance_residual,
+            "cash_tie": res.cash_tie_residual,
+            "re_rollforward": res.re_rollforward_residual,
+        },
+        "circularity": {
+            "interest_basis": res.interest_basis,
+            "enabled": res.circularity_enabled,
+            "iterations": res.iterations, "converged": res.converged,
+        },
+        "ok": all(f.severity.value != "fail" for f in findings),
+        "findings": [{"rule": f.rule, "severity": f.severity.value,
+                      "message": f.message, "detail": f.detail} for f in findings],
+    }
+
+
 @app.post("/api/dcf/assemble")
 async def dcf_assemble_endpoint(request: Request) -> dict:
     """WACC(커넥터) + 운영가정 → 검증된 주당가치. 실행 순서 게이트(PGR≥WACC 등) 반영.

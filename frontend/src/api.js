@@ -51,6 +51,7 @@ export const api = {
   relativeValue: (body) => j("POST", "/api/relative/value", body),
   bridgeCheck: (body) => j("POST", "/api/bridge/check", body),
   pgrSuggest: (body) => j("POST", "/api/macro/pgr-suggest", body),
+  threeStatement: (body) => j("POST", "/api/three-statement", body),
   // 감사인 트랙: 외부평가의견서 → 유의적 가정 후보(고정양식 앵커, 확정은 감사인).
   opinionExtract: (body) => j("POST", "/api/opinion/extract", body),
   // 거시 시계열: 복붙(항상) 또는 ECOS(키 있을 때). base_date 주면 look-ahead 가드.

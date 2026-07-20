@@ -129,6 +129,53 @@ def test_wc_requires_lookback_window_and_reason():
         assert "[입력" in c.get(f"L{rr}", "")
 
 
+# ── W6b Model 3표 뼈대 ───────────────────────────────────────────────────────
+def test_model_sheet_has_opening_column_so_rollforward_is_uniform():
+    """기초(실적) 열이 있어야 롤포워드가 **첫 해부터 같은 수식**으로 떨어진다."""
+    c = _cells(stage_sheets.build_model_3s)
+    assert c.get("C8") == "기초/실적" and c.get("D8") == "1년차"
+    fa = _find_row(c, "순유형자산")
+    da = _find_row(c, "(+) 감가상각비")
+    capex = _find_row(c, "(−) CAPEX")
+    # 1년차 FA = 기초(C) + CAPEX − D&A  ← 기초 열을 참조
+    assert c[f"D{fa}"] == f"=C{fa}+D{capex}-D{da}"
+
+
+def test_model_sheet_circuit_switch_gates_interest_income():
+    """R14 Circuit Switch — OFF 면 이자수익 0(모델러스 IF($L$5=\"ON\",…) 재현)."""
+    c = _cells(stage_sheets.build_model_3s)
+    assert c.get("C5") == "ON"
+    ii = _find_row(c, "(+) 이자수익")
+    f = c[f"D{ii}"]
+    assert f.startswith('=IF($C$5="ON",') and f.endswith(",0)"), f
+    # 평균잔액 기준(기본·더 정확)이어야 한다
+    avg = _find_row(c, "이자부자산 평균잔액")
+    assert c[f"D{avg}"].startswith("=AVERAGE("), c[f"D{avg}"]
+
+
+def test_check_rows_parenthesize_both_sides():
+    """⚠️ 회귀: 우변이 다항식이면 괄호 없이는 **부호가 뒤집힌다**.
+
+    `자산-부채+자본` 이 되어버려 대차 CHECK 가 완전히 틀린 값을 낸다
+    (연산자 우선순위 함정 — 실제로 W6b 생성물에서 발견).
+    """
+    c = _cells(stage_sheets.build_model_3s)
+    bs = _find_row(c, "CHECK 대차")
+    ta, tl, te = _find_row(c, "자산 계"), _find_row(c, "부채 계"), _find_row(c, "자본 계")
+    assert c[f"D{bs}"] == (
+        f'=IF(ABS((D{ta})-(D{tl}+D{te}))<{CHECK_TOL},"TRUE",(D{ta})-(D{tl}+D{te}))'
+    ), c[f"D{bs}"]
+    # 현금연결도 3항 우변
+    cf = _find_row(c, "CHECK 현금연결")
+    assert "-(D" in c[f"D{cf}"] and c[f"D{cf}"].count("+") >= 2, c[f"D{cf}"]
+
+
+def test_model_sheet_registered_as_w6b_stage():
+    from excel.xlsx_writer import Workbook
+    wb = Workbook()
+    assert stage_sheets.build_stage(wb, "W6b") == ["Model"]
+
+
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -140,3 +187,6 @@ if __name__ == "__main__":
         fn()
         print(f"  ok  {fn.__name__}")
     print(f"{len(fns)}/{len(fns)} passed")
+
+
+

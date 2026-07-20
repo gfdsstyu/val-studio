@@ -31,16 +31,27 @@ BS 계정체계는 **새로 만들지 않고** `ingest.fs_mapper.BS_BUCKETS`(WC�
 엑셀의 답(반복계산 켜기 + 순환 스위치)은 **수렴 여부를 사용자가 볼 수 없고**, 스위치를
 OFF 로 두고 잊으면 이자 0인 채 결과가 나온다. 우리는 3층으로 푼다.
 
-  Layer 1 `interest_basis="opening"` (기본) — **순환을 아예 만들지 않는다.**
-      이자를 평균잔액이 아니라 **기초잔액**으로 계산하면 t 의 이자가 t 의 순이익에
-      의존하지 않아 고리가 원천적으로 끊어진다. 반복 불요, 1패스 결정론.
+  ⭐ **기본은 정확도**(`average`)다. 순환 회피는 구현 편의이지 정확성 논거가 아니며,
+  우리는 그 편의를 위해 정확도를 포기하지 않으려고 솔버를 만들었다.
 
-  Layer 2 `interest_basis="average"` — 평균잔액(모델러스 정본)을 원하면 순환이 생긴다.
-      "엑셀에서 반복계산 켜세요" 대신 **연도별 스칼라 고정점 반복**을 직접 돌린다.
+  Layer 1 `interest_basis="average"` (**기본**) — 이자를 **기초·기말 평균잔액** 기준으로.
+      연중 부채가 상환되거나 현금이 쌓이면 기초잔액만으로는 그 변화가 무시된다.
+      수학적으로 기초잔액 = **좌단점 직사각형 근사**, 평균잔액 = **사다리꼴 근사**이므로,
+      흐름이 연중 고르게 발생한다는 표준 가정에서 평균이 명백히 더 나은 근사다
+      (모델러스 정본도 `AVERAGE(N146,O146)`).
+      이 선택이 순환을 만들지만 — "엑셀에서 반복계산 켜세요" 대신 **연도별 스칼라
+      고정점 반복**을 직접 돌려 푼다.
       수렴 보증: 사상의 기울기 ≈ r/2·(1−τ). r=3%·τ=24% 면 ≈0.011 ≪ 1 → **압축사상**
       → 오차가 회차마다 ~1/100 로 줄어든다(실측: tol=1e-9 에서 5~6회, 이론과 정합).
       구간세율이 비선형이라 폐형해가 없어 반복이 정답이다.
       **수렴 실패는 조용히 넘기지 않고 converged=False 로 노출**한다.
+      ⚠️ 평균잔액도 근사다 — 자금이 특정 시점에 몰리면(예: 기말 대량 차입) 과대·과소
+      된다. 정확히 하려면 일자별 스케줄이 필요하나 그건 PF·LBO 트랙의 주제다.
+
+  Layer 2 `interest_basis="opening"` — **기초잔액 단순화**. 순환이 원천적으로 발생하지
+      않아(t 의 이자가 t 의 순이익에 미의존) 1패스 결정론이며, 반복의 **초기값**이자
+      결과 대조용 기준선이다. 보수적 관행이지만 **정확도는 Layer 1 보다 낮다** —
+      연중 잔액 변화를 못 담는다. 회계정책상 기초기준을 쓰는 경우에만 명시적으로 선택.
 
   Layer 3 `circularity_enabled=False` — Circuit Switch(R14). 이자수익을 0으로 강제해
       고리를 끊는다(디버깅·대조용). 모델러스 `IF($L$5="ON", 스케줄, 0)` 재현.
@@ -57,8 +68,9 @@ from dataclasses import dataclass, field
 
 from .tax import corporate_tax
 
-# 이자 기준 — "opening"(기초잔액, 순환 없음) | "average"(평균잔액, 고정점 반복)
-INTEREST_BASIS = ("opening", "average")
+# 이자 기준 — "average"(평균잔액, 기본·더 정확) | "opening"(기초잔액, 단순화·순환 없음)
+INTEREST_BASIS = ("average", "opening")
+DEFAULT_INTEREST_BASIS = "average"
 DEFAULT_MAX_ITERATIONS = 50
 DEFAULT_TOLERANCE = 1e-9
 
@@ -151,7 +163,7 @@ class ThreeStatementInput:
     opening: OpeningBalanceSheet
     financing: FinancingPlan
     effective_tax_rate: float | None = None   # None → 구간세율 corporate_tax(EBT)
-    interest_basis: str = "opening"
+    interest_basis: str = DEFAULT_INTEREST_BASIS   # 기본=평균잔액(더 정확)
     circularity_enabled: bool = True          # R14 Circuit Switch
     max_iterations: int = DEFAULT_MAX_ITERATIONS
     tolerance: float = DEFAULT_TOLERANCE
@@ -200,7 +212,7 @@ class ThreeStatementResult:
     # ── 순환 해결 메타 ──
     iterations: list[int] = field(default_factory=list)
     converged: bool = True
-    interest_basis: str = "opening"
+    interest_basis: str = DEFAULT_INTEREST_BASIS
     circularity_enabled: bool = True
     opening_balance_residual: float = 0.0
     # 투입된 영업 벡터 원본(스파인 대사용). CAPEX 는 CFI 에 음수로만 담기므로 되살릴 수
@@ -328,12 +340,12 @@ def project_three_statements(inp: ThreeStatementInput) -> ThreeStatementResult:
             iters = 1
             out = _pass(ii_t)
         elif inp.interest_basis == "opening":
-            # Layer 1: 기초잔액 기준 — t 의 이자가 t 의 순이익에 의존하지 않아 순환 없음.
+            # Layer 2: 기초잔액 단순화 — 순환 없음(1패스). 평균잔액보다 정확도는 낮다.
             ii_t = fin.interest_rate_cash * iba_prev
             iters = 1
             out = _pass(ii_t)
         else:
-            # Layer 2: 평균잔액 — 고정점 반복. 초기값은 Layer 1 값.
+            # Layer 1(기본): 평균잔액 — 고정점 반복. 초기값은 기초잔액 기준값.
             ii_t = fin.interest_rate_cash * iba_prev
             iters = 0
             converged_year = False

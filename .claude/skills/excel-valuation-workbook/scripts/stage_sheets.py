@@ -46,7 +46,7 @@ def _years(s, row: int, n: int, base_year: int = 2024) -> None:
 
 
 def _check_row(s, row: int, label: str, lhs: str, rhs: str, n: int,
-               tol: float = CHECK_TOL) -> None:
+               tol: float = CHECK_TOL, cols: list | None = None) -> None:
     """정합 CHECK 행(R6) — 일치하면 "TRUE", 아니면 **잔차 금액**을 표시한다.
 
     잔차를 보여주는 게 핵심: TRUE/FALSE 만으로는 어디가 얼마나 틀렸는지 알 수 없다.
@@ -55,8 +55,10 @@ def _check_row(s, row: int, label: str, lhs: str, rhs: str, n: int,
     lhs/rhs 는 `{col}` 자리표시자를 포함한 수식 조각(예: "{col}20").
     """
     s.text(f"B{row}", label)
-    for c in YEAR_COLS[:n]:
-        a, b = lhs.format(col=c), rhs.format(col=c)
+    for c in (cols if cols is not None else YEAR_COLS[:n]):
+        # ⚠️ 양변을 반드시 괄호로 감싼다 — 우변이 다항식이면(예 "부채+자본")
+        # `자산-부채+자본` 이 되어 **부호가 뒤집힌다**(연산자 우선순위 함정).
+        a, b = f"({lhs.format(col=c)})", f"({rhs.format(col=c)})"
         s.formula(f"{c}{row}", f'IF(ABS({a}-{b})<{tol},"TRUE",{a}-{b})')
 
 
@@ -533,6 +535,176 @@ def build_wacc(wb, n: int = 5):
     return s
 
 
+
+# ── W6b Model (3표 완전연결 — 정합성 검증) ────────────────────────────────────
+# 열 배치: C=기초(실적, FS_Hist 참조) / D.. = 추정연도. 실무 3표 모델처럼 **기초 열**을
+# 두어야 롤포워드(기말=기초+증감)가 첫 해부터 같은 수식으로 떨어진다.
+_MODEL_COLS = "CDEFGHIJKLMNOP"
+
+
+def build_model_3s(wb, n: int = 5):
+    """W6b 3표 연결 — IS·BS·CF + 부채/이익잉여금/이자 스케줄 + CHECK 행(살아있는 수식).
+
+    목적은 밸류에이션이 아니라 **조립 배관 검증**이다. 우리 DCF 는 무차입 FCFF 라 3표가
+    가치산정엔 불필요하지만, `자산=부채+자본`·`Δ현금=CFO+CFI+CFF` 항등식이 FA·WC·원가
+    조립의 정합성을 잡아준다. **차액을 '대차조정'으로 메우지 않는다** — 메우는 순간
+    검증기가 죽는다.
+
+    ⭐ 순환참조: `이자수익 → 순이익 → 현금 → 이자부자산 → 이자수익`.
+    C5 의 **Circuit Switch** 로 통제한다(모델러스 정본 `IF($L$5="ON", 스케줄, 0)` 재현).
+    엑셀에서는 스위치 ON + `파일 > 옵션 > 수식 > 반복 계산 사용` 이 필요하다.
+    ⚠️ 엔진(`calc_core.three_statement`)은 반복계산 옵션 없이 **고정점 반복을 직접 돌려
+    수렴을 검증**한다 — 워크북은 표현, 검증은 엔진이 정본이다.
+    """
+    s = wb.add_sheet("Model")
+    _header(s, "Model — 3표 완전연결 (IS·BS·CF) + 정합성 CHECK")
+    s.text("B3", "목적=조립 배관 검증(가치산정 아님). 잔차는 플러그 없이 그대로 노출한다.")
+    s.text("B4", "이자=평균잔액 기준(기본·더 정확 — 연중 잔액 변화를 담는다). 순환 발생 → 스위치로 통제.")
+    s.text("B5", "Circuit Switch :")
+    s.text("C5", "ON")
+    s.text("D5", "OFF 면 이자수익 0 → 순이익 과소. 진단·대조용이며 최종 산출에 쓰지 말 것.")
+    s.text("B6", "⚠️ 엑셀: 스위치 ON 시 [파일>옵션>수식>반복 계산 사용] 필요. "
+                 "엔진은 불요(고정점 반복 내장·수렴 검증).")
+
+    op = _MODEL_COLS[0]                    # 기초(실적) 열
+    cols = list(_MODEL_COLS[1:1 + n])      # 추정연도 열
+    R = {}
+    r = 8
+
+    s.text(f"B{r}", "── [손익계산서] ──")
+    s.text(f"{op}{r}", "기초/실적")
+    for j, c in enumerate(cols):
+        s.text(f"{c}{r}", f"{j + 1}년차")
+    r += 1
+
+    def line(key, label, indent=False):
+        nonlocal r
+        R[key] = r
+        s.text(f"B{r}", ("  " if indent else "") + label)
+        r += 1
+
+    line("rev", "매출액 (→Fcst_Rev 계)")
+    line("cogs", "(−) 매출원가 (→Fcst_Cost 계)", True)
+    line("sga", "(−) 판매관리비 (→Fcst_Cost 계)", True)
+    line("ebit", "영업이익 EBIT")
+    line("ii", "(+) 이자수익  [순환 — 스위치 통제]", True)
+    line("ie", "(−) 이자비용  [부채 스케줄]", True)
+    line("ebt", "세전이익 EBT")
+    line("tax", "(−) 법인세  [입력 또는 세율×EBT]", True)
+    line("ni", "당기순이익")
+    r += 1
+
+    s.text(f"B{r}", "── [재무상태표] ──"); r += 1
+    line("cash", "현금및현금성자산", True)
+    line("sti", "단기금융자산 (이자부·NOA)", True)
+    line("nwc", "순운전자본 (→WC 시트)", True)
+    line("fa", "순유형자산 (→Capex_Dep 기말)", True)
+    line("oa", "기타자산", True)
+    line("ta", "자산 계")
+    line("debt", "이자부부채 (→부채 스케줄)", True)
+    line("ol", "기타부채", True)
+    line("tl", "부채 계")
+    line("cap", "자본금·자본잉여금", True)
+    line("re", "이익잉여금 (→RE 스케줄)", True)
+    line("oe", "기타자본", True)
+    line("te", "자본 계")
+    line("chk_bs", "CHECK 대차 (자산 − 부채 − 자본)")
+    r += 1
+
+    s.text(f"B{r}", "── [현금흐름표] ──"); r += 1
+    line("cfo_ni", "당기순이익", True)
+    line("cfo_da", "(+) 감가상각비 (비현금·→Capex_Dep)", True)
+    line("cfo_wc", "(−) 순운전자본 증가", True)
+    line("cfo", "영업활동 현금흐름 CFO")
+    line("capex", "(−) CAPEX (→Capex_Dep)", True)
+    line("cfi", "투자활동 현금흐름 CFI")
+    line("iss", "(+) 차입 발행", True)
+    line("rep", "(−) 차입 상환", True)
+    line("div", "(−) 배당", True)
+    line("cff", "재무활동 현금흐름 CFF")
+    line("dcash", "현금 순증감")
+    line("chk_cf", "CHECK 현금연결 (Δ현금 − CF합)")
+    r += 1
+
+    s.text(f"B{r}", "── [보조 스케줄] ──"); r += 1
+    line("d_avg", "부채 평균잔액 = AVERAGE(기초,기말)", True)
+    line("d_rate", "차입 이자율", True)
+    line("re_roll", "이익잉여금 기말 = 기초 + NI − 배당", True)
+    line("chk_re", "CHECK 이익잉여금 롤포워드")
+    line("iba", "이자부자산 = 현금 + 단기금융", True)
+    line("iba_avg", "이자부자산 평균잔액 = AVERAGE(기초,기말)", True)
+    line("c_rate", "예금 이자율", True)
+    note_row = r
+
+    # ── 기초(실적) 열: 잔액 항목만 [참조] placeholder ──
+    for key in ("cash", "sti", "nwc", "fa", "oa", "debt", "ol", "cap", "re", "oe"):
+        s.text(f"{op}{R[key]}", "[참조·FS_Hist]")
+    s.formula(f"{op}{R['ta']}", f"SUM({op}{R['cash']}:{op}{R['oa']})")
+    s.formula(f"{op}{R['tl']}", f"SUM({op}{R['debt']}:{op}{R['ol']})")
+    s.formula(f"{op}{R['te']}", f"SUM({op}{R['cap']}:{op}{R['oe']})")
+    s.formula(f"{op}{R['iba']}", f"{op}{R['cash']}+{op}{R['sti']}")
+
+    # ── 추정연도 살아있는 수식 ──
+    for j, c in enumerate(cols):
+        p = op if j == 0 else cols[j - 1]        # 직전 열(첫 해는 기초 열)
+
+        def C(key, col=c):
+            return f"{col}{R[key]}"
+
+        def P(key):
+            return f"{p}{R[key]}"
+
+        # IS
+        s.formula(C("ebit"), f"{C('rev')}-{C('cogs')}-{C('sga')}")
+        # 순환 스위치 — OFF 면 이자수익 0
+        s.formula(C("ii"), f'IF($C$5="ON",{C("iba_avg")}*{C("c_rate")},0)')
+        s.formula(C("ie"), f"{C('d_avg')}*{C('d_rate')}")
+        s.formula(C("ebt"), f"{C('ebit')}+{C('ii')}-{C('ie')}")
+        s.formula(C("ni"), f"{C('ebt')}-{C('tax')}")
+
+        # BS — 롤포워드가 첫 해부터 같은 수식(기초 열 덕분)
+        s.formula(C("cash"), f"{P('cash')}+{C('dcash')}")
+        s.formula(C("fa"), f"{P('fa')}+{C('capex')}-{C('cfo_da')}")
+        s.formula(C("debt"), f"{P('debt')}+{C('iss')}-{C('rep')}")
+        s.formula(C("re"), f"{C('re_roll')}")
+        s.formula(C("ta"), f"SUM({C('cash')}:{C('oa')})")
+        s.formula(C("tl"), f"SUM({C('debt')}:{C('ol')})")
+        s.formula(C("te"), f"SUM({C('cap')}:{C('oe')})")
+
+        # CF
+        s.formula(C("cfo_ni"), C("ni"))
+        s.formula(C("cfo_wc"), f"-({C('nwc')}-{P('nwc')})")
+        s.formula(C("cfo"), f"SUM({C('cfo_ni')}:{C('cfo_wc')})")
+        s.formula(C("cfi"), f"-{C('capex')}")
+        s.formula(C("cff"), f"{C('iss')}-{C('rep')}-{C('div')}")
+        s.formula(C("dcash"), f"{C('cfo')}+{C('cfi')}+{C('cff')}")
+
+        # 스케줄
+        s.formula(C("d_avg"), f"AVERAGE({P('debt')},{C('debt')})")
+        s.formula(C("re_roll"), f"{P('re')}+{C('ni')}-{C('div')}")
+        s.formula(C("iba"), f"{C('cash')}+{C('sti')}")
+        s.formula(C("iba_avg"), f"AVERAGE({P('iba')},{C('iba')})")
+
+    # ── CHECK 행(허용오차 — 정확일치 금지) ──
+    _check_row(s, R["chk_bs"], "CHECK 대차 (자산 − 부채 − 자본)",
+               "{col}" + str(R["ta"]),
+               "{col}" + str(R["tl"]) + "+{col}" + str(R["te"]), n, cols=cols)
+    _check_row(s, R["chk_cf"], "CHECK 현금연결 (Δ현금 − CF합)",
+               "{col}" + str(R["dcash"]),
+               "{col}" + str(R["cfo"]) + "+{col}" + str(R["cfi"]) + "+{col}" + str(R["cff"]),
+               n, cols=cols)
+    _check_row(s, R["chk_re"], "CHECK 이익잉여금 롤포워드",
+               "{col}" + str(R["re"]), "{col}" + str(R["re_roll"]), n, cols=cols)
+
+    s.text(f"B{note_row + 1}",
+           "기초 열(C)=FS_Hist 실적 [참조]. 기초 BS 가 스스로 대차가 맞아야 한다 — "
+           "안 맞으면 그 불균형이 전 추정기간에 상수로 지속된다.")
+    s.text(f"B{note_row + 2}",
+           "⚠️ 대차는 D&A·CAPEX 오류를 흡수한다(CFO+ 와 FA롤− 로 상쇄) — 대차 TRUE 를 "
+           "'모델이 맞다'로 읽지 말 것. 그 대사는 엔진 checks.check_three_statement_vs_spine 담당.")
+    return s
+
+
 STAGE_BUILDERS = {
     "W1": [build_research, build_assumption],
     "W2": [build_fs_hist],
@@ -540,12 +712,13 @@ STAGE_BUILDERS = {
     "W3": [build_reclass],
     "W4": [build_fcst_rev, build_fcst_cost, build_capex_dep, build_wc],
     "W5": [build_peer, build_wacc],
+    "W6B": [build_model_3s],
 }
 
 
 def build_stage(wb, stage: str, n: int = 5) -> list[str]:
-    """stage(W1~W5, W2.5) 시트 뼈대를 wb 에 추가. 생성된 시트명 리스트 반환."""
+    """stage(W1~W5, W2.5, W6b) 시트 뼈대를 wb 에 추가. 생성된 시트명 리스트 반환."""
     builders = STAGE_BUILDERS.get(stage.upper())
     if not builders:
-        raise ValueError(f"알 수 없는 단계: {stage} (W1~W5, W2.5)")
+        raise ValueError(f"알 수 없는 단계: {stage} (W1~W5, W2.5, W6b)")
     return [b(wb, n).name for b in builders]

@@ -64,7 +64,7 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 | W3 | `Reclass`(`_A/_F` 레이어) |
 | W4 | `Fcst_Rev`·`Fcst_Cost`(FS_Disagg 세분 롤업)·`Capex_Dep`·`WC` |
 | W5 | `Peer`(유사회사 4-step 퍼널 + Hamada 무부채화)·`WACC`(빌드업) |
-| W6~W8 | `DCF` 가정 상류참조 승격, `Scenario`·`Sens` |
+| W6~W8 | `DCF` 가정 상류참조 승격, **`Model`(3표 정합성, W6b)**, `Scenario`·`Sens` |
 
 **정체성 원칙(중요)**: 시트명·레이아웃은 위 **자체 정의**를 따른다. **MSVALUE(H_FS/EBIT/BackData 등) 시트명·레이아웃을 복제하지 않는다.** MSVALUE·xDCF 지식은 "무엇을 계산·검증할지"로만 쓴다. 규약은 `references/template_conventions.md`.
 
@@ -95,6 +95,7 @@ W4/W5 시트는 살아있는 수식: Capex_Dep(기말=기초+CAPEX−상각·정
 | **W3 계정재분류** | PL 4유형·BS 6유형 태깅(모호는 표면화) — `reclass.py`로 파티션 검증 | **분류합=원본 FS합(FAIL 게이트)**·누락·중복·유형오류 0 | xDCF_계정분류·msvalue_DCF_교육_정본 |
 | **W4 추정** | 드라이버 후보 제시→선택분 수식 구현. **`Fcst_Rev`·`Fcst_Cost`는 FS_Disagg 세분 라인(제품/상품/용역, 재료/노무/경비, 급여/상각/광고)과 동일 성격 행 → `계=Σ세분` 살아있는 SUM 롤업 → DCF!매출/원가/판관비** | projection_smoothness·wc_burn·가정 출처 완비·**세분 계=원계정 롤업 일치** | msvalue_리포트예시·모델링_실무 |
 | **W5 WACC** | **`peer.py` 유사회사 퍼널(Step0 자기제외 + 4-step)**(Step1 코드→Step2 유사성[판정]→Step3 비중≥70%→Step4 베타포인트·거래정지) → `Peer` 시트 Hamada 무부채화 → `wacc.py` 빌드업(Kroll size) | 퍼널 게이트(**대상 자기포함 거부**·무근거 판정 거부·uncertain→⚖️큐·5-10 rule)·β/MRP 정합·provenance·8~14% | wacc_할인율서식·베타·deloitte·PGR·msvalue_리포트예시 §E |
+| **W6b 3표 정합성(선택)** | `scaffold.py --stage W6b` → `Model` 시트(IS·BS·CF + 부채·RE·이자 스케줄 + CHECK 행). 엔진 검증은 `three_statement.py` | **대차·현금연결·RE롤 잔차 0**(허용오차)·순환 수렴·**3표↔스파인 영업벡터 대사** | 모델링_워크플로우_기초 §7·앤트로픽_벤치마크 §2 |
 | **W6 DCF** | 스파인 입력셀→Fcst 계 참조 승격(`promote.py`) + `dcf.py` 재계산 | **승격 tie-out(per_share 불변)**·워크북 vs 엔진 rel_tol 1e-6·audit 전규칙·gap_diagnosis | engine_spec·검증_클래시스 |
 | **W7 시나리오** | `scenario.py`(구성=판단) → Scenario 시트. **두 패러다임 병행**: 가중 SUMPRODUCT(기대값) + `--switch` CHOOSE 단일선택(서사·발표). Base 기본규칙=과거 N년 평균(평균회귀), Up/Down=절대 %p 가감 + 폭을 메모열에 기록 | 가중치 완전일치·합=1 | msvalue_리포트예시 부록F |
 | **W8 민감도** | `sensitivity.py`로 WACC×PGR 5×5 살아있는 수식 그리드(셀마다 독립 DCF 재계산) | 워크북 중심 == 엔진 3×3 중심 == base·(설치 시)recalc 게이트 | 앤트로픽_금융스킬_벤치마크 §1 |
@@ -126,6 +127,7 @@ echo '{...}' | python scripts/scaffold.py --emit-cells
 # W1~W5 단계 시트 뼈대(stdin 불요; 워크북 성장)
 python scripts/scaffold.py --stage W2.5 --emit-cells   # FS_Disagg(손익 세분 뼈대)
 python scripts/scaffold.py --stage W4 --emit-cells     # Fcst_Rev·Fcst_Cost·Capex_Dep·WC
+python scripts/scaffold.py --stage W6b --emit-cells    # Model(3표 연결 + Circuit Switch)
 
 # W2 과거 FS 무결성 (정규화·교차검증·재분류 추적; 미해결엔 account_dictionary 이관 힌트)
 echo '{"sources":[{"label":"FY2024","periods":{"2024":{"매출액":"1,234",...}}}]}' | python scripts/fs_clean.py

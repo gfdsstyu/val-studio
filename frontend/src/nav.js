@@ -26,6 +26,7 @@ export const NAV = {
     ]},
     { id: "valuation", label: "4. 밸류에이션", sheets: [
       { id: "dcf", label: "DCF" },
+      { id: "model", label: "3표 정합성" },
       { id: "scenario", label: "시나리오" },
       { id: "relative", label: "상대가치" },
     ]},
