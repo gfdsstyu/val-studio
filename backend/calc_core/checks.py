@@ -603,6 +603,21 @@ def check_bridge_consistency(
 _BRIDGE_COMPONENTS = ("net_debt", "non_operating_assets", "non_controlling_interest")
 
 
+# 브리지 단위 — 두 방법이 서로 다른 스케일을 쓰므로 **선언 없이 비교하면 무조건 오탐**이다.
+# DCF 스파인은 백만원(`per_share` 에 ×1e6), 상대가치 EV/EBITDA 경로는
+# `(EV−net_debt)/shares` 에 환산이 없어 **원**을 전제한다(multiples.py:77-78).
+_BRIDGE_UNIT_SCALE = {"KRW_mn": 1.0, "KRW": 1e-6}      # → 백만원 기준으로 정규화
+
+
+def bridge_unit_scale(unit: str | None) -> float:
+    """브리지 단위 → 백만원 환산계수. 미지정은 백만원(엔진 기본 단위)으로 본다."""
+    u = (unit or "KRW_mn").strip()
+    if u not in _BRIDGE_UNIT_SCALE:
+        raise ValueError(f"알 수 없는 브리지 단위: {unit!r} "
+                         f"({sorted(_BRIDGE_UNIT_SCALE)} 중 하나)")
+    return _BRIDGE_UNIT_SCALE[u]
+
+
 def bridge_net_position(bridge: dict) -> float:
     """지분브리지 **순포지션** = EV 에서 차감되는 총액.
 
@@ -612,9 +627,10 @@ def bridge_net_position(bridge: dict) -> float:
     항목 분해 방식이 달라도(DCF 는 3분해, 상대가치는 net_debt 스칼라 1개) 이 스칼라는
     **항상 비교 가능**하다 → 오탐 없는 1차 신호.
     """
+    scale = bridge_unit_scale(bridge.get("unit"))
     return (float(bridge.get("net_debt", 0.0))
             - float(bridge.get("non_operating_assets", 0.0))
-            + float(bridge.get("non_controlling_interest", 0.0)))
+            + float(bridge.get("non_controlling_interest", 0.0))) * scale
 
 
 def check_cross_method_bridge(
@@ -637,10 +653,14 @@ def check_cross_method_bridge(
     """
     out: list[Finding] = []
 
+    # 단위를 백만원으로 정규화한 뒤 비교한다(선언 없으면 백만원 가정).
     a, b = bridge_net_position(dcf_bridge), bridge_net_position(relative_bridge)
     scale = max(abs(a), abs(b), 1.0)
     detail = {"dcf_net_position": a, "relative_net_position": b, "delta": a - b,
-              "tol": tol, "dcf": dcf_bridge, "relative": relative_bridge}
+              "tol": tol, "dcf": dcf_bridge, "relative": relative_bridge,
+              "unit": "KRW_mn",
+              "dcf_unit": dcf_bridge.get("unit") or "KRW_mn",
+              "relative_unit": relative_bridge.get("unit") or "KRW_mn"}
     if abs(a - b) / scale > tol:
         out.append(Finding(
             "cross_method_bridge", Severity.WARN,

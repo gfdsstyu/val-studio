@@ -80,7 +80,13 @@ export default function DcfSheet({ project, onSave }) {
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   // 거시 시트가 남긴 PGR 앵커 제안(R2) — 있으면 한 번에 값+출처를 채운다.
-  const anchor = project?.data?.pgr_suggestion || null;
+  const rawAnchor = project?.data?.pgr_suggestion || null;
+  // ⚠️ FAIL 앵커(관측치 없음 → value 0)는 **적용 불가**. 객체가 truthy 라는 이유로
+  // 적용하면 PGR=0 에 pgr_source='derived' 가 붙어 R2 게이트가 자기 실패 산출물에
+  // 통과 도장을 찍는다.
+  const anchorFailed = !!rawAnchor
+    && (rawAnchor.findings || []).some((f) => f.severity === "fail");
+  const anchor = rawAnchor && !anchorFailed ? rawAnchor : null;
   const applyAnchor = () => setForm((f) => ({
     ...f, terminal_growth: String(anchor.value),
     pgr_source: "derived", pgr_basis: anchor.basis || "",
@@ -158,6 +164,13 @@ export default function DcfSheet({ project, onSave }) {
               )}</div>
             <div className="row"><label>영구성장률 PGR (소수)</label>
               <input type="text" value={form.terminal_growth} onChange={set("terminal_growth")} />
+              {anchorFailed && (
+                <div className="muted" style={{ marginTop: 4, fontSize: "0.8rem",
+                  color: "var(--warn,#c49b47)" }}>
+                  ⚠ 거시 앵커 산출 실패({rawAnchor.basis}) — 적용할 수 없습니다.
+                  3.할인율 › 거시에서 물가 자료·평가기준일을 확인하세요.
+                </div>
+              )}
               {anchor && (
                 <div style={{ marginTop: 4, fontSize: "0.82rem" }}>
                   <button type="button" onClick={applyAnchor}>

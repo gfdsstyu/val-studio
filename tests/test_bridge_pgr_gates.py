@@ -576,12 +576,32 @@ def test_fade_years_invalid_rejected():
     assert len(run(_fade_base(fade_years=0)).fcff) == 5
 
 
+def test_bridge_unit_contract_prevents_structural_false_positive():
+    """DCF(백만원)와 상대가치(원)를 단위 선언 없이 비교하면 무조건 오탐이 난다.
+
+    실측 근거: multiples.py 의 EV/EBITDA 경로는 `(EV−net_debt)/shares` 에 ×1e6 환산이
+    없어 **원**을 전제하는데, DCF 스파인은 백만원이다(per_share 에 ×1e6).
+    경제적으로 동일한 순부채 100억을 각 시트 규약대로 넣으면 일치해야 한다.
+    """
+    from calc_core.checks import bridge_unit_scale, check_cross_method_bridge
+    dcf = {"net_debt": 10_000.0, "unit": "KRW_mn"}                 # 100억 = 10,000 백만원
+    rel = {"net_debt": 10_000_000_000.0, "unit": "KRW"}            # 100억 = 1e10 원
+    f = next(x for x in check_cross_method_bridge(dcf, rel)
+             if x.rule == "cross_method_bridge")
+    assert f.severity.name == "PASS", f.message
+    assert f.detail["dcf_unit"] == "KRW_mn" and f.detail["relative_unit"] == "KRW"
+    # 단위 미선언은 백만원(엔진 기본)으로 본다 → 같은 숫자면 일치
+    assert bridge_unit_scale(None) == 1.0
+    try:
+        bridge_unit_scale("USD")
+        raise AssertionError("알 수 없는 단위가 통과됨")
+    except ValueError:
+        pass
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
             fn()
             print(f"  ok  {name}")
     print("R2·R3 게이트 통과")
-
-
-

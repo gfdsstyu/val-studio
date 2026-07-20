@@ -59,7 +59,18 @@ app.add_middleware(
 _FIELDS = {f.name for f in dataclasses.fields(DcfSpineInput)}
 
 
+# 프론트는 폼 문자열을 그대로 저장·전송하므로 선택 숫자필드에 "" 가 실려 온다.
+# 그대로 두면 `(1+w)**""` 같은 TypeError → 500. 입구에서 None 으로 접는다.
+_OPTIONAL_NUMERIC = (
+    "terminal_discount_period", "terminal_wc_ratio", "terminal_fcff_override",
+    "terminal_reinvestment_rate", "effective_tax_rate", "fade_years", "fade_growth",
+)
+
+
 def _parse_input(data: dict) -> DcfSpineInput:
+    for k in _OPTIONAL_NUMERIC:
+        if isinstance(data.get(k), str) and not data[k].strip():
+            data[k] = None
     try:
         return DcfSpineInput(**{k: v for k, v in data.items() if k in _FIELDS})
     except (TypeError, ValueError) as e:

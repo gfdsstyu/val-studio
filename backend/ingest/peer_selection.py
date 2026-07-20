@@ -139,7 +139,9 @@ def normalize_ticker(ticker: str) -> str:
     자기제외(R11) 가 표기 차이 때문에 뚫리면 안 되므로 여기서 통일한다.
     """
     t = (ticker or "").strip().upper()
-    if len(t) == 7 and t[0] == "A" and t[1:].isdigit():
+    # 한국 종목코드는 6자리 **영숫자**다(신형우선주 '00104K' 등) — `A`+6숫자 전제로 짜면
+    # 'A00104K' 와 '00104K' 가 서로 다른 값이 되어 자기제외가 조용히 미발동한다.
+    if len(t) == 7 and t[0] == "A" and t[1:].isalnum() and any(c.isdigit() for c in t[1:]):
         return t[1:]
     return t
 
@@ -166,13 +168,16 @@ def select_peers(
     # — 자기 배수로 자기를 평가하는 꼴이라 상승여력이 구조적으로 희석된다.
     # 실측 근거: 모델러스_통합모델_5.4 §4 D4 — Hugel 이 자기 peer 5사에 포함되어
     # EV/EBITDA 평균 15.595(자기제외 시 16.813), 주당가치 **7.9% 과소**.
-    if target_ticker:
-        tgt = normalize_ticker(target_ticker)
+    tgt = normalize_ticker(target_ticker) if target_ticker else ""
+    if tgt:                       # 공백만 준 경우 no-op — 빈 티커 후보를 전량 오탈락시킨다
         for t in traces:
-            if normalize_ticker(t.candidate.ticker) == tgt:
+            cand = normalize_ticker(t.candidate.ticker)
+            if cand and cand == tgt:
                 t.dropped_at = "step0"
                 t.reason = "평가대상 자기 자신 — peer 통계 자기포함은 순환논법"
-    funnel["step0 자기제외"] = sum(1 for t in traces if not t.dropped_at)
+        # ⚠️ target_ticker 가 없을 땐 이 행을 **찍지 않는다** — 찍으면 감사 리포트가
+        # "자기제외를 돌렸고 탈락자가 없었다"로 읽혀 거짓 안심을 준다(기능 미실행인데).
+        funnel["step0 자기제외"] = sum(1 for t in traces if not t.dropped_at)
 
     # ── Step1 산업코드 ──
     if target_industry_codes:

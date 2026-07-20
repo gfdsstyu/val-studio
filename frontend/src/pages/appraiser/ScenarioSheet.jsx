@@ -32,6 +32,9 @@ export default function ScenarioSheet({ project, onSave }) {
 
   const weightSum = cases.reduce((a, c) => a + (Number(c.weight) || 0), 0);
 
+  /** 선택 숫자필드: 값이 있을 때만 키를 넣는다(빈 문자열 → 서버 500 방지). */
+  const num = (k) => (base?.[k]?.toString().trim() ? { [k]: Number(base[k]) } : {});
+
   const buildSpine = (scale) => {
     const s = Number(scale);
     return {
@@ -45,7 +48,16 @@ export default function ScenarioSheet({ project, onSave }) {
       delta_nwc_cash_adj: parseSeries(base.delta_nwc_cash_adj),
       non_operating_assets: Number(base.non_operating_assets),
       net_debt: Number(base.net_debt),
+      non_controlling_interest: Number(base.non_controlling_interest) || 0,
       shares_outstanding: Number(base.shares_outstanding),
+      // ⚠️ 터미널·페이드 구조를 빠뜨리면 시나리오가 DCF 와 **다른 모델**이 된다.
+      // Dashboard 는 둘을 같은 막대차트에 나란히 놓으므로, 구조 차이가 시나리오
+      // 효과로 오독된다(실측 Δ-13.2% 가 전부 구조 차이였던 사례).
+      ...num("terminal_discount_period"),
+      ...num("terminal_wc_ratio"),
+      ...num("fade_years"),
+      ...num("fade_growth"),
+      ...(base.terminal_from_last_fcff ? { terminal_from_last_fcff: true } : {}),
     };
   };
 

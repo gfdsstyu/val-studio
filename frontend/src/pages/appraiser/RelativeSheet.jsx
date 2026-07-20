@@ -105,9 +105,9 @@ export default function RelativeSheet({ project, onSave }) {
               <input type="text" value={t.eps} onChange={setT_("eps")} /></div>
             <div className="row"><label>BPS (주당순자산 → PBR)</label>
               <input type="text" value={t.bps} onChange={setT_("bps")} /></div>
-            <div className="row"><label>EBITDA (→ EV/EBITDA)</label>
+            <div className="row"><label>EBITDA (→ EV/EBITDA, <b>원</b>)</label>
               <input type="text" value={t.ebitda} onChange={setT_("ebitda")} /></div>
-            <div className="row"><label>순차입부채 (EV→지분)</label>
+            <div className="row"><label>순차입부채 (EV→지분, <b>원</b>)</label>
               <input type="text" value={t.net_debt} onChange={setT_("net_debt")} /></div>
             <div className="row"><label>발행주식수 (EV/EBITDA용)</label>
               <input type="text" value={t.shares} onChange={setT_("shares")} /></div>

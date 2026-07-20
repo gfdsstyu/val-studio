@@ -31,7 +31,9 @@ export default function MacroSheet({ project, onSave }) {
   const [saved, setSaved] = useState(false);
   const [pgr, setPgr] = useState(project?.data?.pgr_suggestion || null);
 
-  const baseDate = project?.setup?.base_date || "";
+  // SSOT 키는 `valuation_date` — `base_date` 는 레포에 존재하지 않는 키였다.
+  // 이 오타 때문에 vintage look-ahead 가드가 **모든 실사용 경로에서 꺼져** 있었다.
+  const baseDate = project?.setup?.valuation_date || "";
   const ecosKey = loadKey("ecos");
   const dataKey = INDICATORS.find(([id]) => id === indicator)?.[2];
   const current = project?.data?.[dataKey];
@@ -190,6 +192,12 @@ export default function MacroSheet({ project, onSave }) {
                   최고민감 파라미터라 <b>무근거 하드코드는 감사 방어가 불가</b>하다.
                   vintage 가드 통과분만 평균한다. <b>제안일 뿐 확정은 평가인 몫.</b>
                 </div>
+                {!baseDate && (
+                  <div style={{ color: "var(--warn,#c49b47)", fontSize: "0.8rem", marginBottom: 6 }}>
+                    ⚠ 평가기준일 미설정 — look-ahead 가드가 적용되지 않습니다(기준일 이후
+                    공표·전망치가 평균에 섞일 수 있음). 개요에서 평가기준일을 먼저 확정하세요.
+                  </div>
+                )}
                 <button disabled={busy || !text.trim()} onClick={suggestPgr}>
                   10년 평균으로 PGR 앵커 산출
                 </button>

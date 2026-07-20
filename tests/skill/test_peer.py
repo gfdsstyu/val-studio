@@ -49,7 +49,7 @@ def test_full_funnel_matches_web():
     dropped = {d["ticker"]: d["dropped_at"] for d in out["dropped"]}
     assert dropped == {"B": "step1", "C": "step3", "D": "step4", "E": "step4"}
     # 퍼널 생존수 5→4→4→3→1
-    assert list(out["funnel"].values()) == [5, 5, 4, 4, 3, 1]   # step0 자기제외(R11) 추가
+    assert list(out["funnel"].values()) == [5, 4, 4, 3, 1]
     assert out["size_note"] and "< 5" in out["size_note"]      # 1<5 통계취약
 
 

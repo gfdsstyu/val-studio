@@ -41,10 +41,12 @@ function useBridgeCheck(d) {
         non_operating_assets: Number(dcf.non_operating_assets) || 0,
         non_controlling_interest: Number(dcf.non_controlling_interest) || 0,
         shares_outstanding: Number(dcf.shares_outstanding) || 0,
+        unit: "KRW_mn",              // DCF 스파인은 백만원
       },
       relative: {
         net_debt: Number(rel.net_debt) || 0,
         shares_outstanding: Number(rel.shares) || 0,
+        unit: "KRW",                 // 상대가치 EV/EBITDA 경로는 원(multiples.py 환산 없음)
       },
     }).then((r) => alive && setRes(r)).catch(() => alive && setRes(null));
     return () => { alive = false; };

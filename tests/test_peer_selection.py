@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from ingest.peer_selection import (  # noqa: E402
-    PeerCandidate, Step2Judgment, codes_from_seed_peers, select_peers,
+    PeerCandidate, Step2Judgment, codes_from_seed_peers, normalize_ticker, select_peers,
 )
 
 # 클래시스 스타일 미니 퍼널: 6후보 → step1에서 1·step2에서 1·step3에서 1·step4에서 1 탈락 → 2사
@@ -40,10 +40,10 @@ def _run(**over):
 
 
 def test_funnel_counts():
-    """모집단 → step0 자기제외(R11) → step1~4. target_ticker 미지정이면 step0 은 no-op."""
+    """target_ticker 미지정이면 step0 행 자체가 없다(기능 미실행을 정직하게 표기)."""
     r = _run()
-    assert list(r.funnel.values()) == [6, 6, 5, 4, 3, 2]
-    assert list(r.funnel)[1] == "step0 자기제외"
+    assert list(r.funnel.values()) == [6, 5, 4, 3, 2]
+    assert "step0 자기제외" not in r.funnel
 
 
 def test_final_selection_and_traces():
@@ -165,7 +165,14 @@ def test_no_target_ticker_is_noop():
                            revenue_share_related=0.9, listed_years=8)]
     r = select_peers(cands, target_industry_codes={"2110"})
     assert len(r.selected) == 1
-    assert r.funnel["step0 자기제외"] == 1
+    # 기능 미실행 → 퍼널에 행이 없어야 한다(있으면 "돌렸는데 탈락 0"으로 오독)
+    assert "step0 자기제외" not in r.funnel
+    # 공백만 준 경우도 no-op — 티커 결측 후보를 전량 오탈락시키면 안 된다
+    blank = select_peers(
+        [PeerCandidate(ticker="", name="티커결측", industry_code="2110",
+                       revenue_share_related=0.9, listed_years=8)],
+        target_ticker="   ", target_industry_codes={"2110"})
+    assert len(blank.selected) == 1, [t.reason for t in blank.traces]
 
 
 def test_self_excluded_target_needs_no_step2_judgment():
@@ -179,6 +186,18 @@ def test_self_excluded_target_needs_no_step2_judgment():
     r = select_peers(cands, target_ticker="A145020", target_industry_codes={"2110"},
                      judgments=[Step2Judgment("A086900", True, "동일 톡신 사업")])
     assert [c.ticker for c in r.selected] == ["A086900"]
+
+
+def test_normalize_ticker_alphanumeric_korean_code():
+    """신형우선주 등 6자리 **영숫자** 코드도 A 접두를 흡수해야 한다.
+
+    'A00104K' vs '00104K' 가 갈리면 같은 종목인데 자기제외가 조용히 미발동한다.
+    """
+    assert normalize_ticker("A00104K") == normalize_ticker("00104K") == "00104K"
+    assert normalize_ticker("A145020") == normalize_ticker("145020") == "145020"
+    assert normalize_ticker(" a145020 ") == "145020"
+    assert normalize_ticker("AAPL") == "AAPL"        # 미국 티커는 건드리지 않는다
+    assert normalize_ticker("ABCDEFG") == "ABCDEFG"  # 숫자 없으면 코드로 보지 않는다
 
 
 if __name__ == "__main__":

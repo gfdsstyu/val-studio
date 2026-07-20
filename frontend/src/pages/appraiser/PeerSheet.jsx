@@ -43,6 +43,8 @@ function KsicLookup() {
 export default function PeerSheet({ project, onSave }) {
   const [cands, setCands] = useState(project?.data?.peer_candidates || DEMO);
   const [codes, setCodes] = useState(project?.data?.peer_codes || "2710");
+  const [targetTicker, setTargetTicker] = useState(
+    project?.data?.peer_target_ticker || project?.ticker || "");
   // Step1a: rough 유사회사(Research ⑦⑨ 경쟁사)에서 KSIC 역산 → 모집단 코드
   const [seedMode, setSeedMode] = useState(false);
   const [seeds, setSeeds] = useState(project?.data?.peer_seeds || [{ ticker: "", name: "", industry_code: "" }]);
@@ -72,6 +74,9 @@ export default function PeerSheet({ project, onSave }) {
     setBusy(true); setErr(null); setRes(null);
     const numOrNull = (v) => (String(v).trim() === "" ? null : Number(v));
     const body = {
+      // R11 자기제외 — 평가대상을 peer 통계에 넣으면 배수가 현재 주가로 끌려간다.
+      // 비우면 서버가 자기제외를 **실행하지 않는다**(퍼널에도 행이 찍히지 않음).
+      target_ticker: targetTicker.trim() || undefined,
       candidates: cands.filter((c) => c.ticker.trim()).map((c) => ({
         ticker: c.ticker, name: c.name || c.ticker,
         industry_code: c.industry_code || null,
@@ -94,7 +99,7 @@ export default function PeerSheet({ project, onSave }) {
     try {
       const d = await api.peerSelect(body);
       setRes(d);
-      onSave?.({ peer_candidates: cands, peer_codes: codes, peer_seeds: seeds,
+      onSave?.({ peer_candidates: cands, peer_codes: codes, peer_target_ticker: targetTicker, peer_seeds: seeds,
         peer_selected: d.selected, peer_needs_review: d.needs_review });
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
@@ -110,6 +115,15 @@ export default function PeerSheet({ project, onSave }) {
           </label>
           {!seedMode ? (
             <div className="row" style={{ maxWidth: 320 }}>
+              <label>평가대상 종목코드 (자기제외)</label>
+              <input type="text" value={targetTicker}
+                onChange={(e) => setTargetTicker(e.target.value)}
+                placeholder="예 145020 (A145020 도 인식)" />
+              <div className="muted" style={{ fontSize: "0.8rem", margin: "2px 0 8px" }}>
+                평가대상을 peer 통계에 넣으면 <b>자기 배수로 자기를 평가</b>하는 순환논법이 되어
+                상승여력이 구조적으로 희석된다(실측 주당 7.9% 왜곡). 비우면 자기제외를
+                <b> 실행하지 않는다</b>.
+              </div>
               <label>모집단 산업코드 (KSIC, 콤마 구분)</label>
               <input type="text" value={codes} onChange={(e) => setCodes(e.target.value)} />
             </div>
