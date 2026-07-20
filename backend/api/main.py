@@ -1107,6 +1107,13 @@ async def macro_pgr_suggest(request: Request) -> dict:
         vintage=d.get("vintage") or base_date,
         is_forecast_from=d.get("is_forecast_from"),
         source=d.get("source") or "붙여넣기", report=report)
+    # base_date 미지정이면 vintage 가드가 사실상 무력화된다(모든 관측이 usable) —
+    # 조용히 통과시키지 않고 findings 에 명시한다.
+    guard_note = None
+    if not base_date:
+        guard_note = {"rule": "pgr_anchor", "severity": "warn",
+                      "message": "평가기준일(base_date) 미지정 — look-ahead 가드가 적용되지 "
+                                 "않았다(기준일 이후 공표값이 섞일 수 있음)"}
     try:
         sug = suggest_pgr_from_inflation(series, base_date or "9999-12-31",
                                          years=int(d.get("years", 10)))
@@ -1116,8 +1123,9 @@ async def macro_pgr_suggest(request: Request) -> dict:
         "value": sug.value, "basis": sug.basis,
         "n_observations": sug.n_observations, "periods": list(sug.periods),
         "source": sug.source,
-        "findings": [{"rule": f.rule, "severity": f.severity.value, "message": f.message}
-                     for f in list(report.findings) + list(sug.findings)],
+        "findings": ([{"rule": f.rule, "severity": f.severity.value, "message": f.message}
+                      for f in list(report.findings) + list(sug.findings)]
+                     + ([guard_note] if guard_note else [])),
     }
 
 

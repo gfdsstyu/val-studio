@@ -86,9 +86,16 @@ def _expand_fade(inp: DcfSpineInput, g: float) -> DcfSpineInput:
     """명시추정 시계열 뒤에 페이드 구간을 이어붙여 확장된 입력을 만든다(R1).
 
     **설계**: 페이드를 별도 계산분기로 만들지 않고 *입력 확장*으로 구현한다 →
-    할인·터미널·브리지·민감도 로직이 전부 무수정으로 재사용되고, 하류 게이트
-    (tv_weight·projection_smoothness·working_capital_burn)도 페이드 포함 시계열을
-    자동으로 검사한다.
+    할인·터미널·브리지·민감도 로직이 전부 무수정으로 재사용된다.
+    (하류 게이트 중 `tv_weight` 만 `result` 를 읽으므로 페이드를 자동 반영한다.
+    `projection_smoothness`·`working_capital_burn` 은 **미확장 스파인**을 받는다 —
+    페이드 구간은 마지막 명시연도의 균일 스케일이라 급변·회전기일 악화 판정에
+    정보가 없어 무해하지만, "전 게이트가 페이드를 본다"는 뜻은 아니다.)
+
+    ⚠️ `terminal_discount_period` 는 여기서 **건드리지 않는다** — 그 필드는 확장된
+    전체 시계 기준의 절대 기간이라는 계약이다. 명시 5년 기준으로 4.5 를 선언한 뒤
+    페이드 5년을 켜면 시계가 10년인데 TV 를 t=4.5 로 할인하게 되므로,
+    `checks.check_terminal_discount_convention` 이 시계와의 정합을 검사한다.
 
     **비율 동결의 구현**: 전 라인아이템을 동일 성장률 gf 로 성장시킨다. 매출도 gf 로
     자라므로 모든 비율(원가율·판관비율·CAPEX/매출·D&A/매출·ΔWC/매출)이 자동 동결되고,
@@ -96,11 +103,17 @@ def _expand_fade(inp: DcfSpineInput, g: float) -> DcfSpineInput:
 
     fade_years 가 None/0 이면 **입력을 그대로 반환**(기존 동작 완전 보존 — 골든 불변).
     """
-    k = inp.fade_years or 0
-    if k <= 0:
+    k = inp.fade_years
+    if k is None:
         return inp
-    if k < 0 or int(k) != k:
-        raise ValueError(f"fade_years 는 0 이상 정수여야 한다: {k}")
+    # 검증을 **조기 반환보다 먼저** 한다 — `k <= 0` 을 먼저 걸러내면 음수가 조용히
+    # "페이드 없음"으로 흡수되어 사용자는 페이드를 켰다고 믿는데 안 켜진 상태가 된다.
+    if isinstance(k, bool) or not isinstance(k, int):
+        raise ValueError(f"fade_years 는 정수여야 한다: {k!r}")
+    if k < 0:
+        raise ValueError(f"fade_years 는 음수일 수 없다: {k}")
+    if k == 0:
+        return inp
 
     gf = resolve_fade_growth(inp, g)
     factors = [(1.0 + gf) ** (j + 1) for j in range(k)]

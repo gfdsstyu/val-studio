@@ -167,9 +167,14 @@ def test_terminal_period_implicit_warns_with_impact():
     assert f.detail["explicit"] is False
     assert abs(f.detail["terminal_discount_period"] - 2.5) < 1e-6   # mid-year 기본
     assert f.detail["alternative_period"] == 3.0            # 기말 대안
-    # 기말 할인은 한 반기 더 할인 → 주당가치 하락
+    # 기말 할인은 한 반기 더 할인 → 주당가치 하락. 값도 해석적으로 고정한다
+    # (PV(TV) 만 1/(1+w)^0.5 배로 줄고 명시구간 PV 는 불변).
+    res = run(inp)
+    expected_alt = res.pv_explicit_sum + res.terminal_value_pv / (1.0 + inp.wacc) ** 0.5
+    expected_delta = expected_alt / res.enterprise_value - 1.0     # 브리지 0 이라 EV 비 = 주당 비
     assert f.detail["delta_pct"] < 0
-    assert abs(f.detail["delta_pct"] + 0.0) < 0.5           # 상식 범위
+    assert abs(f.detail["delta_pct"] - expected_delta) < 1e-9, (
+        f.detail["delta_pct"], expected_delta)
 
 
 def test_terminal_period_explicit_passes():
@@ -303,9 +308,280 @@ def test_d7_share_count_discrepancy_reproduced():
     assert rules["cross_method_shares"].detail["relative_shares"] == 11_214_141
 
 
+# ══ 코드리뷰 회귀 (2026-07-20 독립검토 지적사항) ══════════════════════════════
+def _fade_base(**kw):
+    from calc_core.models import DcfSpineInput
+    base = dict(wacc=0.10, terminal_growth=0.02,
+                revenue=[1000., 1150., 1300., 1450., 1600.],
+                cogs=[600., 690., 780., 870., 960.],
+                sga=[200., 230., 260., 290., 320.],
+                dep_amort=[50., 57., 65., 72., 80.],
+                capex=[60., 69., 78., 87., 96.],
+                delta_nwc_cash_adj=[-20., -23., -26., -29., -32.],
+                non_operating_assets=100., net_debt=200., shares_outstanding=1_000_000)
+    base.update(kw)
+    return DcfSpineInput(**base)
+
+
+def test_terminal_period_stale_declaration_caught():
+    """페이드를 켜기 전 시계로 선언한 terminal_discount_period 를 잡는다.
+
+    실측 결함: 명시 5년 기준 t=4.5 선언 + 페이드 5년 → TV 를 t=4.5 로 할인해
+    **주당 +36% 과대**인데 게이트가 PASS 를 줬다(explicit 분기가 시계 검사를 우회).
+    """
+    from calc_core.checks import check_terminal_discount_convention
+    from calc_core.dcf import run
+    stale = _fade_base(fade_years=5, terminal_discount_period=4.5)
+    ok = _fade_base(fade_years=5, terminal_discount_period=9.5)
+    r_stale, r_ok = run(stale), run(ok)
+    assert r_stale.per_share / r_ok.per_share - 1 > 0.30          # 실제로 크게 과대
+    f = check_terminal_discount_convention(stale, r_stale)
+    assert f.severity.name == "WARN", f.message
+    assert f.detail["horizon"] == 10 and f.detail["consistent_with_horizon"] is False
+    # 정합 선언은 PASS
+    assert check_terminal_discount_convention(ok, r_ok).severity.name == "PASS"
+
+
+def test_terminal_period_wacc_le_minus_one_returns_finding_not_exception():
+    """검증 게이트는 잘못된 입력에 **예외가 아니라 finding** 을 내야 한다.
+
+    WACC=-1 → 0 나눗셈, WACC<-1 → (음수)^소수 = complex. 예외면 audit 전체가 중단된다.
+    """
+    from calc_core.checks import check_terminal_discount_convention
+    from calc_core.dcf import run
+    res = run(_fade_base())
+    for w in (-1.0, -1.5):
+        f = check_terminal_discount_convention(_fade_base(wacc=w), res)
+        assert f.severity.name == "FAIL", (w, f.message)
+
+
+def test_diagnose_gap_uses_expanded_horizon_and_per_share_scale():
+    """가설값이 실제 per_share 와 같은 스케일·시계여야 매칭이 가능하다.
+
+    선행 결함(8fbd8b8): ps() 가 ×1e6 환산과 NCI 차감을 빠뜨려 모든 가설이 100만배
+    작았다 → 어떤 가설도 영원히 매칭 불가. 여기에 페이드 미확장 시계까지 겹쳤다.
+    """
+    from calc_core.checks import diagnose_dcf_gap
+    from calc_core.dcf import run
+    inp = _fade_base(fade_years=5)
+    res = run(inp)
+    f = diagnose_dcf_gap(inp, res, claimed_per_share=res.per_share)
+    assert f.severity.name == "PASS"                      # 자기 자신은 일치
+    h = f.detail["hypotheses"]
+    # 모든 가설이 per_share 와 같은 자릿수(0.1~10배)여야 한다
+    for k, v in h.items():
+        assert 0.1 < v / res.per_share < 10.0, (k, v, res.per_share)
+    # tv_missing 가설 = 명시구간만 → 실제보다 작아야
+    assert h["tv_missing"] < res.per_share
+
+
+def test_from_last_fcff_not_credited_when_underinvesting():
+    """마지막 해 CAPEX < D&A 면 재투자 부족을 영구 승계 → 재투자 반영으로 인정 금지.
+
+    실측: 무조건 인정하면 기본(WARN) 대비 EV 가 23% 큰 결과에 PASS 가 붙어 게이트
+    방향이 뒤집힌다.
+    """
+    from calc_core.checks import audit_dcf
+    from calc_core.dcf import run
+    kw = dict(wacc=0.10, terminal_growth=0.04, revenue=[100., 110., 120.],
+              cogs=[50., 55., 60.], sga=[20., 22., 24.], dep_amort=[10., 10., 10.],
+              delta_nwc_cash_adj=[0., 0., 0.], non_operating_assets=0., net_debt=0.,
+              shares_outstanding=1000)
+    from calc_core.models import DcfSpineInput
+    under = DcfSpineInput(**kw, capex=[10., 10., 1.], terminal_from_last_fcff=True)
+    rep = audit_dcf(under, run(under))
+    rules = {f.rule: f.severity.name for f in rep.findings}
+    assert rules["terminal_reinvestment"] == "WARN"          # 승격되지 않아야
+    assert rules["terminal_from_last_fcff"] == "WARN"        # 별도 경고도 나와야
+
+    healthy = DcfSpineInput(**kw, capex=[10., 10., 15.], terminal_from_last_fcff=True)
+    rep2 = audit_dcf(healthy, run(healthy))
+    rules2 = {f.rule: f.severity.name for f in rep2.findings}
+    assert rules2["terminal_reinvestment"] == "PASS"         # 충분하면 인정
+    assert "terminal_from_last_fcff" not in rules2
+
+
+def test_shares_zero_is_not_silently_skipped():
+    """`if ds and rs` truthiness 로 쓰면 0 주가 조용히 통과한다 — 가장 흔한 불량 입력."""
+    from calc_core.checks import check_cross_method_bridge
+    fs = check_cross_method_bridge({"net_debt": 0.0, "shares_outstanding": 0},
+                                   {"net_debt": 0.0, "shares_outstanding": 5000})
+    sh = [f for f in fs if f.rule == "cross_method_shares"]
+    assert sh and sh[0].severity.name == "WARN", [f.rule for f in fs]
+    # None(미선언)은 판정보류 — 추측 금지
+    fs2 = check_cross_method_bridge({"net_debt": 0.0}, {"net_debt": 0.0})
+    assert not any(f.rule == "cross_method_shares" for f in fs2)
+
+
+def test_suggest_pgr_rejects_nonpositive_years():
+    """파이썬 슬라이싱 함정: lst[-0:] 는 빈 리스트가 아니라 **전체 리스트**.
+
+    years=0 을 흘리면 요청하지 않은 전체 평균이 나오면서 basis 는 그럴듯하게 찍히고
+    finding 은 PASS — 감사추적이 거짓이 된다.
+    """
+    s = _cpi_series([0.01] * 12)
+    for bad in (0, -3):
+        try:
+            suggest_pgr_from_inflation(s, "2030-01-01", years=bad)
+            raise AssertionError(f"years={bad} 가 통과됨")
+        except ValueError:
+            pass
+    assert suggest_pgr_from_inflation(s, "2030-01-01", years=10).n_observations == 10
+
+
+def test_fade_years_invalid_rejected():
+    """음수는 조용히 '페이드 없음'으로 흡수되면 안 되고, 실수는 raw TypeError 금지."""
+    from calc_core.dcf import run
+    for bad in (-3, 3.0, True):
+        try:
+            run(_fade_base(fade_years=bad))
+            raise AssertionError(f"fade_years={bad!r} 가 통과됨")
+        except ValueError:
+            pass
+    # None/0 은 정상(페이드 없음)
+    assert len(run(_fade_base(fade_years=0)).fcff) == 5
+
+
+# ══ 코드리뷰 회귀 (2026-07-20 독립검토 지적사항) ══════════════════════════════
+def _fade_base(**kw):
+    from calc_core.models import DcfSpineInput
+    base = dict(wacc=0.10, terminal_growth=0.02,
+                revenue=[1000., 1150., 1300., 1450., 1600.],
+                cogs=[600., 690., 780., 870., 960.],
+                sga=[200., 230., 260., 290., 320.],
+                dep_amort=[50., 57., 65., 72., 80.],
+                capex=[60., 69., 78., 87., 96.],
+                delta_nwc_cash_adj=[-20., -23., -26., -29., -32.],
+                non_operating_assets=100., net_debt=200., shares_outstanding=1_000_000)
+    base.update(kw)
+    return DcfSpineInput(**base)
+
+
+def test_terminal_period_stale_declaration_caught():
+    """페이드를 켜기 전 시계로 선언한 terminal_discount_period 를 잡는다.
+
+    실측 결함: 명시 5년 기준 t=4.5 선언 + 페이드 5년 → TV 를 t=4.5 로 할인해
+    **주당 +36% 과대**인데 게이트가 PASS 를 줬다(explicit 분기가 시계 검사를 우회).
+    """
+    from calc_core.checks import check_terminal_discount_convention
+    from calc_core.dcf import run
+    stale = _fade_base(fade_years=5, terminal_discount_period=4.5)
+    ok = _fade_base(fade_years=5, terminal_discount_period=9.5)
+    r_stale, r_ok = run(stale), run(ok)
+    assert r_stale.per_share / r_ok.per_share - 1 > 0.30          # 실제로 크게 과대
+    f = check_terminal_discount_convention(stale, r_stale)
+    assert f.severity.name == "WARN", f.message
+    assert f.detail["horizon"] == 10 and f.detail["consistent_with_horizon"] is False
+    # 정합 선언은 PASS
+    assert check_terminal_discount_convention(ok, r_ok).severity.name == "PASS"
+
+
+def test_terminal_period_wacc_le_minus_one_returns_finding_not_exception():
+    """검증 게이트는 잘못된 입력에 **예외가 아니라 finding** 을 내야 한다.
+
+    WACC=-1 → 0 나눗셈, WACC<-1 → (음수)^소수 = complex. 예외면 audit 전체가 중단된다.
+    """
+    from calc_core.checks import check_terminal_discount_convention
+    from calc_core.dcf import run
+    res = run(_fade_base())
+    for w in (-1.0, -1.5):
+        f = check_terminal_discount_convention(_fade_base(wacc=w), res)
+        assert f.severity.name == "FAIL", (w, f.message)
+
+
+def test_diagnose_gap_uses_expanded_horizon_and_per_share_scale():
+    """가설값이 실제 per_share 와 같은 스케일·시계여야 매칭이 가능하다.
+
+    선행 결함(8fbd8b8): ps() 가 ×1e6 환산과 NCI 차감을 빠뜨려 모든 가설이 100만배
+    작았다 → 어떤 가설도 영원히 매칭 불가. 여기에 페이드 미확장 시계까지 겹쳤다.
+    """
+    from calc_core.checks import diagnose_dcf_gap
+    from calc_core.dcf import run
+    inp = _fade_base(fade_years=5)
+    res = run(inp)
+    f = diagnose_dcf_gap(inp, res, claimed_per_share=res.per_share)
+    assert f.severity.name == "PASS"                      # 자기 자신은 일치
+    h = f.detail["hypotheses"]
+    # 모든 가설이 per_share 와 같은 자릿수(0.1~10배)여야 한다
+    for k, v in h.items():
+        assert 0.1 < v / res.per_share < 10.0, (k, v, res.per_share)
+    # tv_missing 가설 = 명시구간만 → 실제보다 작아야
+    assert h["tv_missing"] < res.per_share
+
+
+def test_from_last_fcff_not_credited_when_underinvesting():
+    """마지막 해 CAPEX < D&A 면 재투자 부족을 영구 승계 → 재투자 반영으로 인정 금지.
+
+    실측: 무조건 인정하면 기본(WARN) 대비 EV 가 23% 큰 결과에 PASS 가 붙어 게이트
+    방향이 뒤집힌다.
+    """
+    from calc_core.checks import audit_dcf
+    from calc_core.dcf import run
+    kw = dict(wacc=0.10, terminal_growth=0.04, revenue=[100., 110., 120.],
+              cogs=[50., 55., 60.], sga=[20., 22., 24.], dep_amort=[10., 10., 10.],
+              delta_nwc_cash_adj=[0., 0., 0.], non_operating_assets=0., net_debt=0.,
+              shares_outstanding=1000)
+    from calc_core.models import DcfSpineInput
+    under = DcfSpineInput(**kw, capex=[10., 10., 1.], terminal_from_last_fcff=True)
+    rep = audit_dcf(under, run(under))
+    rules = {f.rule: f.severity.name for f in rep.findings}
+    assert rules["terminal_reinvestment"] == "WARN"          # 승격되지 않아야
+    assert rules["terminal_from_last_fcff"] == "WARN"        # 별도 경고도 나와야
+
+    healthy = DcfSpineInput(**kw, capex=[10., 10., 15.], terminal_from_last_fcff=True)
+    rep2 = audit_dcf(healthy, run(healthy))
+    rules2 = {f.rule: f.severity.name for f in rep2.findings}
+    assert rules2["terminal_reinvestment"] == "PASS"         # 충분하면 인정
+    assert "terminal_from_last_fcff" not in rules2
+
+
+def test_shares_zero_is_not_silently_skipped():
+    """`if ds and rs` truthiness 로 쓰면 0 주가 조용히 통과한다 — 가장 흔한 불량 입력."""
+    from calc_core.checks import check_cross_method_bridge
+    fs = check_cross_method_bridge({"net_debt": 0.0, "shares_outstanding": 0},
+                                   {"net_debt": 0.0, "shares_outstanding": 5000})
+    sh = [f for f in fs if f.rule == "cross_method_shares"]
+    assert sh and sh[0].severity.name == "WARN", [f.rule for f in fs]
+    # None(미선언)은 판정보류 — 추측 금지
+    fs2 = check_cross_method_bridge({"net_debt": 0.0}, {"net_debt": 0.0})
+    assert not any(f.rule == "cross_method_shares" for f in fs2)
+
+
+def test_suggest_pgr_rejects_nonpositive_years():
+    """파이썬 슬라이싱 함정: lst[-0:] 는 빈 리스트가 아니라 **전체 리스트**.
+
+    years=0 을 흘리면 요청하지 않은 전체 평균이 나오면서 basis 는 그럴듯하게 찍히고
+    finding 은 PASS — 감사추적이 거짓이 된다.
+    """
+    s = _cpi_series([0.01] * 12)
+    for bad in (0, -3):
+        try:
+            suggest_pgr_from_inflation(s, "2030-01-01", years=bad)
+            raise AssertionError(f"years={bad} 가 통과됨")
+        except ValueError:
+            pass
+    assert suggest_pgr_from_inflation(s, "2030-01-01", years=10).n_observations == 10
+
+
+def test_fade_years_invalid_rejected():
+    """음수는 조용히 '페이드 없음'으로 흡수되면 안 되고, 실수는 raw TypeError 금지."""
+    from calc_core.dcf import run
+    for bad in (-3, 3.0, True):
+        try:
+            run(_fade_base(fade_years=bad))
+            raise AssertionError(f"fade_years={bad!r} 가 통과됨")
+        except ValueError:
+            pass
+    # None/0 은 정상(페이드 없음)
+    assert len(run(_fade_base(fade_years=0)).fcff) == 5
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
             fn()
             print(f"  ok  {name}")
     print("R2·R3 게이트 통과")
+
+
+

@@ -211,17 +211,24 @@ def diagnose_dcf_gap(
       netdebt_ignored      — 순차입부채 미차감
     어느 가설도 안 맞으면 구조가 아닌 **가정 차이** → 민감도로 추적하라는 신호.
     """
-    w, n = inp.wacc, len(inp.revenue)
+    # ⚠️ n 은 **확장된 시계**(페이드 포함)여야 한다 — inp.revenue 는 미확장이라
+    # 페이드 사용 시 (1+w)^(n−0.5) 역산이 (1+w)^fade_years 만큼 어긋난다.
+    w, n = inp.wacc, len(result.pv_fcff)
     shares = inp.shares_outstanding or 1.0
     ev, pv_exp, pv_tv = (result.enterprise_value, result.pv_explicit_sum,
                          result.terminal_value_pv)
 
     def ps(ev_h: float, nonop: float | None = None, debt: float | None = None) -> float:
+        """가설 EV → 주당가치. `_compute` 와 **동일한 브리지·단위**여야 비교가 성립한다
+        (NCI 차감 + 백만원→원 환산 1e6). 둘 중 하나라도 빠지면 가설이 실제 주당가치와
+        스케일이 달라 어떤 가설도 영원히 매칭되지 않는다."""
         nonop = inp.non_operating_assets if nonop is None else nonop
         debt = inp.net_debt if debt is None else debt
-        return (ev_h + nonop - debt) / shares
+        return ((ev_h + nonop - debt - inp.non_controlling_interest)
+                / shares * 1_000_000)
 
-    tv_undisc = pv_tv * (1.0 + w) ** (n - 0.5)      # mid-year 최종기간 역산
+    # 할인 전 TV 는 result 에 이미 있다 — 역산(부동소수·기간 가정 이중오류)보다 정확하다.
+    tv_undisc = result.terminal_value
     hypotheses = {
         "end_year_discounting": ps(ev / (1.0 + w) ** 0.5),
         "tv_undiscounted": ps(pv_exp + tv_undisc),
@@ -488,19 +495,47 @@ def check_terminal_discount_convention(
     alt = float(n_eff) if abs(eff - round(eff)) > 1e-9 else eff - 0.5
 
     shares = inp.shares_outstanding or 1
+    if inp.wacc <= -1.0:
+        # 검증 게이트가 잘못된 입력에 **예외를 던지면 audit 전체가 중단**된다
+        # (WACC=-1 → 0 나눗셈, WACC<-1 → (음수)^소수 = complex → 포맷 단계 폭발).
+        f = Finding("terminal_discount_convention", Severity.FAIL,
+                    f"WACC({inp.wacc:.2%}) ≤ −100% — 할인계수 정의 불가",
+                    {"wacc": inp.wacc, "terminal_discount_period": eff})
+        if report is not None:
+            report.add(f)
+        return f
     pv_tv_alt = result.terminal_value * (1.0 / (1.0 + inp.wacc) ** alt)
     ev_alt = result.pv_explicit_sum + pv_tv_alt
     ps_alt = (ev_alt + inp.non_operating_assets - inp.net_debt
               - inp.non_controlling_interest) / shares * 1_000_000
     delta = (ps_alt / result.per_share - 1.0) if result.per_share else float("nan")
 
+    # 시계와의 정합 — 명시 선언이 **확장된 전체 시계**를 반영하는가.
+    # 통용되는 두 컨벤션은 t=n(기말)·t=n−0.5(mid-year) 뿐이다. 그 밖의 값은
+    # 페이드를 켜기 전 시계 기준으로 선언해 놓고 잊은 경우가 대부분 —
+    # 실측: 명시 5년 기준 4.5 선언 + 페이드 5년 → TV 를 t=4.5 로 할인해 **주당 +36%** 과대.
+    sane = (float(n_eff), float(n_eff) - 0.5)
+    consistent = any(abs(eff - c) < 1e-6 for c in sane)
+
     detail = {"terminal_discount_period": eff, "explicit": explicit,
               "alternative_period": alt, "per_share": result.per_share,
-              "per_share_alternative": ps_alt, "delta_pct": delta}
-    if explicit:
+              "per_share_alternative": ps_alt, "delta_pct": delta,
+              "horizon": n_eff, "consistent_with_horizon": consistent}
+    if explicit and not consistent:
+        ps_fix = ((result.pv_explicit_sum
+                   + result.terminal_value / (1.0 + inp.wacc) ** (n_eff - 0.5)
+                   + inp.non_operating_assets - inp.net_debt
+                   - inp.non_controlling_interest) / shares * 1_000_000)
+        detail["per_share_at_horizon_midyear"] = ps_fix
+        f = Finding("terminal_discount_convention", Severity.WARN,
+                    f"터미널 할인기간 t={eff:g} 가 시계 {n_eff}년과 불일치 — 통용 컨벤션은 "
+                    f"t={n_eff:g}(기말)·t={n_eff - 0.5:g}(mid-year) 뿐. 페이드를 켜기 전 "
+                    f"시계로 선언해 두지 않았는지 확인(t={n_eff - 0.5:g} 이면 주당 "
+                    f"{ps_fix / result.per_share - 1:+.1%})", detail)
+    elif explicit:
         f = Finding("terminal_discount_convention", Severity.PASS,
-                    f"터미널 할인기간 t={eff:g} 명시 선언됨 "
-                    f"(대안 t={alt:g} 이면 주당 {delta:+.1%})", detail)
+                    f"터미널 할인기간 t={eff:g} 명시 선언됨(시계 {n_eff}년 정합, "
+                    f"대안 t={alt:g} 이면 주당 {delta:+.1%})", detail)
     else:
         f = Finding("terminal_discount_convention", Severity.WARN,
                     f"터미널 할인기간 미선언(암묵 t={eff:g}) — 대안 t={alt:g} 적용 시 "
@@ -619,9 +654,17 @@ def check_cross_method_bridge(
 
     # 주식수 — 브리지가 같아도 주식수가 다르면 주당가치가 어긋난다(자기주식·희석 처리 차이).
     ds, rs = dcf_bridge.get("shares_outstanding"), relative_bridge.get("shares_outstanding")
-    if ds and rs:
+    # `if ds and rs` (truthiness) 로 쓰면 **0 주가 조용히 스킵**된다 — 미입력·0 은 가장
+    # 흔한 불량 입력인데 정작 그때 게이트가 침묵하면 안 된다. None(미선언)만 판정보류.
+    if ds is not None and rs is not None:
         ds, rs = float(ds), float(rs)
-        if abs(ds - rs) / max(abs(ds), abs(rs), 1.0) > tol:
+        if ds <= 0 or rs <= 0:
+            out.append(Finding(
+                "cross_method_shares", Severity.WARN,
+                f"주식수 0/음수 — DCF {ds:,.0f}주 vs 상대가치 {rs:,.0f}주 "
+                f"(미입력 확인 — 주당가치 산정 불가)",
+                {"dcf_shares": ds, "relative_shares": rs}))
+        elif abs(ds - rs) / max(abs(ds), abs(rs), 1.0) > tol:
             out.append(Finding(
                 "cross_method_shares", Severity.WARN,
                 f"주식수 불일치 — DCF {ds:,.0f}주 vs 상대가치 {rs:,.0f}주 "
@@ -667,12 +710,29 @@ def audit_dcf(
     # TV 비중을 낮출 뿐, 터미널 FCFF 자체는 여전히 NOPLAT_T(D&A=CAPEX, ΔWC=0)로
     # 재구축되기 때문. 반면 terminal_from_last_fcff 는 마지막 연도의 실제 CAPEX·ΔWC 를
     # 승계하므로 재투자 반영으로 인정한다.
+    # ⚠️ terminal_from_last_fcff 는 **조건부**로만 인정한다. 마지막 연도 FCFF 를 성장시키면
+    # 그 해의 재투자 강도가 영구히 승계되는데, 그 해가 재투자 부족(CAPEX < D&A)이었다면
+    # **부족분을 영원히 승계**해 FCFF 를 과대계상한다(자산기반이 줄면서 매출이 g 로 영구
+    # 성장하는 것은 불가능). 무조건 인정하면 게이트 방향이 뒤집힌다 — 실측: CAPEX 1 < D&A 10
+    # 인 입력에서 기본(WARN) 대비 EV 가 23% 더 큰데 PASS 가 붙었다.
+    last_reinvestment_ok = (
+        bool(inp.capex) and bool(inp.dep_amort)
+        and inp.capex[-1] >= inp.dep_amort[-1]
+    )
     reinvestment_modeled = (
         inp.terminal_wc_ratio is not None
         or inp.terminal_reinvestment_rate is not None
         or inp.terminal_fcff_override is not None
-        or inp.terminal_from_last_fcff
+        or (inp.terminal_from_last_fcff and last_reinvestment_ok)
     )
+    if inp.terminal_from_last_fcff and not last_reinvestment_ok:
+        report.add(Finding(
+            "terminal_from_last_fcff", Severity.WARN,
+            f"마지막 연도 CAPEX({inp.capex[-1] if inp.capex else 0:,.0f}) < "
+            f"D&A({inp.dep_amort[-1] if inp.dep_amort else 0:,.0f}) 인데 그 해 FCFF 를 "
+            f"영구 성장 — 재투자 부족을 영원히 승계해 TV 과대계상",
+            {"capex_last": inp.capex[-1] if inp.capex else None,
+             "dep_amort_last": inp.dep_amort[-1] if inp.dep_amort else None}))
     check_terminal_growth(inp.terminal_growth, inp.wacc,
                           long_term_gdp=long_term_gdp,
                           reinvestment_modeled=reinvestment_modeled, report=report)

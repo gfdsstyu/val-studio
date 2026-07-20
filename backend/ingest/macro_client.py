@@ -403,6 +403,11 @@ def suggest_pgr_from_inflation(
 
     관측치가 없으면 value=0.0 + FAIL finding(임의 기본값을 지어내지 않는다).
     """
+    # ⚠️ 파이썬 슬라이싱 함정: `lst[-0:]` 는 빈 리스트가 아니라 **전체 리스트**다.
+    # years=0/음수를 그대로 흘리면 요청하지 않은 윈도우의 평균이 나오면서 basis 문자열은
+    # 그럴듯하게 찍히고 finding 은 PASS — 감사추적이 거짓이 된다. 입구에서 막는다.
+    if not isinstance(years, int) or isinstance(years, bool) or years < 1:
+        raise ValueError(f"years 는 1 이상 정수여야 한다: {years!r}")
     usable = usable_as_of(series, base_date)
     obs = list(usable.observations)[-years:]
     findings: list[Finding] = []

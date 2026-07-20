@@ -190,14 +190,16 @@ def test_diagnosis_pass_when_matching():
 
 def test_diagnosis_names_end_year_bug():
     inp, res = _diag_base()
-    claimed = ((res.enterprise_value / 1.10 ** 0.5) + 50.0 - 30.0) / 100.0
+    # ⚠️ per_share 는 백만원→원 환산(×1e6)을 거친다. 이 스케일을 빼먹으면 가설이
+    # 실제 주당가치와 100만배 어긋나 어떤 가설도 매칭되지 않는다(선행 결함, 8fbd8b8).
+    claimed = ((res.enterprise_value / 1.10 ** 0.5) + 50.0 - 30.0) / 100.0 * 1_000_000
     f = diagnose_dcf_gap(inp, res, claimed)
     assert f.severity is Severity.WARN and "end_year_discounting" in f.message
 
 
 def test_diagnosis_names_netdebt_ignored():
     inp, res = _diag_base()
-    claimed = (res.enterprise_value + 50.0) / 100.0     # 순차입 미차감
+    claimed = (res.enterprise_value + 50.0) / 100.0 * 1_000_000   # 순차입 미차감
     f = diagnose_dcf_gap(inp, res, claimed)
     assert "netdebt_ignored" in f.message
 
