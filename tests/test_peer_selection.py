@@ -40,8 +40,10 @@ def _run(**over):
 
 
 def test_funnel_counts():
+    """모집단 → step0 자기제외(R11) → step1~4. target_ticker 미지정이면 step0 은 no-op."""
     r = _run()
-    assert list(r.funnel.values()) == [6, 5, 4, 3, 2]
+    assert list(r.funnel.values()) == [6, 6, 5, 4, 3, 2]
+    assert list(r.funnel)[1] == "step0 자기제외"
 
 
 def test_final_selection_and_traces():
@@ -126,6 +128,57 @@ def test_threshold_params_bind():
     # 0.95 임계 → A(0.90)·B(0.85)도 step3 탈락 → 최종 0
     assert not r.selected
     assert r.params["revenue_share_threshold"] == 0.95
+
+
+# ── R11 자기제외 (모델러스 D4) ────────────────────────────────────────────────
+def test_self_exclusion_drops_target():
+    """평가대상 자신은 step0 에서 탈락 — peer 통계 자기포함은 순환논법."""
+    cands = [
+        PeerCandidate(ticker="A145020", name="Hugel", industry_code="2110",
+                      revenue_share_related=0.9, listed_years=8),
+        PeerCandidate(ticker="A086900", name="Medytox", industry_code="2110",
+                      revenue_share_related=0.9, listed_years=8),
+    ]
+    r = select_peers(cands, target_ticker="A145020", target_industry_codes={"2110"})
+    assert [c.ticker for c in r.selected] == ["A086900"]
+    self_trace = next(t for t in r.traces if t.candidate.ticker == "A145020")
+    assert self_trace.dropped_at == "step0"
+    assert "자기 자신" in self_trace.reason
+
+
+def test_self_exclusion_normalizes_ticker_prefix():
+    """'A145020'(FnGuide) 과 '145020'(KRX/DART) 표기 차이로 자기제외가 뚫리면 안 된다."""
+    cands = [PeerCandidate(ticker="145020", name="Hugel", industry_code="2110",
+                           revenue_share_related=0.9, listed_years=8)]
+    r = select_peers(cands, target_ticker="A145020", target_industry_codes={"2110"})
+    assert r.selected == []
+    # 역방향도 동일
+    cands2 = [PeerCandidate(ticker="A145020", name="Hugel", industry_code="2110",
+                            revenue_share_related=0.9, listed_years=8)]
+    assert select_peers(cands2, target_ticker="145020",
+                        target_industry_codes={"2110"}).selected == []
+
+
+def test_no_target_ticker_is_noop():
+    """target_ticker 미지정이면 아무도 탈락하지 않는다(기존 호출자 호환)."""
+    cands = [PeerCandidate(ticker="A145020", name="Hugel", industry_code="2110",
+                           revenue_share_related=0.9, listed_years=8)]
+    r = select_peers(cands, target_industry_codes={"2110"})
+    assert len(r.selected) == 1
+    assert r.funnel["step0 자기제외"] == 1
+
+
+def test_self_excluded_target_needs_no_step2_judgment():
+    """자기제외된 대상은 step2 판정 대상에서 빠진다(누락 ValueError 안 남)."""
+    cands = [
+        PeerCandidate(ticker="A145020", name="Hugel", industry_code="2110",
+                      revenue_share_related=0.9, listed_years=8),
+        PeerCandidate(ticker="A086900", name="Medytox", industry_code="2110",
+                      revenue_share_related=0.9, listed_years=8),
+    ]
+    r = select_peers(cands, target_ticker="A145020", target_industry_codes={"2110"},
+                     judgments=[Step2Judgment("A086900", True, "동일 톡신 사업")])
+    assert [c.ticker for c in r.selected] == ["A086900"]
 
 
 if __name__ == "__main__":

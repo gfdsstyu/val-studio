@@ -132,18 +132,47 @@ def codes_from_seed_peers(seeds: list[PeerCandidate]) -> set[str]:
     return {s.industry_code for s in seeds if s.industry_code}
 
 
+def normalize_ticker(ticker: str) -> str:
+    """티커 비교용 정규화 — 한국 종목코드의 'A' 접두 유무·대소문자·공백 흡수.
+
+    같은 종목이 자료원에 따라 'A145020'(FnGuide 계열) / '145020'(KRX·DART) 로 온다.
+    자기제외(R11) 가 표기 차이 때문에 뚫리면 안 되므로 여기서 통일한다.
+    """
+    t = (ticker or "").strip().upper()
+    if len(t) == 7 and t[0] == "A" and t[1:].isdigit():
+        return t[1:]
+    return t
+
+
 def select_peers(
     candidates: list[PeerCandidate],
     *,
+    target_ticker: str | None = None,
     target_industry_codes: set[str] | None = None,
     judgments: list[Step2Judgment] | None = None,
     revenue_share_threshold: float = 0.70,
     min_listed_years: float = 2.0,          # 2년 주간 베타 → 상장 ≥2년
 ) -> PeerSelectionResult:
     """4-step 퍼널 실행. Step2 는 judgments(LLM 산출) 주입 — 생존 후보 전원분이
-    없거나 사유가 비어 있으면 ValueError(검증 게이트: 무근거 판정 금지)."""
+    없거나 사유가 비어 있으면 ValueError(검증 게이트: 무근거 판정 금지).
+
+    target_ticker 를 주면 **Step0 자기제외**(R11)가 먼저 돈다.
+    """
     traces = [CandidateTrace(c) for c in candidates]
     funnel: dict[str, int] = {"step0 모집단(입력)": len(traces)}
+
+    # ── Step0 자기제외(R11) ──
+    # 평가대상 자신을 peer 통계에 넣으면 배수가 현재 주가 쪽으로 끌려간다(순환논법)
+    # — 자기 배수로 자기를 평가하는 꼴이라 상승여력이 구조적으로 희석된다.
+    # 실측 근거: 모델러스_통합모델_5.4 §4 D4 — Hugel 이 자기 peer 5사에 포함되어
+    # EV/EBITDA 평균 15.595(자기제외 시 16.813), 주당가치 **7.9% 과소**.
+    if target_ticker:
+        tgt = normalize_ticker(target_ticker)
+        for t in traces:
+            if normalize_ticker(t.candidate.ticker) == tgt:
+                t.dropped_at = "step0"
+                t.reason = "평가대상 자기 자신 — peer 통계 자기포함은 순환논법"
+    funnel["step0 자기제외"] = sum(1 for t in traces if not t.dropped_at)
 
     # ── Step1 산업코드 ──
     if target_industry_codes:
@@ -202,7 +231,8 @@ def select_peers(
 
     return PeerSelectionResult(
         traces=traces, funnel=funnel,
-        params={"industry_codes": sorted(target_industry_codes or []),
+        params={"target_ticker": target_ticker,
+                "industry_codes": sorted(target_industry_codes or []),
                 "revenue_share_threshold": revenue_share_threshold,
                 "min_listed_years": min_listed_years},
     )

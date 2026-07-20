@@ -17,6 +17,8 @@ const DEMO = {
   delta_nwc_cash_adj: "0, 0, 0, 0, 0",
   non_operating_assets: "20000", net_debt: "10000", non_controlling_interest: "0",
   shares_outstanding: "10000000", claimed_per_share: "", terminal_wc_ratio: "",
+  fade_years: "", fade_growth: "", terminal_from_last_fcff: false,
+  terminal_discount_period: "",
 };
 
 const FIELD_LABELS = [
@@ -108,6 +110,13 @@ export default function DcfSheet({ project, onSave }) {
     if (form.claimed_per_share.trim()) body.claimed_per_share = Number(form.claimed_per_share);
     // 터미널 정규화 WC 재조정(정본): 있으면 터미널 ΔWC=추정말매출×g×비율(과대계상 방어).
     if (form.terminal_wc_ratio?.trim()) body.terminal_wc_ratio = Number(form.terminal_wc_ratio);
+    // 페이드(R1): 명시 → 페이드 → Gordon 3단. 비우면 기존 2단.
+    if (form.fade_years?.toString().trim()) body.fade_years = Number(form.fade_years);
+    if (form.fade_growth?.toString().trim()) body.fade_growth = Number(form.fade_growth);
+    if (form.terminal_from_last_fcff) body.terminal_from_last_fcff = true;
+    // R15: 터미널 할인기간 명시 선언(비우면 audit 가 WARN + 대안 영향 제시)
+    if (form.terminal_discount_period?.toString().trim())
+      body.terminal_discount_period = Number(form.terminal_discount_period);
     try {
       const d = await api.dcf(body);
       setRes(d);
@@ -144,6 +153,35 @@ export default function DcfSheet({ project, onSave }) {
                 placeholder="예 0.30 (비우면 ΔWC=0)" />
               <div className="muted" style={{ fontSize: "0.8rem", marginTop: 2 }}>
                 터미널 ΔWC = 추정말매출 × PGR × 이 비율 (정본 과대계상 방어). 비우면 g&gt;2%서 F1 경고.
+              </div></div>
+            <div className="row"><label>페이드(수렴) 연수 (선택 — 명시→페이드→Gordon 3단)</label>
+              <input type="text" value={form.fade_years} onChange={set("fade_years")}
+                placeholder="예 5 (비우면 기존 2단)" />
+              <div className="muted" style={{ fontSize: "0.8rem", marginTop: 2 }}>
+                마지막 명시연도의 <b>모든 비율(마진·세율·CAPEX/매출·ΔWC/매출)이 동결</b>된 채 성장률만
+                수렴하는 구간. 명시말기 고성장에서 PGR 로 급단절하면 TV 가 왜곡되고 TV 비중이 치솟는다.
+                <br />실측(모델러스 Hugel): 페이드 5년 → TV비중 57.8%(PASS) / 없으면 84.6%(WARN)·주당 9% 과대.
+              </div></div>
+            <div className="row"><label>페이드 성장률 (선택 — 비우면 자동)</label>
+              <input type="text" value={form.fade_growth} onChange={set("fade_growth")}
+                placeholder="비우면 AVERAGE(마지막 명시 성장률, PGR)" /></div>
+            <div className="row">
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input type="checkbox" checked={!!form.terminal_from_last_fcff}
+                  onChange={(e) => setForm((f) => ({ ...f, terminal_from_last_fcff: e.target.checked }))} />
+                터미널을 <b>마지막 연도 FCFF × (1+g)</b> 로 산출
+              </label>
+              <div className="muted" style={{ fontSize: "0.8rem", marginTop: 2 }}>
+                끄면 EBIT_T 재구축(D&amp;A=CAPEX, ΔWC=0) — 재투자 0 가정이라 g&gt;0 에서 FCFF 과대.
+                켜면 마지막 해의 실제 재투자 강도를 영구 승계(페이드와 함께 쓸 때 정합적).
+              </div></div>
+            <div className="row"><label>터미널 할인기간 t (선택 — 명시 선언 권장)</label>
+              <input type="text" value={form.terminal_discount_period}
+                onChange={set("terminal_discount_period")}
+                placeholder="비우면 마지막 명시연도 계수(mid-year)" />
+              <div className="muted" style={{ fontSize: "0.8rem", marginTop: 2 }}>
+                기말 t=n 과 mid-year t=n−0.5 모두 통용되나 <b>선택은 밝혀야 한다</b>(실측 영향 주당 −2.1%).
+                비우면 audit 이 대안 컨벤션의 금액 영향을 계산해 WARN 으로 제시한다.
               </div></div>
           </div>
           <label style={{ marginTop: 6 }}>추정 시계열 (백만원, 연도=열)</label>

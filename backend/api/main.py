@@ -495,7 +495,8 @@ async def peer_select(request: Request) -> dict:
     if "min_listed_years" in d:
         kw["min_listed_years"] = float(d["min_listed_years"])
     try:
-        res = select_peers(cands, target_industry_codes=codes, judgments=judgments, **kw)
+        res = select_peers(cands, target_ticker=d.get("target_ticker"),
+                           target_industry_codes=codes, judgments=judgments, **kw)
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
     return {

@@ -128,6 +128,76 @@ def test_bridge_tolerance_absorbs_rounding():
     assert f.severity.name == "PASS"      # 0.005% < 1% 허용
 
 
+# ── R15: 터미널 할인기간 컨벤션 ──────────────────────────────────────────────
+def _spine(**kw):
+    from calc_core.models import DcfSpineInput
+    base = dict(
+        wacc=0.10, terminal_growth=0.02,
+        revenue=[1000.0, 1100.0, 1200.0], cogs=[600.0, 660.0, 720.0],
+        sga=[200.0, 220.0, 240.0], dep_amort=[50.0, 55.0, 60.0],
+        capex=[50.0, 55.0, 60.0], delta_nwc_cash_adj=[0.0, 0.0, 0.0],
+        non_operating_assets=0.0, net_debt=0.0, shares_outstanding=1_000_000,
+    )
+    base.update(kw)
+    return DcfSpineInput(**base)
+
+
+def test_terminal_period_implicit_warns_with_impact():
+    """미선언이면 WARN 하되 대안 컨벤션의 주당 영향을 함께 제시(행동 가능한 경고)."""
+    from calc_core.checks import check_terminal_discount_convention
+    from calc_core.dcf import run
+    inp = _spine()
+    f = check_terminal_discount_convention(inp, run(inp))
+    assert f.severity.name == "WARN"
+    assert f.detail["explicit"] is False
+    assert abs(f.detail["terminal_discount_period"] - 2.5) < 1e-6   # mid-year 기본
+    assert f.detail["alternative_period"] == 3.0            # 기말 대안
+    # 기말 할인은 한 반기 더 할인 → 주당가치 하락
+    assert f.detail["delta_pct"] < 0
+    assert abs(f.detail["delta_pct"] + 0.0) < 0.5           # 상식 범위
+
+
+def test_terminal_period_explicit_passes():
+    from calc_core.checks import check_terminal_discount_convention
+    from calc_core.dcf import run
+    inp = _spine(terminal_discount_period=3.0)
+    f = check_terminal_discount_convention(inp, run(inp))
+    assert f.severity.name == "PASS"
+    assert f.detail["explicit"] is True
+    assert f.detail["alternative_period"] == 2.5            # 반대편 제시
+
+
+def test_terminal_period_impact_matches_manual_ratio():
+    """정량치 검증: 대안 주당 / 현재 주당 이 PV 계수비와 정합."""
+    from calc_core.checks import check_terminal_discount_convention
+    from calc_core.dcf import run
+    inp = _spine()
+    res = run(inp)
+    f = check_terminal_discount_convention(inp, res)
+    pv_tv_alt = res.terminal_value / (1.0 + inp.wacc) ** 3.0
+    ev_alt = res.pv_explicit_sum + pv_tv_alt
+    expected = ev_alt / inp.shares_outstanding * 1_000_000
+    assert abs(f.detail["per_share_alternative"] - expected) < 1e-6
+
+
+def test_terminal_period_alternative_accounts_for_fade():
+    """회귀: 페이드가 있으면 대안 기간은 **확장된 시계**(명시+페이드) 기준이어야 한다.
+
+    inp.n_years() 는 페이드 확장 **전** 길이라 그대로 쓰면 명시 3 + 페이드 7 인 모델에서
+    대안이 t=3 으로 잡히는 버그가 났었다(실측 '대안 t=5 이면 +23.6%' 오표기).
+    """
+    from calc_core.checks import check_terminal_discount_convention
+    from calc_core.dcf import run
+    inp = _spine(fade_years=7)                 # 명시 3 + 페이드 7 = 시계 10년
+    res = run(inp)
+    assert len(res.pv_fcff) == 10
+    f = check_terminal_discount_convention(inp, res)
+    assert abs(f.detail["terminal_discount_period"] - 9.5) < 1e-9, f.detail
+    assert f.detail["alternative_period"] == 10.0, f.detail
+    # 기말 할인이 반기 더 할인 → 대안 주당가치는 낮아야 한다
+    assert f.detail["delta_pct"] < 0
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

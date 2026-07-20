@@ -17,6 +17,8 @@ ingest/validators.py 의 tie-out(데이터가 원본과 일치하나? — 라운
 """
 from __future__ import annotations
 
+import math
+
 from ingest.validators import Finding, Severity, ValidationReport
 
 from .models import DcfResult, DcfSpineInput
@@ -452,6 +454,62 @@ def check_pgr_provenance(
     return f
 
 
+def check_terminal_discount_convention(
+    inp: DcfSpineInput,
+    result: DcfResult,
+    *,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """터미널 할인기간 컨벤션 **명시 선언** 검사(R15) + 대안의 금액 영향 정량.
+
+    TV 는 명시기간 말 시점 가치이므로 `t = n`(기말) 로 할인하는 것도, 최종 명시연도
+    현금흐름과 같은 mid-year 계수 `t = n−0.5` 를 재사용하는 것도 모두 통용된다
+    (모델러스 정본은 후자 — `F39 = F40 × X10`, t=9.5). **어느 쪽도 틀리지 않지만
+    선택은 반드시 밝혀야 한다** — 실측 영향이 주당 −2.1% 로 무시할 수 없다.
+
+    미선언(`terminal_discount_period is None`)이면 WARN 하되, **대안 컨벤션을 적용했을
+    때의 주당가치를 함께 계산해** 붙인다(잔소리가 아니라 판단 재료가 되도록).
+    """
+    # ⚠️ inp.n_years() 는 **페이드 확장 전** 명시 길이라 시계로 쓰면 안 된다
+    # (페이드 5 + 명시 5 인데 5 로 잡혀 대안 기간이 틀어짐). 실제 시계·할인기간은
+    # result 에서 역산한다 — _expand_fade 의 확장 로직을 여기서 재구현하지 않는 이점도 있다.
+    n_eff = len(result.pv_fcff)
+    explicit = inp.terminal_discount_period is not None
+    if explicit:
+        eff = float(inp.terminal_discount_period)
+    else:
+        last_factor = result.pv_factor[-1] if result.pv_factor else 1.0
+        eff = (-math.log(last_factor) / math.log(1.0 + inp.wacc)
+               if last_factor > 0 and inp.wacc > -1.0 else float(n_eff))
+        # log/exp 왕복 노이즈 정리(2.5000000000000004 → 2.5). 표시·비교 양쪽에 쓰이므로
+        # 여기서 한 번 정규화한다 — 정확일치 비교의 함정(§D1)을 우리가 반복하지 않도록.
+        eff = round(eff, 6)
+    # 대안: mid-year(소수) ↔ 기말(정수) 반대편
+    alt = float(n_eff) if abs(eff - round(eff)) > 1e-9 else eff - 0.5
+
+    shares = inp.shares_outstanding or 1
+    pv_tv_alt = result.terminal_value * (1.0 / (1.0 + inp.wacc) ** alt)
+    ev_alt = result.pv_explicit_sum + pv_tv_alt
+    ps_alt = (ev_alt + inp.non_operating_assets - inp.net_debt
+              - inp.non_controlling_interest) / shares * 1_000_000
+    delta = (ps_alt / result.per_share - 1.0) if result.per_share else float("nan")
+
+    detail = {"terminal_discount_period": eff, "explicit": explicit,
+              "alternative_period": alt, "per_share": result.per_share,
+              "per_share_alternative": ps_alt, "delta_pct": delta}
+    if explicit:
+        f = Finding("terminal_discount_convention", Severity.PASS,
+                    f"터미널 할인기간 t={eff:g} 명시 선언됨 "
+                    f"(대안 t={alt:g} 이면 주당 {delta:+.1%})", detail)
+    else:
+        f = Finding("terminal_discount_convention", Severity.WARN,
+                    f"터미널 할인기간 미선언(암묵 t={eff:g}) — 대안 t={alt:g} 적용 시 "
+                    f"주당 {delta:+.1%}. terminal_discount_period 로 명시하라", detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
 # 브리지 항목 상대 허용오차(R3). 같은 대상의 같은 항목이므로 사실상 완전일치여야 한다.
 BRIDGE_RECON_TOL = 0.01
 
@@ -539,6 +597,7 @@ def audit_dcf(
                           long_term_gdp=long_term_gdp,
                           reinvestment_modeled=reinvestment_modeled, report=report)
     check_pgr_provenance(inp.terminal_growth, pgr_source, basis=pgr_basis, report=report)
+    check_terminal_discount_convention(inp, result, report=report)
     check_terminal_value_weight(result, report=report)
     check_projection_smoothness(list(inp.revenue), name="revenue", report=report)
     check_working_capital_burn(list(inp.revenue), list(inp.delta_nwc_cash_adj), report=report)

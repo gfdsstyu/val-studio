@@ -91,7 +91,7 @@ W4/W5 시트는 살아있는 수식: Capex_Dep(기말=기초+CAPEX−상각·정
 | **W2.5 손익 계정 세분화** | 러프한 IS 라인을 성격별로 분해(매출→제품/상품/용역, 원가·판관비→성격별) — `fs_disagg.py` | **세분합=원계정(합보존) FAIL 0**·구성비 YoY 급변 WARN 표면화 | account_dictionary·모델링_실무_2강4강 |
 | **W3 계정재분류** | PL 4유형·BS 6유형 태깅(모호는 표면화) — `reclass.py`로 파티션 검증 | **분류합=원본 FS합(FAIL 게이트)**·누락·중복·유형오류 0 | xDCF_계정분류·msvalue_DCF_교육_정본 |
 | **W4 추정** | 드라이버 후보 제시→선택분 수식 구현. **`Fcst_Rev`·`Fcst_Cost`는 FS_Disagg 세분 라인(제품/상품/용역, 재료/노무/경비, 급여/상각/광고)과 동일 성격 행 → `계=Σ세분` 살아있는 SUM 롤업 → DCF!매출/원가/판관비** | projection_smoothness·wc_burn·가정 출처 완비·**세분 계=원계정 롤업 일치** | msvalue_리포트예시·모델링_실무 |
-| **W5 WACC** | **`peer.py` 유사회사 4-step 퍼널**(Step1 코드→Step2 유사성[판정]→Step3 비중≥70%→Step4 베타포인트·거래정지) → `Peer` 시트 Hamada 무부채화 → `wacc.py` 빌드업(Kroll size) | 퍼널 게이트(무근거 판정 거부·uncertain→⚖️큐·5-10 rule)·β/MRP 정합·provenance·8~14% | wacc_할인율서식·베타·deloitte·PGR·msvalue_리포트예시 §E |
+| **W5 WACC** | **`peer.py` 유사회사 퍼널(Step0 자기제외 + 4-step)**(Step1 코드→Step2 유사성[판정]→Step3 비중≥70%→Step4 베타포인트·거래정지) → `Peer` 시트 Hamada 무부채화 → `wacc.py` 빌드업(Kroll size) | 퍼널 게이트(**대상 자기포함 거부**·무근거 판정 거부·uncertain→⚖️큐·5-10 rule)·β/MRP 정합·provenance·8~14% | wacc_할인율서식·베타·deloitte·PGR·msvalue_리포트예시 §E |
 | **W6 DCF** | 스파인 입력셀→Fcst 계 참조 승격(`promote.py`) + `dcf.py` 재계산 | **승격 tie-out(per_share 불변)**·워크북 vs 엔진 rel_tol 1e-6·audit 전규칙·gap_diagnosis | engine_spec·검증_클래시스 |
 | **W7 시나리오** | `scenario.py`(구성=판단) → Scenario 시트(가중 SUMPRODUCT·합=1 게이트 살아있는 수식) | 가중치 완전일치·합=1 | msvalue_리포트예시 부록F |
 | **W8 민감도** | `sensitivity.py`로 WACC×PGR 5×5 살아있는 수식 그리드(셀마다 독립 DCF 재계산) | 워크북 중심 == 엔진 3×3 중심 == base·(설치 시)recalc 게이트 | 앤트로픽_금융스킬_벤치마크 §1 |
@@ -134,7 +134,7 @@ echo '{"blocks":[{"parent":"매출액","periods":{"2024":{"total":"1,234","child
 echo '{"items":[{"account":"매출채권","amount":100,"type":"WC"},{"account":"유형자산","amount":700,"type":"FA"}],"original_total":800}' | python scripts/reclass.py
 
 # W5 유사회사 4-step 퍼널 (웹 /api/peer/select 미러; Step2만 판단, 나머지 결정론)
-echo '{"candidates":[{"ticker":"A","industry_code":"2710","revenue_share_related":0.9,"listed_years":5}],"target_industry_codes":["2710"],"judgments":[{"ticker":"A","similar":true,"reason":"동일 사업"}]}' | python scripts/peer.py
+echo '{"target_ticker":"TGT","candidates":[{"ticker":"A","industry_code":"2710","revenue_share_related":0.9,"listed_years":5}],"target_industry_codes":["2710"],"judgments":[{"ticker":"A","similar":true,"reason":"동일 사업"}]}' | python scripts/peer.py
 
 # W5 WACC (market_cap_musd 주면 Kroll 제안). 무부채β·목표자본구조는 Peer 확정 peer 평균.
 echo '{"risk_free":0.03,"market_risk_premium":0.08,"unlevered_beta":1.0,...}' | python scripts/wacc.py

@@ -64,6 +64,7 @@ def run_peer(payload: dict) -> dict:
 
     result = select_peers(
         candidates,
+        target_ticker=payload.get("target_ticker"),
         target_industry_codes=codes or None,
         judgments=judgments,
         revenue_share_threshold=float(payload.get("revenue_share_threshold", 0.70)),
