@@ -66,6 +66,9 @@ def assemble_dcf_inputs(
     maintenance_capex_by_class: dict | None = None,
     maintenance_depreciates: bool = True,
     terminal_wc_ratio: float | None = None,
+    fade_years: int | None = None,
+    fade_growth: float | None = None,
+    terminal_from_last_fcff: bool = False,
     long_term_gdp: float = 0.02,
 ) -> DcfAssembly:
     """WACC 어셈블리 + 운영가정 → 검증된 ModelConfig → (게이트 통과 시) DcfResult.
@@ -95,6 +98,9 @@ def assemble_dcf_inputs(
         maintenance_capex_by_class=maintenance_capex_by_class,
         maintenance_depreciates=maintenance_depreciates,
         terminal_wc_ratio=terminal_wc_ratio,
+        fade_years=fade_years,
+        fade_growth=fade_growth,
+        terminal_from_last_fcff=terminal_from_last_fcff,
     )
     wacc_val = wacc.result.wacc if wacc.result is not None else wacc.inputs.risk_free
 

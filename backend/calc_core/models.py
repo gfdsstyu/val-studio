@@ -44,13 +44,34 @@ class DcfSpineInput:
     # WACC≈g 에서 순진한 Gordon 이 폭발 → 정규화 FCF 주입 또는 재투자율(g/ROIC) 반영.
     terminal_fcff_override: float | None = None  # 영구구간 FCF_{n+1} 직접 주입
     terminal_reinvestment_rate: float | None = None  # NOPLAT_T×(1−rate), rate=g/ROIC
+    # 터미널 컨벤션 분기: True → FCFF_T = **마지막 연도 FCFF × (1+g)**.
+    # 기본(False)은 EBIT_T 에서 재구축(D&A=CAPEX, ΔWC=0) → 재투자 0 가정이라 g>0 에서
+    # FCFF 과대(F1 경고 대상). True 는 마지막 연도의 **실제 재투자 강도(CAPEX·ΔWC 포함)를
+    # 영구히 승계**한다 — 모델러스 정본 `TV = X26×(1+g)/(WACC−g)`.
+    # 페이드와 함께 쓸 때 특히 정합적이다: 페이드 최종연도는 이미 비율이 동결된
+    # 정상상태(steady state)이므로 그 FCFF 를 성장시키는 것이 자연스럽다.
+    # 우선순위: fcff_override > terminal_from_last_fcff > reinvestment_rate > (D&A=CAPEX−WC).
+    terminal_from_last_fcff: bool = False
     # 정규화 운전자본 재조정(MSVALUE 정본 §Normalized CF). 터미널 ΔWC = 추정말매출 × g ×
     # WC비율(운전자본/매출). 기본 None → ΔWC=0(D&A=CAPEX 만) = g>0 시 과대계상 위험.
     # reinvestment_rate 미사용 시에만 적용(둘 다 주면 reinvestment_rate 가 WC 를 이미 번들).
     # 옳은 방식(정본): 추정말매출 × g × ratio (틀린 방식=말WC투자×(1+g), TV 21% 왜곡).
     terminal_wc_ratio: float | None = None
+    # ── 페이드(수렴) 구간(R1) — 명시추정 → [페이드] → Gordon 의 3단 구조.
+    # 근거: 모델러스_통합모델_5.4(The Modellers, Hugel) — 명시 5년 + 페이드 5년 + Gordon.
+    # 명시말기 고성장에서 영구성장률로 **급단절**하면 TV 가 왜곡되고 TV 비중이 치솟는다.
+    # 페이드 구간은 마지막 명시연도의 **모든 비율(마진·세율·CAPEX/매출·D&A/매출·ΔWC/매출)을
+    # 동결**하고 성장률만 낮춰 자기정합적 정상상태로 수렴시킨다. 실측: 페이드 적용 시
+    # TV 비중 57.8%(75% 게이트 통과).
+    # 구현은 "전 라인아이템을 fade_growth 로 성장"(⇔ 전 비율 동결과 수학적 동치).
+    fade_years: int | None = None
+    # None → AVERAGE(마지막 명시연도 매출성장률, terminal_growth). 모델러스 정본:
+    # F30 = AVERAGE(S15, F33) = AVERAGE(13.101%, 1.62%) = 7.361%.
+    # g 에 의존하므로 민감도에서 g 가 변하면 페이드 성장률도 함께 변한다(_compute 내부 확장).
+    fade_growth: float | None = None
 
     def n_years(self) -> int:
+        """명시추정 연수(페이드 제외 — 사용자가 입력한 원 시계열 길이)."""
         return len(self.revenue)
 
 

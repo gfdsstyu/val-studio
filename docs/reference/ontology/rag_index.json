@@ -556,6 +556,34 @@
       "has_frontmatter": true
     },
     {
+      "id": "모델러스_통합모델_5.4",
+      "path": "docs/reference/모델러스_통합모델_5.4.md",
+      "title": "모델러스 통합모델 5.4 — 3표 연결 + DCF + Trading Comps 정본",
+      "topic": "통합 3표 연결모델 + DCF + Trading Comps (트레이닝 정본)",
+      "track": "거래평가·DCF",
+      "layer": "unclassified",
+      "parent": null,
+      "doc_type": "knowledge",
+      "keywords": [
+        "3표연결, 통합모델, integrated model, 순환참조, circularity switch",
+        "페이드, fade, 수렴구간, 3단 DCF, mid-year convention",
+        "DSO/DIO/DPO, 회전기일, PPE 롤포워드, 부채스케줄",
+        "P×Q, ASP, 인건비 bottom-up, 원가배분, D&A 배분",
+        "Trading comps, EV 브리지, NM/NA, LTM/FTM, 자기제외",
+        "CHOOSE 시나리오, 데이터테이블, 민감도"
+      ],
+      "canonical_questions": [
+        "명시추정기간 이후 영구성장으로 바로 넘어가도 되나? 페이드 구간이 왜 필요한가?",
+        "영구성장률을 무엇에 근거해 정하나? 인플레이션으로 앵커링해도 되나?",
+        "DCF 브리지와 상대가치 브리지가 달라도 되나?",
+        "통합모델에서 이자비용 순환참조를 어떻게 다루나?",
+        "Trading comps 에 평가대상 회사 자신을 peer 로 넣어도 되나?",
+        "배수 통계는 평균인가 중앙값인가?"
+      ],
+      "links": [],
+      "has_frontmatter": true
+    },
+    {
       "id": "모델링_실무_2강4강",
       "path": "docs/reference/모델링_실무_2강4강.md",
       "title": "DCF 모델링 실무 (MSVALUE 2강·4강)",

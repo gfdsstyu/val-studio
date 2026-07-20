@@ -39,6 +39,11 @@ class ModelConfig:
     maintenance_depreciates: bool = True
     # 터미널 정규화 운전자본 재조정(정본 공식): 터미널 ΔWC = 추정말매출 × g × 이 비율.
     terminal_wc_ratio: float | None = None
+    # 페이드(수렴) 구간(R1) — 명시 → 페이드 → Gordon 3단. 근거: 모델러스_통합모델_5.4.
+    fade_years: int | None = None
+    fade_growth: float | None = None
+    # 터미널 컨벤션: True 면 FCFF_T = 마지막 연도 FCFF × (1+g)(재투자 강도 승계).
+    terminal_from_last_fcff: bool = False
 
 
 def build_spine(cfg: ModelConfig) -> DcfSpineInput:
@@ -73,6 +78,9 @@ def build_spine(cfg: ModelConfig) -> DcfSpineInput:
         mid_year_periods=cfg.mid_year_periods,
         terminal_discount_period=cfg.terminal_discount_period,
         terminal_wc_ratio=cfg.terminal_wc_ratio,
+        fade_years=cfg.fade_years,
+        fade_growth=cfg.fade_growth,
+        terminal_from_last_fcff=cfg.terminal_from_last_fcff,
     )
 
 

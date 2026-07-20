@@ -359,3 +359,66 @@ def build_macro_assumptions(
         if pick is not None:
             setattr(result, indicator, pick)
     return result
+
+
+# ── PGR 거시 앵커링(R2) ──────────────────────────────────────────────────────
+# 근거: docs/reference/모델러스_통합모델_5.4.md §2.3(e) — 원본 `F33 =
+# AVERAGE(rInflation!B2:K2)/100 = 1.62%`. 영구성장률을 감(感)이 아니라 **장기 물가상승률
+# 평균의 함수**로 만들어 출처 추적을 가능하게 한다. PGR 은 TV 최고민감 파라미터이므로
+# 무근거 하드코드는 감사 방어가 불가능하다.
+PGR_ANCHOR_YEARS = 10
+
+
+@dataclass(frozen=True)
+class PgrSuggestion:
+    """앵커링된 영구성장률 제안 — 값 + 산출근거(감사추적)."""
+    value: float                       # 비율(0.0162 = 1.62%)
+    basis: str                         # 산출식 설명
+    n_observations: int
+    periods: tuple[str, ...]
+    source: str
+    findings: list[Finding] = field(default_factory=list)
+
+
+def suggest_pgr_from_inflation(
+    series: MacroSeries,
+    base_date: str,
+    *,
+    years: int = PGR_ANCHOR_YEARS,
+) -> PgrSuggestion:
+    """장기 물가상승률 평균 → 영구성장률 제안(R2). **제안일 뿐 확정은 평가인 몫.**
+
+    vintage 가드(`usable_as_of`)를 먼저 통과시켜 평가기준일 이후 공표된 값이 섞이지
+    않게 한다 — look-ahead 방지는 여기서도 동일하게 적용된다.
+
+    단위: series.unit 이 '%' 면 /100 하여 비율로 반환한다.
+    관측치가 없으면 value=0.0 + FAIL finding(임의 기본값을 지어내지 않는다).
+    """
+    usable = usable_as_of(series, base_date)
+    obs = list(usable.observations)[-years:]
+    findings: list[Finding] = []
+    if not obs:
+        findings.append(Finding(
+            "pgr_anchor", Severity.FAIL,
+            f"물가 관측치 없음(기준일 {base_date} 이하) — PGR 앵커링 불가",
+            {"indicator": series.indicator, "base_date": base_date},
+        ))
+        return PgrSuggestion(0.0, "관측치 없음", 0, (), usable.indicator, findings)
+
+    raw = sum(o.value for o in obs) / len(obs)
+    value = raw / 100.0 if series.unit == "%" else raw
+    periods = tuple(o.period for o in obs)
+    basis = f"AVERAGE({series.indicator}, {periods[0]}~{periods[-1]}, n={len(obs)})"
+    if len(obs) < years:
+        findings.append(Finding(
+            "pgr_anchor", Severity.WARN,
+            f"물가 관측 {len(obs)}년 < 요청 {years}년 — 장기평균 대표성 취약",
+            {"n": len(obs), "requested": years},
+        ))
+    else:
+        findings.append(Finding(
+            "pgr_anchor", Severity.PASS,
+            f"PGR 앵커 {value:.2%} ← {basis}", {"value": value, "basis": basis},
+        ))
+    return PgrSuggestion(value, basis, len(obs), periods,
+                         obs[-1].source or usable.indicator, findings)

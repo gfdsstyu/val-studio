@@ -1,6 +1,6 @@
 # 밸류에이션 북 — 개념·트랙 색인 (자동생성, build.py)
 
-챕터 29 · 개념 439 · 링크 54
+챕터 30 · 개념 445 · 링크 54
 
 ## 위계 트리 (root → foundation → methodology/infrastructure → practice)
 - 🌳 **밸류에이션_스코프_로드맵** (root) — 밸류에이션 플랫폼 스코프 지도 — 대상×목적별 평가 트랙과 방법론
@@ -32,6 +32,7 @@
     - 🛠 **외부평가의견서_활용** (practice) — 외부평가의견서 활용 — 방법론 taxonomy·감사인 트랙·리포트 정형문구
       - 🛠 **외부평가의견서_고정양식_구조** (practice) — 외부평가의견서 고정 양식 — 고정부(skeleton) vs 가변부(slot) 구조
     - 🛠 **참고보고서_활용** (practice) — 증권사·산업 리포트를 RAG 지식원천으로 — 산업 CAGR·컨센서스
+- ❓ **모델러스_통합모델_5.4** (unclassified) — 통합 3표 연결모델 + DCF + Trading Comps (트레이닝 정본)
 
 ## 트랙별 챕터
 
@@ -41,6 +42,7 @@
 - **MSVALUE 리포트 예시 (클래시스) — 최종 리포트 양식 정본 명세** ([msvalue_리포트예시_클래시스](msvalue_리포트예시_클래시스.md)) — 밸류에이션 리포트 양식 + 미용의료기기 peer + 상세 추정가정
 - **Peer/실무 DCF 템플릿 명세 — 클래시스·솔루엠** ([peer_dcf_클래시스_솔루엠](peer_dcf_클래시스_솔루엠.md)) — 동종업종 실무 DCF 가정·로직·CAPM (클래시스·솔루엠)
 - **할인율(WACC) 서식·강의자료 — 시트 논리 정본 명세** ([wacc_할인율서식](wacc_할인율서식.md)) — WACC 할인율 서식의 셀 수식 논리 (Hamada·규모별세율·베타옵션)
+- **모델러스 통합모델 5.4 — 3표 연결 + DCF + Trading Comps 정본** ([모델러스_통합모델_5.4](모델러스_통합모델_5.4.md)) — 통합 3표 연결모델 + DCF + Trading Comps (트레이닝 정본)
 - **DCF 모델링 실무 (MSVALUE 2강·4강)** ([모델링_실무_2강4강](모델링_실무_2강4강.md)) — DCF 매출추정 P×Q 사업유형 + Finalize 체크리스트
 - **베타(β) 산출: Bloomberg β vs KICPA β** ([베타_Bloomberg_vs_KICPA](베타_Bloomberg_vs_KICPA.md)) — 베타(β) 산출: Bloomberg(S&P500) vs KICPA(KOSPI) + CAPM 한계
 - **영구성장률(Perpetual/Terminal Growth Rate) 적합성** ([영구성장률_PGR_적합성](영구성장률_PGR_적합성.md)) — 영구성장률(Terminal Growth Rate) 적합성 — 0~1% vs 2~4%

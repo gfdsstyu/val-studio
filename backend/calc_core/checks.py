@@ -408,27 +408,137 @@ def check_working_capital_burn(
     return f
 
 
+# PGR 출처 유형(R2). derived=거시 앵커링(권장) / research=문서근거 / user=평가인 확정 /
+# 없음=무근거 하드코드(감사 방어 불가).
+PGR_SOURCE_KINDS = frozenset({"derived", "research", "user"})
+
+
+def check_pgr_provenance(
+    pgr: float,
+    source: str | None = None,
+    *,
+    basis: str | None = None,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """영구성장률의 **출처** 검사(R2) — 값 자체가 아니라 근거의 존재를 본다.
+
+    기존 `check_terminal_growth` 는 PGR 이 GDP 상한·WACC 수렴을 지키는지만 본다.
+    그러나 PGR 은 TV 최고민감 파라미터라 **"어디서 온 숫자인가"** 가 별도로 중요하다.
+
+    근거: 모델러스_통합모델_5.4 §2.3(e)·§4 D6 — 그 모델은 가정 5개 중 4개를 수식 파생
+    (PGR = 장기 물가평균)으로 만들었으나 정작 WACC 만 무근거 하드코드였다. 우리는
+    PGR 에 같은 함정이 생기지 않도록 출처를 게이트한다.
+
+    `derived`(거시 앵커링, `macro_client.suggest_pgr_from_inflation`) 를 권장한다.
+    """
+    detail = {"pgr": pgr, "source": source, "basis": basis}
+    if source is None:
+        f = Finding("pgr_provenance", Severity.WARN,
+                    f"PGR({pgr:.2%}) 출처 미기재 — 무근거 하드코드는 감사 방어 불가"
+                    f"(권장: 장기 물가평균 앵커링)", detail)
+    elif source not in PGR_SOURCE_KINDS:
+        f = Finding("pgr_provenance", Severity.WARN,
+                    f"PGR 출처유형 '{source}' 미인식 — {sorted(PGR_SOURCE_KINDS)} 중 하나여야",
+                    detail)
+    elif source == "derived" and not basis:
+        f = Finding("pgr_provenance", Severity.WARN,
+                    "PGR 출처가 derived 이나 산출식(basis) 부재 — 재현 불가", detail)
+    else:
+        f = Finding("pgr_provenance", Severity.PASS,
+                    f"PGR({pgr:.2%}) 출처 {source}" + (f" — {basis}" if basis else ""),
+                    detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
+# 브리지 항목 상대 허용오차(R3). 같은 대상의 같은 항목이므로 사실상 완전일치여야 한다.
+BRIDGE_RECON_TOL = 0.01
+
+
+def check_bridge_consistency(
+    dcf_bridge: dict,
+    relative_bridge: dict,
+    *,
+    tol: float = BRIDGE_RECON_TOL,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """DCF ↔ 상대가치의 **지분 브리지 정의 일치** 검사(R3).
+
+    두 방법이 같은 대상회사를 평가하면서 EV→지분 브리지를 다르게 잡으면, 두 결과의
+    차이가 *밸류에이션 관점 차이*인지 *브리지 정의 차이*인지 분간할 수 없다 →
+    교차검증 자체가 무의미해진다.
+
+    근거(실측): 모델러스_통합모델_5.4 §4 D3 — 같은 워크북에서 DCF 는 단기금융자산
+    392B 를 이자부자산에 포함하고 NCI 를 미차감(순현금 426B), Trading 은 vendor
+    `CASH_LTM`(단기금융자산 제외)에 NCI 가산(순부채 27B). **지분가치 25% 차이.**
+
+    비교 키(있는 것만): cash·short_term_investments·interest_bearing_debt·
+    non_controlling_interest·preferred_stock·net_debt·non_operating_assets.
+    한쪽에만 있는 키는 **누락**으로 본다(0 으로 간주하지 않는다 — 0 과 미정의는 다르다).
+    """
+    keys = sorted(set(dcf_bridge) | set(relative_bridge))
+    mismatches: dict[str, dict] = {}
+    missing: dict[str, str] = {}
+    for k in keys:
+        in_d, in_r = k in dcf_bridge, k in relative_bridge
+        if not in_d or not in_r:
+            missing[k] = "relative" if in_d else "dcf"
+            continue
+        a, b = float(dcf_bridge[k]), float(relative_bridge[k])
+        scale = max(abs(a), abs(b), 1.0)
+        if abs(a - b) / scale > tol:
+            mismatches[k] = {"dcf": a, "relative": b, "delta": a - b}
+
+    detail = {"mismatches": mismatches, "missing_in": missing, "tol": tol}
+    if mismatches or missing:
+        parts = [f"{k}(DCF {v['dcf']:,.0f} vs 상대 {v['relative']:,.0f}, Δ{v['delta']:+,.0f})"
+                 for k, v in mismatches.items()]
+        parts += [f"{k}(→{side} 누락)" for k, side in missing.items()]
+        f = Finding("bridge_consistency", Severity.WARN,
+                    "교차방법 지분브리지 불일치 — " + " · ".join(parts)
+                    + " → 브리지 정의를 SSOT 로 통일해야 교차검증이 유효",
+                    detail)
+    else:
+        f = Finding("bridge_consistency", Severity.PASS,
+                    f"DCF·상대가치 지분브리지 정의 일치({len(keys)}항목)", detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
 def audit_dcf(
     inp: DcfSpineInput,
     result: DcfResult,
     *,
     wacc_inputs: WaccInputs | None = None,
     long_term_gdp: float = DEFAULT_LONG_TERM_GDP,
+    pgr_source: str | None = None,
+    pgr_basis: str | None = None,
 ) -> ValidationReport:
     """DCF 입력·산출·(선택)WACC 입력에 대한 가정 타당성 종합 검사.
 
     ingest 게이트(validators)와 별개인 valuation 게이트. warn 은 통과시키되
     감사인에게 노출, fail(PGR≥WACC 등)은 결과 무효로 취급한다.
+
+    pgr_source/pgr_basis 를 주면 PGR 출처 게이트(R2)도 함께 돈다.
     """
     report = ValidationReport()
+    # 터미널에서 재투자가 실제로 반영되는 경로들.
+    # ⚠️ fade_years 는 여기 포함되지 **않는다** — 페이드는 명시구간의 현실성을 높이고
+    # TV 비중을 낮출 뿐, 터미널 FCFF 자체는 여전히 NOPLAT_T(D&A=CAPEX, ΔWC=0)로
+    # 재구축되기 때문. 반면 terminal_from_last_fcff 는 마지막 연도의 실제 CAPEX·ΔWC 를
+    # 승계하므로 재투자 반영으로 인정한다.
     reinvestment_modeled = (
         inp.terminal_wc_ratio is not None
         or inp.terminal_reinvestment_rate is not None
         or inp.terminal_fcff_override is not None
+        or inp.terminal_from_last_fcff
     )
     check_terminal_growth(inp.terminal_growth, inp.wacc,
                           long_term_gdp=long_term_gdp,
                           reinvestment_modeled=reinvestment_modeled, report=report)
+    check_pgr_provenance(inp.terminal_growth, pgr_source, basis=pgr_basis, report=report)
     check_terminal_value_weight(result, report=report)
     check_projection_smoothness(list(inp.revenue), name="revenue", report=report)
     check_working_capital_burn(list(inp.revenue), list(inp.delta_nwc_cash_adj), report=report)

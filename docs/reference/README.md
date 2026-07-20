@@ -44,6 +44,7 @@
 | [MnA_구조화_합병규제_세무](MnA_구조화_합병규제_세무.md) | Structuring 4유형·**합병가액 법제(기준시가 ±30%·본질가치 0.4/0.6)**·주식매수청구 가격·적격합병 요건 5·양도세 | M&A ESSENCE |
 | [MnA_사례집_유형별_시사점](MnA_사례집_유형별_시사점.md) | 10사례(SPAC·회생·PEF·U-turn 등) 구조·교훈 — 가격조정 75억 실측·SI/FI 가격차 | M&A CASEBOOK(2021) |
 | [앤트로픽_금융스킬_벤치마크](앤트로픽_금융스킬_벤치마크.md) | 공식 dcf/lbo/comps·audit-xls 원문 감사 — 채택 규약·DCF 버그 5종·서사 규격 | anthropics/financial-services |
+| [모델러스_통합모델_5.4](모델러스_통합모델_5.4.md) | ⭐ **3번째 교차검증 레퍼런스(IB 트레이닝 표준)**: 3표 완전연결·순환스위치·**페이드 스테이지**(명시5+페이드5+Gordon, TV비중 57.8%)·**PGR 인플레 앵커링**·Trading comps(EV브리지·NM/NA·EV vs 지분배수 비대칭)·CHOOSE 시나리오 + **반면교사 6종**(데이터테이블 stale·peer 자기포함·배수 평균·정확일치 CHECK·브리지 불일치) + 반영점 R1~R16 | The Modellers 5.4(COMPLETED).xlsx (Hugel) |
 
 ## 온톨로지 + RAG 인덱스
 `ontology/` — 북을 자동 컴파일한 개념 그래프·RAG 검색 인덱스(SSOT→컴파일). 재생성:
@@ -56,6 +57,7 @@
 - `pe양식\` — 실무 DCF 템플릿(암호화, 비번=`파일명_비번`, ㅁ→동일위치 영문키)
 - `0003-삼일_Fulcrum`, `0004-Deloitte-외부평가검토` — Big4 교육자료
 - `MSVALUE강의자료\` — NOA IBD 참고자료, 한공회 MRP 가이던스, dcf공시사례.pptx
+- `모델러스엑셀\` — The Modellers 트레이닝: `5.4(COMPLETED).xlsx`(**Hugel 통합모델 정본** — 14시트 3표연결+DCF+Comps), Excel Practice Materials(EMP), Total Shortcuts Summary
 
 ## 핵심 확정 사실 (전 자료 종합)
 - **비올 peer 유니버스**(미용 의료기기 6사): 이루다·비올·제이시스메디칼·클래시스·하이로닉·한스바이오메드.

@@ -383,6 +383,11 @@ async def dcf_assemble_endpoint(request: Request) -> dict:
             shares_outstanding=int(ops.get("shares_outstanding", 1)),
             mid_year_periods=ops.get("mid_year_periods"),
             terminal_discount_period=ops.get("terminal_discount_period"),
+            fade_years=(int(ops["fade_years"])
+                        if ops.get("fade_years") is not None else None),
+            fade_growth=(float(ops["fade_growth"])
+                         if ops.get("fade_growth") is not None else None),
+            terminal_from_last_fcff=bool(ops.get("terminal_from_last_fcff", False)),
         )
     except (TypeError, ValueError) as e:
         raise HTTPException(422, f"운영가정 오류: {e}") from e

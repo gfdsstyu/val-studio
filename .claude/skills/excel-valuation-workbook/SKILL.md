@@ -167,7 +167,10 @@ python scripts/lint_report.py --text "본 건은 분식입니다."
 python scripts/book_search.py "영구성장률 몇 퍼센트?"
 ```
 
-**DcfSpineInput 필드**: `wacc, terminal_growth, revenue[], cogs[], sga[], dep_amort[], capex[], delta_nwc_cash_adj[], non_operating_assets, net_debt, shares_outstanding` (+ 선택: `mid_year_periods[], terminal_discount_period, tax_override[], effective_tax_rate, terminal_fcff_override, terminal_reinvestment_rate`). 단위 백만원, 주식수만 주.
+**DcfSpineInput 필드**: `wacc, terminal_growth, revenue[], cogs[], sga[], dep_amort[], capex[], delta_nwc_cash_adj[], non_operating_assets, net_debt, shares_outstanding` (+ 선택: `non_controlling_interest, mid_year_periods[], terminal_discount_period, tax_override[], effective_tax_rate, terminal_fcff_override, terminal_reinvestment_rate, terminal_wc_ratio`, **페이드**: `fade_years, fade_growth, terminal_from_last_fcff`). 단위 백만원, 주식수만 주.
+
+**⭐ 페이드(수렴) 구간 — 명시 → 페이드 → Gordon 3단**: 명시말기 고성장에서 영구성장률로 **급단절**하면 TV 가 왜곡되고 TV 비중이 치솟는다. `fade_years=5` 를 주면 마지막 명시연도의 **모든 비율(마진·세율·CAPEX/매출·D&A/매출·ΔWC/매출)이 동결**된 채 성장률만 `fade_growth`(기본 = AVERAGE(마지막 명시 성장률, PGR))로 수렴하는 구간이 붙는다. `terminal_from_last_fcff=True` 면 TV 를 **마지막 연도 FCFF×(1+g)** 로 잡아 그 해의 재투자 강도를 영구 승계한다(기본은 EBIT_T 재구축=D&A·CAPEX 상쇄).
+> **실측(모델러스 Hugel, `tests/golden/test_modellers_hugel_fade.py`)**: 페이드 5년 → 주당 144,000원·**TV비중 57.8%(PASS)**. 동일 입력에 페이드를 빼면 주당 157,000원·**TV비중 84.6%(WARN)** — 9% 과대. **TV 비중이 75% 를 넘으면 페이드 구간을 먼저 검토**하라.
 
 ---
 

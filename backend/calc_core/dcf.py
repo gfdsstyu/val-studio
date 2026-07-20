@@ -11,6 +11,16 @@
     PV(FCFF)   = FCFF × PVfactor
     Terminal   : EBIT_T = EBIT_last×(1+g) → 세금 재계산 → NOPLAT_T = FCFF_T
                  TV = FCFF_T/(WACC−g),  PV(TV) = TV × PVfactor(마지막 명시연도)
+
+기간 구조는 **2단(명시+Gordon)이 기본**이고, `fade_years` 를 주면 **3단**이 된다(R1):
+
+    [1] 명시추정   드라이버 기반 N년 (사용자 입력 시계열)
+    [2] 페이드     fade_years 년 — 전 비율 동결, 성장률만 gf 로 수렴  ← _expand_fade
+    [3] Gordon     TV = FCFF_T/(WACC−g)
+
+페이드는 *입력 확장*으로 구현되어(§_expand_fade) 아래 계산은 전부 무수정 재사용된다.
+근거: docs/reference/모델러스_통합모델_5.4.md §2.3 — 명시말기 고성장에서 영구성장률로의
+급단절이 TV 를 왜곡하고 TV 비중을 끌어올린다(실측: 페이드 적용 시 TV 비중 57.8%).
     EV         = ΣPV(FCFF) + PV(TV)
     주식가치   = EV + 비영업자산 − 순차입부채
     주당가치   = 주식가치 / 주식수 × 1e6            # 백만원→원
@@ -19,6 +29,8 @@
 중심 셀 == base 주당가치 자기일관성으로 검증한다.
 """
 from __future__ import annotations
+
+from dataclasses import replace
 
 from .models import DcfResult, DcfSpineInput
 from .tax import corporate_tax
@@ -48,7 +60,81 @@ def _tax_on(inp: DcfSpineInput, ebit_val: float, i: int | None) -> float:
     return corporate_tax(ebit_val)
 
 
+def resolve_fade_growth(inp: DcfSpineInput, g: float) -> float:
+    """페이드 구간 성장률 결정(R1). 명시 지정 > AVERAGE(마지막 명시 성장률, g).
+
+    모델러스 정본 `F30 = AVERAGE(S15, F33)` — 명시말기 성장률과 영구성장률의 중간값을
+    페이드 전 구간에 고정한다. **g 의 함수**이므로 민감도에서 g 축이 움직이면 페이드
+    성장률도 따라 움직인다(터미널만 바꾸고 페이드를 고정하면 시나리오가 비정합).
+    """
+    if inp.fade_growth is not None:
+        return inp.fade_growth
+    if inp.n_years() < 2:
+        raise ValueError(
+            "fade_growth 자동산출에는 명시추정 2개년 이상이 필요하다"
+            "(마지막 매출성장률 계산 불가) — fade_growth 를 명시하라"
+        )
+    prev, last = inp.revenue[-2], inp.revenue[-1]
+    if prev <= 0:
+        raise ValueError(
+            f"직전 매출({prev}) ≤ 0 — 마지막 명시 성장률 정의 불가, fade_growth 를 명시하라"
+        )
+    return ((last / prev - 1.0) + g) / 2.0
+
+
+def _expand_fade(inp: DcfSpineInput, g: float) -> DcfSpineInput:
+    """명시추정 시계열 뒤에 페이드 구간을 이어붙여 확장된 입력을 만든다(R1).
+
+    **설계**: 페이드를 별도 계산분기로 만들지 않고 *입력 확장*으로 구현한다 →
+    할인·터미널·브리지·민감도 로직이 전부 무수정으로 재사용되고, 하류 게이트
+    (tv_weight·projection_smoothness·working_capital_burn)도 페이드 포함 시계열을
+    자동으로 검사한다.
+
+    **비율 동결의 구현**: 전 라인아이템을 동일 성장률 gf 로 성장시킨다. 매출도 gf 로
+    자라므로 모든 비율(원가율·판관비율·CAPEX/매출·D&A/매출·ΔWC/매출)이 자동 동결되고,
+    EBIT 도 `매출(1+gf)×동결OPM = EBIT(1+gf)` 로 동일 성장한다(모델러스 T16 = T14×T17 와 동치).
+
+    fade_years 가 None/0 이면 **입력을 그대로 반환**(기존 동작 완전 보존 — 골든 불변).
+    """
+    k = inp.fade_years or 0
+    if k <= 0:
+        return inp
+    if k < 0 or int(k) != k:
+        raise ValueError(f"fade_years 는 0 이상 정수여야 한다: {k}")
+
+    gf = resolve_fade_growth(inp, g)
+    factors = [(1.0 + gf) ** (j + 1) for j in range(k)]
+
+    def grow(series: list[float]) -> list[float]:
+        return list(series) + [series[-1] * f for f in factors]
+
+    # 세금: override 가 있으면 EBIT 과 같은 속도로 성장 = 세금/EBIT 비율 동결
+    # (모델러스 T19 = $F$32 = S19). effective_tax_rate·구간세율은 _tax_on 이
+    # 확장된 EBIT 에 그대로 적용하므로 확장 불요.
+    tax_override = grow(inp.tax_override) if inp.tax_override is not None else None
+
+    # 할인기간: 명시 지정된 경우만 이어붙인다(None 이면 _compute 가 확장 길이 기준
+    # 0.5,1.5,… 를 자동 생성 → 페이드까지 자연 연장).
+    periods = inp.mid_year_periods
+    if periods is not None:
+        periods = list(periods) + [periods[-1] + (j + 1) for j in range(k)]
+
+    return replace(
+        inp,
+        revenue=grow(inp.revenue),
+        cogs=grow(inp.cogs),
+        sga=grow(inp.sga),
+        dep_amort=grow(inp.dep_amort),
+        capex=grow(inp.capex),
+        delta_nwc_cash_adj=grow(inp.delta_nwc_cash_adj),
+        tax_override=tax_override,
+        mid_year_periods=periods,
+        fade_years=None,          # 확장 완료 — 재확장 방지
+    )
+
+
 def _compute(inp: DcfSpineInput, wacc: float, g: float) -> DcfResult:
+    inp = _expand_fade(inp, g)      # R1: 페이드 구간을 명시 시계열로 편입
     n = inp.n_years()
     periods = inp.mid_year_periods or [i - 0.5 for i in range(1, n + 1)]
     term_period = inp.terminal_discount_period if inp.terminal_discount_period is not None else periods[-1]
@@ -67,6 +153,10 @@ def _compute(inp: DcfSpineInput, wacc: float, g: float) -> DcfResult:
     #                   (D&A=CAPEX − 정규화 WC 재조정).
     if inp.terminal_fcff_override is not None:
         terminal_fcff = inp.terminal_fcff_override  # 정규화된 FCF_{n+1} 직접 주입
+    elif inp.terminal_from_last_fcff:
+        # 마지막 연도 FCFF 를 그대로 성장 — 그 해의 재투자 강도(CAPEX·ΔWC)를 영구 승계.
+        # 페이드 최종연도는 비율이 동결된 정상상태라 이 컨벤션과 특히 정합적이다.
+        terminal_fcff = fcff[-1] * (1.0 + g)
     else:
         terminal_ebit = ebit[-1] * (1.0 + g)
         terminal_tax = _tax_on(inp, terminal_ebit, None)
