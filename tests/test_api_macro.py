@@ -88,3 +88,40 @@ def test_cpi_driver_is_flat_without_cpi():
                       json={**body, "cpi": [0.02, 0.02, 0.02]}).json()
     assert flat["cogs"] == [3000, 3000, 3000], "CPI 없으면 평탄 — 조용한 오답의 실체"
     assert with_cpi["cogs"][2] > flat["cogs"][2], "CPI 있으면 물가만큼 상승해야"
+
+
+def test_pgr_suggest_endpoint_reproduces_modellers_anchor():
+    """/api/macro/pgr-suggest — 복붙 물가 10년 → PGR 1.62%(모델러스 F33).
+
+    회귀: 단위 이중나눗셈(1.62% → 0.0162%) 방지. 실제 parse_paste_table 을 통과시켜야
+    잡히는 결함이라 반드시 엔드포인트 경로로 검증한다.
+    """
+    text = "\n".join(f"{y}\t{v}" for y, v in zip(
+        range(2013, 2023), [1.3, 1.3, 0.7, 1.0, 1.9, 1.5, 0.4, 0.5, 2.5, 5.1]))
+    r = C.post("/api/macro/pgr-suggest", json={
+        "text": text, "vintage": "2023-01-31", "base_date": "2023-12-31", "years": 10})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert abs(d["value"] - 0.0162) < 1e-9, d["value"]
+    assert d["n_observations"] == 10
+    assert "AVERAGE" in d["basis"]
+
+
+def test_pgr_provenance_round_trip_through_dcf():
+    """앵커 → DCF pgr_source/basis 전달 → audit PASS. 미전달이면 WARN."""
+    c = C
+    base = {"wacc": 0.10, "terminal_growth": 0.0162,
+            "revenue": [1000, 1100, 1200], "cogs": [600, 660, 720],
+            "sga": [200, 220, 240], "dep_amort": [50, 55, 60],
+            "capex": [50, 55, 60], "delta_nwc_cash_adj": [0, 0, 0],
+            "non_operating_assets": 0, "net_debt": 0, "shares_outstanding": 1_000_000}
+    def prov(body):
+        d = c.post("/api/dcf", json=body).json()
+        return next(f for f in d["findings"] if f["rule"] == "pgr_provenance")["severity"]
+    assert prov(base) == "warn"
+    assert prov({**base, "pgr_source": "derived",
+                 "pgr_basis": "AVERAGE(cpi_inflation, 2013~2022, n=10)"}) == "pass"
+
+
+def test_pgr_suggest_requires_text():
+    assert C.post("/api/macro/pgr-suggest", json={}).status_code == 422

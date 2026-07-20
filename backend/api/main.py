@@ -66,9 +66,11 @@ def _parse_input(data: dict) -> DcfSpineInput:
         raise HTTPException(422, f"입력 오류: {e}") from e
 
 
-def _result_payload(inp: DcfSpineInput, claimed: float | None = None) -> dict:
+def _result_payload(inp: DcfSpineInput, claimed: float | None = None,
+                    pgr_source: str | None = None,
+                    pgr_basis: str | None = None) -> dict:
     res = run(inp)
-    rep = audit_dcf(inp, res)
+    rep = audit_dcf(inp, res, pgr_source=pgr_source, pgr_basis=pgr_basis)
     out = {
         "per_share": res.per_share,
         "enterprise_value": res.enterprise_value,
@@ -105,9 +107,13 @@ async def dcf_endpoint(request: Request) -> dict:
     """
     data = await request.json()
     claimed = data.pop("claimed_per_share", None)
+    # PGR 출처(R2) — 스파인 필드가 아니라 audit 메타라 별도로 뽑는다.
+    pgr_source = data.pop("pgr_source", None) or None
+    pgr_basis = data.pop("pgr_basis", None) or None
     inp = _parse_input(data)
     try:
-        return _result_payload(inp, float(claimed) if claimed not in (None, "") else None)
+        return _result_payload(inp, float(claimed) if claimed not in (None, "") else None,
+                               pgr_source=pgr_source, pgr_basis=pgr_basis)
     except ZeroDivisionError as e:
         raise HTTPException(422, f"계산 불능(0 나눗셈 — WACC≈g 확인): {e}") from e
 
@@ -1077,6 +1083,41 @@ async def macro_series(request: Request,
         "observations": obs, "annual": annual, "dropped_periods": dropped,
         "findings": [{"rule": f.rule, "severity": f.severity.value, "message": f.message}
                      for f in findings],
+    }
+
+
+@app.post("/api/macro/pgr-suggest")
+async def macro_pgr_suggest(request: Request) -> dict:
+    """물가 시계열(복붙) → **영구성장률 앵커 제안**(R2). 제안일 뿐 확정은 평가인 몫.
+
+    `{text, vintage?, base_date?, source?, years?}` — /api/macro/series 와 같은 복붙 경로를
+    쓰되 **vintage 가드 통과분만** 평균한다(평가기준일 이후 공표값 배제).
+
+    근거: 모델러스 정본 `F33 = AVERAGE(rInflation 10년)/100 = 1.62%` — PGR 을 감(感)이
+    아니라 출처 있는 거시 통계의 함수로 만든다.
+    """
+    from ingest.macro_client import suggest_pgr_from_inflation
+    d = await request.json()
+    if not d.get("text"):
+        raise HTTPException(422, "text(물가 시계열 복붙) 필요")
+    base_date = d.get("base_date") or ""
+    report = ValidationReport()
+    series = parse_paste_table(
+        d["text"], CPI_INFLATION,
+        vintage=d.get("vintage") or base_date,
+        is_forecast_from=d.get("is_forecast_from"),
+        source=d.get("source") or "붙여넣기", report=report)
+    try:
+        sug = suggest_pgr_from_inflation(series, base_date or "9999-12-31",
+                                         years=int(d.get("years", 10)))
+    except (TypeError, ValueError) as e:
+        raise HTTPException(422, f"앵커 산출 오류: {e}") from e
+    return {
+        "value": sug.value, "basis": sug.basis,
+        "n_observations": sug.n_observations, "periods": list(sug.periods),
+        "source": sug.source,
+        "findings": [{"rule": f.rule, "severity": f.severity.value, "message": f.message}
+                     for f in list(report.findings) + list(sug.findings)],
     }
 
 

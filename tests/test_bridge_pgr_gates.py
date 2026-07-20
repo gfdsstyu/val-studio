@@ -43,6 +43,8 @@ def test_pgr_unknown_source_kind_warns():
 
 
 def _cpi_series(values, unit="%"):
+    """⚠️ value 는 **비율**로 넣는다 — 이 모듈 규약(parse_paste_table 이 %→비율 변환하고
+    unit 은 출처 라벨로만 남긴다). 픽스처를 %스케일로 만들면 실제 파서와 어긋난다."""
     obs = tuple(
         MacroObservation(CPI_INFLATION, f"{2013 + i}", v, vintage=f"{2014 + i}-03-31",
                          source="ECOS")
@@ -57,7 +59,7 @@ def test_suggest_pgr_reproduces_modellers_anchor():
     원본은 rInflation 10개년 평균 /100 = 1.62%. 동일 평균이 나오는 계열을 넣어
     단위환산(%→비율)과 평균 로직을 검증한다.
     """
-    vals = [1.3, 1.3, 0.7, 1.0, 1.9, 1.5, 0.4, 0.5, 2.5, 5.1]   # 평균 1.62
+    vals = [0.013, 0.013, 0.007, 0.010, 0.019, 0.015, 0.004, 0.005, 0.025, 0.051]  # 평균 1.62%
     s = _cpi_series(vals)
     # 기준일은 마지막 관측 vintage(2023-03-31) 이후여야 10개가 전부 usable
     sug = suggest_pgr_from_inflation(s, "2023-12-31", years=10)
@@ -71,7 +73,7 @@ def test_suggest_pgr_reproduces_modellers_anchor():
 
 def test_suggest_pgr_respects_vintage_guard():
     """평가기준일 이후 vintage 는 제외(look-ahead 방지)."""
-    s = _cpi_series([1.0, 2.0, 3.0])          # vintage 2014·2015·2016-03-31
+    s = _cpi_series([0.01, 0.02, 0.03])       # vintage 2014·2015·2016-03-31
     sug = suggest_pgr_from_inflation(s, "2015-06-30", years=10)
     assert sug.n_observations == 2, sug.periods    # 2016 vintage 는 배제
     assert abs(sug.value - 0.015) < 1e-12
@@ -84,9 +86,22 @@ def test_suggest_pgr_no_data_fails_instead_of_guessing():
     assert any(f.severity.name == "FAIL" for f in sug.findings)
 
 
-def test_suggest_pgr_ratio_unit_not_divided():
-    s = _cpi_series([0.02, 0.02], unit="ratio")
-    assert abs(suggest_pgr_from_inflation(s, "2023-01-01").value - 0.02) < 1e-12
+def test_suggest_pgr_unit_label_does_not_rescale():
+    """unit 라벨('%' vs 'ratio')이 값을 다시 나누면 안 된다 — value 는 항상 비율.
+
+    회귀: 초기 구현이 unit=='%' 를 보고 /100 해서 라이브에서 1.62% → 0.0162% 로
+    100배 축소됐다(단위 테스트는 잘못된 픽스처라 통과).
+    """
+    for unit in ("%", "ratio"):
+        s = _cpi_series([0.02, 0.02], unit=unit)
+        assert abs(suggest_pgr_from_inflation(s, "2023-01-01").value - 0.02) < 1e-12, unit
+
+
+def test_suggest_pgr_percent_scale_input_warns():
+    """% 스케일로 잘못 들어오면 조용히 100배 틀리지 않고 WARN 한다."""
+    s = _cpi_series([1.3, 1.9, 2.5])          # 비율이어야 하는데 % 스케일
+    sug = suggest_pgr_from_inflation(s, "2023-12-31")
+    assert any("비현실적" in f.message for f in sug.findings), sug.findings
 
 
 # ── R3: 교차방법 브리지 ──────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ const DEMO = {
   non_operating_assets: "20000", net_debt: "10000", non_controlling_interest: "0",
   shares_outstanding: "10000000", claimed_per_share: "", terminal_wc_ratio: "",
   fade_years: "", fade_growth: "", terminal_from_last_fcff: false,
+  pgr_source: "", pgr_basis: "",
   terminal_discount_period: "",
 };
 
@@ -78,6 +79,12 @@ export default function DcfSheet({ project, onSave }) {
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
+  // 거시 시트가 남긴 PGR 앵커 제안(R2) — 있으면 한 번에 값+출처를 채운다.
+  const anchor = project?.data?.pgr_suggestion || null;
+  const applyAnchor = () => setForm((f) => ({
+    ...f, terminal_growth: String(anchor.value),
+    pgr_source: "derived", pgr_basis: anchor.basis || "",
+  }));
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const years = grid.revenue.length;
@@ -117,6 +124,9 @@ export default function DcfSheet({ project, onSave }) {
     // R15: 터미널 할인기간 명시 선언(비우면 audit 가 WARN + 대안 영향 제시)
     if (form.terminal_discount_period?.toString().trim())
       body.terminal_discount_period = Number(form.terminal_discount_period);
+    // R2: PGR 출처 — 없으면 audit 이 '무근거 하드코드' WARN
+    if (form.pgr_source?.trim()) body.pgr_source = form.pgr_source.trim();
+    if (form.pgr_basis?.trim()) body.pgr_basis = form.pgr_basis.trim();
     try {
       const d = await api.dcf(body);
       setRes(d);
@@ -147,7 +157,30 @@ export default function DcfSheet({ project, onSave }) {
                 </div>
               )}</div>
             <div className="row"><label>영구성장률 PGR (소수)</label>
-              <input type="text" value={form.terminal_growth} onChange={set("terminal_growth")} /></div>
+              <input type="text" value={form.terminal_growth} onChange={set("terminal_growth")} />
+              {anchor && (
+                <div style={{ marginTop: 4, fontSize: "0.82rem" }}>
+                  <button type="button" onClick={applyAnchor}>
+                    앵커 적용 ({(anchor.value * 100).toFixed(2)}%)
+                  </button>
+                  <span className="muted" style={{ marginLeft: 6 }}>
+                    3.할인율 › 거시에서 산출한 물가 앵커
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="row"><label>PGR 출처 (감사 방어 — 비우면 WARN)</label>
+              <select value={form.pgr_source} onChange={set("pgr_source")}>
+                <option value="">(미기재)</option>
+                <option value="derived">derived — 거시 앵커링(권장)</option>
+                <option value="research">research — 문서·리포트 근거</option>
+                <option value="user">user — 평가인 확정</option>
+              </select>
+              <input type="text" value={form.pgr_basis} onChange={set("pgr_basis")}
+                placeholder="산출식·근거 (derived 는 필수)" style={{ marginTop: 4 }} />
+              <div className="muted" style={{ fontSize: "0.8rem", marginTop: 2 }}>
+                PGR 은 TV 최고민감 파라미터 — <b>어디서 온 숫자인지</b>가 값 자체만큼 중요하다.
+              </div></div>
             <div className="row"><label>터미널 운전자본비율 (선택 — 정규화 WC/매출)</label>
               <input type="text" value={form.terminal_wc_ratio} onChange={set("terminal_wc_ratio")}
                 placeholder="예 0.30 (비우면 ΔWC=0)" />

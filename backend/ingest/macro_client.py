@@ -367,6 +367,9 @@ def build_macro_assumptions(
 # 평균의 함수**로 만들어 출처 추적을 가능하게 한다. PGR 은 TV 최고민감 파라미터이므로
 # 무근거 하드코드는 감사 방어가 불가능하다.
 PGR_ANCHOR_YEARS = 10
+# 앵커 결과가 이 값을 넘으면 % 스케일 오투입 의심(비율 규약 위반) — 조용한
+# 100배 오차를 막는 2차 방어선.
+PGR_SCALE_SANITY = 0.20
 
 
 @dataclass(frozen=True)
@@ -391,7 +394,13 @@ def suggest_pgr_from_inflation(
     vintage 가드(`usable_as_of`)를 먼저 통과시켜 평가기준일 이후 공표된 값이 섞이지
     않게 한다 — look-ahead 방지는 여기서도 동일하게 적용된다.
 
-    단위: series.unit 이 '%' 면 /100 하여 비율로 반환한다.
+    ⚠️ **단위 규약**: 이 모듈의 `MacroObservation.value` 는 **항상 비율**이다
+    (`parse_paste_table` 은 "1.3%" → 0.013, `EcosProvider` 는 v/100 로 저장).
+    `MacroSeries.unit` 은 **출처 라벨**이지 스케일 플래그가 아니다 — 값이 이미 비율인데
+    unit 이 '%' 인 것이 정상. 따라서 여기서 추가로 나누지 않는다.
+    (이 함수는 처음에 unit=='%' 를 보고 /100 했다가 라이브에서 1.62% → 0.0162% 로
+    100배 축소되는 버그가 났다. 단위 테스트는 잘못된 가정에 맞춘 픽스처라 통과했음.)
+
     관측치가 없으면 value=0.0 + FAIL finding(임의 기본값을 지어내지 않는다).
     """
     usable = usable_as_of(series, base_date)
@@ -405,10 +414,15 @@ def suggest_pgr_from_inflation(
         ))
         return PgrSuggestion(0.0, "관측치 없음", 0, (), usable.indicator, findings)
 
-    raw = sum(o.value for o in obs) / len(obs)
-    value = raw / 100.0 if series.unit == "%" else raw
+    value = sum(o.value for o in obs) / len(obs)      # 값은 이미 비율(위 단위 규약)
     periods = tuple(o.period for o in obs)
     basis = f"AVERAGE({series.indicator}, {periods[0]}~{periods[-1]}, n={len(obs)})"
+    if abs(value) > PGR_SCALE_SANITY:
+        findings.append(Finding(
+            "pgr_anchor", Severity.WARN,
+            f"앵커 {value:.1%} 가 비현실적 — 값이 비율이 아니라 %(예 1.62)로 들어온 것은"
+            f" 아닌지 확인(이 모듈의 value 는 항상 비율)",
+            {"value": value, "sanity": PGR_SCALE_SANITY}))
     if len(obs) < years:
         findings.append(Finding(
             "pgr_anchor", Severity.WARN,

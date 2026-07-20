@@ -29,6 +29,7 @@ export default function MacroSheet({ project, onSave }) {
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [pgr, setPgr] = useState(project?.data?.pgr_suggestion || null);
 
   const baseDate = project?.setup?.base_date || "";
   const ecosKey = loadKey("ecos");
@@ -48,6 +49,21 @@ export default function MacroSheet({ project, onSave }) {
                 source: source || undefined }),
         },
         viaEcos ? ecosKey : null));
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  /** 물가 시계열 → 영구성장률(PGR) 앵커 제안(R2). 산식은 서버 결정론(vintage 가드 포함).
+      근거: 모델러스 F33 = AVERAGE(rInflation 10년) — PGR 을 감이 아니라 출처 있는
+      거시 통계의 함수로. **제안일 뿐 확정은 평가인 몫.** */
+  const suggestPgr = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await api.pgrSuggest({
+        text, vintage: vintage || undefined, base_date: baseDate || undefined,
+        is_forecast_from: forecastFrom || undefined, source: source || undefined, years: 10,
+      });
+      setPgr(r);
+      onSave?.({ pgr_suggestion: r });
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
@@ -164,6 +180,33 @@ export default function MacroSheet({ project, onSave }) {
             {saved && (
               <div className="muted" style={{ marginTop: 8 }}>
                 2.가정 › 원가·판관비의 <b>물가연동(cpi)</b> 드라이버가 이 값을 사용합니다.
+              </div>
+            )}
+            {indicator === "cpi_inflation" && (
+              <div style={{ marginTop: 14, borderTop: "1px solid var(--line,#e5e2e0)", paddingTop: 12 }}>
+                <b>영구성장률(PGR) 앵커</b>
+                <div className="muted" style={{ fontSize: "0.82rem", margin: "4px 0 8px" }}>
+                  장기 물가상승률 평균을 PGR 근거로 삼는다(모델러스 정본 F33). PGR 은 TV
+                  최고민감 파라미터라 <b>무근거 하드코드는 감사 방어가 불가</b>하다.
+                  vintage 가드 통과분만 평균한다. <b>제안일 뿐 확정은 평가인 몫.</b>
+                </div>
+                <button disabled={busy || !text.trim()} onClick={suggestPgr}>
+                  10년 평균으로 PGR 앵커 산출
+                </button>
+                {pgr && (
+                  <div style={{ marginTop: 8, fontSize: "0.85rem" }}>
+                    <div>제안 PGR <b>{(pgr.value * 100).toFixed(2)}%</b>
+                      <span className="muted"> · n={pgr.n_observations}</span></div>
+                    <div className="muted" style={{ fontFamily: "monospace", fontSize: "0.78rem" }}>
+                      {pgr.basis}</div>
+                    {(pgr.findings || []).filter((f) => f.severity !== "pass").map((f, i) => (
+                      <div key={i} style={{ color: "var(--warn,#c49b47)" }}>⚠ {f.message}</div>
+                    ))}
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      4.밸류에이션 › DCF 에서 <b>“앵커 적용”</b> 으로 불러올 수 있습니다.
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
