@@ -7,6 +7,7 @@
 사용:
   echo '{"cases":{"Base":{...DcfSpineInput...},"Up":{...}},"weights":{"Base":0.5,"Up":0.5}}' | python scenario.py
   echo '{...}' | python scenario.py --emit-cells      # Scenario 시트 셀 JSON(가중 SUMPRODUCT live)
+  echo '{...}' | python scenario.py --emit-cells --switch   # + CHOOSE 단일선택 스위치 블록
   echo '{...}' | python scenario.py --xlsx sc.xlsx     # Scenario 시트 파일
 출력(기본): 시나리오별 주당가치·EV·TV비중 + spread + weighted_per_share(가중치 완비 시).
 """
@@ -39,6 +40,7 @@ def main() -> None:
     args = sys.argv[1:]
     mode_xlsx = None
     emit = False
+    switch = False        # R13: CHOOSE 단일선택 스위치 블록 동봉(가중 종합과 병행)
     rest = []
     i = 0
     while i < len(args):
@@ -47,6 +49,9 @@ def main() -> None:
             i += 2
         elif args[i] == "--emit-cells":
             emit = True
+            i += 1
+        elif args[i] == "--switch":
+            switch = True
             i += 1
         else:
             rest.append(args[i])
@@ -60,7 +65,7 @@ def main() -> None:
 
     if mode_xlsx or emit:
         wb = Workbook()
-        add_scenario_sheet(wb, analysis)
+        add_scenario_sheet(wb, analysis, switch=switch)
         if mode_xlsx:
             wb.save(mode_xlsx)
             print(json.dumps({"saved": mode_xlsx, "sheets": [s.name for s in wb.sheets]},

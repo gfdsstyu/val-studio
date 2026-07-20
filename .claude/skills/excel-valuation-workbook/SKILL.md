@@ -72,7 +72,10 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 
 W4/W5 시트는 살아있는 수식: Capex_Dep(기말=기초+CAPEX−상각·정액 스케줄), WC(잔액=드라이버×회전일/365·ΔNWC 차분), Fcst_Cost(영업이익=매출−원가−판관비), Assumption 가정 SSOT를 하류가 Green 참조.
 
-- 참조 단방향(`뒤→앞`, 순환 금지). 색상 3색: Blue(입력)/Black(수식)/Green(타시트) + 핵심가정 yellow.
+- 참조는 **셀 단위 비순환(DAG)**. 기본은 `뒤→앞`이나, 시트 A·B 가 서로를 참조해도 **참조되는 셀 집합이 분리**(과거열/추정열)되면 허용 — 시트 단위로만 읽으면 정당한 패턴을 오탐 금지한다. **셀 단위 순환은 금지**(3표 완결용 이자 순환만 예외, 명시적 차단기 필수 — FCFF DCF 는 무차입이라 원천 불요). 색상 3색: Blue(입력)/Black(수식)/Green(타시트) + 핵심가정 yellow.
+- **원자료 격리**: 붙여넣은 외부자료는 `r` 접두 시트(`rFS`·`rPeer`·`rMacro`)에 **무수정** 보관, 모델 시트는 참조만.
+- **CHECK 행 상시 검증**: 합보존·정합은 `=IF(ABS(좌−우)<0.001,"TRUE",좌−우)` 로 워크북에 상주(잔차 표시). **정확일치 비교 금지**(부동소수 노이즈로 맞는 연도가 FALSE).
+- **가시 상태 헤더**(전 시트 I1:J3): Scenario·Target Price·Stage — `_VS_STATE` 는 숨김이라 사람이 못 본다.
 - **hard number 승격(W6)**: 상류 시트가 생기면 DCF 스파인 입력셀(매출/원가/판관비)을 상류 참조(`=Fcst_Rev!C12` 등, Green)로 교체하고, **교체 전후 per_share 불변(tie-out)**을 `promote.py`로 검증(불일치 시 라인·연도 델타 표면화).
 
 **Research 시트 = SSOT**: 붙여넣은 자료를 여기 정리(숫자=하류 수식 참조 대상, 서사=판단 맥락). MD Brief는 필요 시 여기서 뽑는 파생뷰(이중 유지 금지).
@@ -93,9 +96,9 @@ W4/W5 시트는 살아있는 수식: Capex_Dep(기말=기초+CAPEX−상각·정
 | **W4 추정** | 드라이버 후보 제시→선택분 수식 구현. **`Fcst_Rev`·`Fcst_Cost`는 FS_Disagg 세분 라인(제품/상품/용역, 재료/노무/경비, 급여/상각/광고)과 동일 성격 행 → `계=Σ세분` 살아있는 SUM 롤업 → DCF!매출/원가/판관비** | projection_smoothness·wc_burn·가정 출처 완비·**세분 계=원계정 롤업 일치** | msvalue_리포트예시·모델링_실무 |
 | **W5 WACC** | **`peer.py` 유사회사 퍼널(Step0 자기제외 + 4-step)**(Step1 코드→Step2 유사성[판정]→Step3 비중≥70%→Step4 베타포인트·거래정지) → `Peer` 시트 Hamada 무부채화 → `wacc.py` 빌드업(Kroll size) | 퍼널 게이트(**대상 자기포함 거부**·무근거 판정 거부·uncertain→⚖️큐·5-10 rule)·β/MRP 정합·provenance·8~14% | wacc_할인율서식·베타·deloitte·PGR·msvalue_리포트예시 §E |
 | **W6 DCF** | 스파인 입력셀→Fcst 계 참조 승격(`promote.py`) + `dcf.py` 재계산 | **승격 tie-out(per_share 불변)**·워크북 vs 엔진 rel_tol 1e-6·audit 전규칙·gap_diagnosis | engine_spec·검증_클래시스 |
-| **W7 시나리오** | `scenario.py`(구성=판단) → Scenario 시트(가중 SUMPRODUCT·합=1 게이트 살아있는 수식) | 가중치 완전일치·합=1 | msvalue_리포트예시 부록F |
+| **W7 시나리오** | `scenario.py`(구성=판단) → Scenario 시트. **두 패러다임 병행**: 가중 SUMPRODUCT(기대값) + `--switch` CHOOSE 단일선택(서사·발표). Base 기본규칙=과거 N년 평균(평균회귀), Up/Down=절대 %p 가감 + 폭을 메모열에 기록 | 가중치 완전일치·합=1 | msvalue_리포트예시 부록F |
 | **W8 민감도** | `sensitivity.py`로 WACC×PGR 5×5 살아있는 수식 그리드(셀마다 독립 DCF 재계산) | 워크북 중심 == 엔진 3×3 중심 == base·(설치 시)recalc 게이트 | 앤트로픽_금융스킬_벤치마크 §1 |
-| **W9 리포트(선택)** | 주요가정 표·차이 서사 | audit findings 누락 없이 반영 · **`lint_report.py` 표현 가드**(근거 없는 단정·순환설명·무설명·뭉뚱그리기·Driver/Outlook/Action 공란) | msvalue_리포트예시·장표_작성법·앤트로픽_금융스킬_벤치마크 §4 |
+| **W9 리포트(선택)** | 주요가정 표·차이 서사 | audit findings 누락 없이 반영 · **`lint_report.py` 표현 가드**(근거 없는 단정·순환설명·무설명·뭉뚱그리기·**허위정밀 반올림**·Driver/Outlook/Action 공란) | msvalue_리포트예시·장표_작성법·앤트로픽_금융스킬_벤치마크 §4 |
 
 **게이트 공통**: `앤트로픽_금융스킬_벤치마크.md §2`(audit-xls — BS부터·하드코딩 오버라이드·DCF 버그 5종).
 
@@ -152,6 +155,7 @@ echo '{"spine":{...DcfSpineInput...},"fcst_totals":{"rev":[...],"cogs":[...],"sg
 # W7 시나리오 (기본=JSON 분석; --emit-cells 로 Scenario 시트 셀)
 echo '{"cases":{"Base":{...},"Up":{...}},"weights":{"Base":0.5,"Up":0.5}}' | python scripts/scenario.py
 echo '{...}' | python scripts/scenario.py --emit-cells      # Scenario 시트(가중 SUMPRODUCT)
+echo '{...}' | python scripts/scenario.py --emit-cells --switch   # + CHOOSE 단일선택 스위치(발표·서사용)
 
 # W8 민감도 그리드 (WACC×PGR 5×5 살아있는 수식; 중심==base, DCF 있는 워크북에 Sens 추가)
 echo '{...DcfSpineInput...}' | python scripts/sensitivity.py --emit-cells
@@ -188,7 +192,8 @@ python scripts/book_search.py "영구성장률 몇 퍼센트?"
 
 ## 가정 출처(provenance)
 
-모든 가정은 `_VS_STATE` 대장에 `가정명|값|출처유형|근거|승인상태`. 출처유형 = `user`(평가인) / `research`(URL·문서 병기) / `suggested`(근거 챕터 병기). **`suggested` 미승인 가정이 W6에 유입되면 WARN 표면화**, 출처 없는 가정은 진행 차단.
+모든 가정은 `_VS_STATE` 대장에 `가정명|값|출처유형|근거|승인상태|lookback|lookback사유`.
+**과거평균 드라이버는 lookback 창과 그 사유가 필수**(R12) — `AVERAGE(과거 N년)` 은 좋은 기본값이지만 **N 자체가 판단**이다. 실측(모델러스 5.4 §2.2c): 같은 워크북에서 DSO=3년 평균, DIO·DPO=5년 평균으로 창이 달랐는데 시트에 근거가 없었다. 창을 달리했으면 이유를 쓴다(예: "2020 코로나 재고 이상치 제외 위해 DSO 만 3년"). 출처유형 = `user`(평가인) / `research`(URL·문서 병기) / `suggested`(근거 챕터 병기). **`suggested` 미승인 가정이 W6에 유입되면 WARN 표면화**, 출처 없는 가정은 진행 차단.
 
 ## 추천 모델·난이도 승격
 

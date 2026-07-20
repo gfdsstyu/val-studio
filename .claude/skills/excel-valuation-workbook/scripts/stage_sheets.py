@@ -10,7 +10,10 @@ from __future__ import annotations
 
 # 셀 레이아웃·세분 롤업 위계는 vendored template_schema SSOT 를 소비(자체 복사 금지).
 # scaffold.py 가 _bootstrap 로 vendor 를 path 에 올린 뒤 stage_sheets 를 import 한다.
-from excel.template_schema import DISAGG_BLOCKS, FCST, ROLLUP, YEAR_COLS, fcst_total_cell
+from excel.template_schema import (
+    ALLOCATED_COSTS, CHECK_TOL, DISAGG_BLOCKS, FCST, LABOR_ROLES, ROLLUP, YEAR_COLS,
+    fcst_total_cell,
+)
 
 _LEGEND = "범례: [입력]=파랑(hard) · [수식]=검정 · [참조]=초록(타시트) · 핵심가정=노랑fill"
 
@@ -42,9 +45,35 @@ def _years(s, row: int, n: int, base_year: int = 2024) -> None:
         s.num(f"{c}{row}", base_year + j)
 
 
+def _check_row(s, row: int, label: str, lhs: str, rhs: str, n: int,
+               tol: float = CHECK_TOL) -> None:
+    """정합 CHECK 행(R6) — 일치하면 "TRUE", 아니면 **잔차 금액**을 표시한다.
+
+    잔차를 보여주는 게 핵심: TRUE/FALSE 만으로는 어디가 얼마나 틀렸는지 알 수 없다.
+    ⚠️ 정확일치 비교 금지 — 부동소수 노이즈로 맞는 연도가 FALSE 로 뜬다
+    (모델러스 5.4 §4 D1: 잔차 -7.1e-14 로 2개 연도 오작동). ABS(차이) < 허용오차로 판정.
+    lhs/rhs 는 `{col}` 자리표시자를 포함한 수식 조각(예: "{col}20").
+    """
+    s.text(f"B{row}", label)
+    for c in YEAR_COLS[:n]:
+        a, b = lhs.format(col=c), rhs.format(col=c)
+        s.formula(f"{c}{row}", f'IF(ABS({a}-{b})<{tol},"TRUE",{a}-{b})')
+
+
 def _header(s, title: str) -> None:
+    """제목 + 범례 + **가시 상태 헤더**(R8).
+
+    모델러스 정본은 전 시트 상단에 전역 상태(선택 시나리오·현재 타깃가격)를 노출해
+    "지금 이 모델이 어떤 상태인지"를 어느 시트에서든 알 수 있게 한다. 우리 `_VS_STATE`
+    는 숨김 시트라 사람이 못 보므로 그 보완재. 값은 Claude/평가인이 채운다.
+    """
     s.text("B1", title)
     s.text("B2", _LEGEND)
+    for r, (k, hint) in enumerate(
+            (("Scenario", "[Base/Up/Down]"), ("Target Price", "[= DCF 주당가치]"),
+             ("Stage", "[W0~W9]")), start=1):
+        s.text(f"I{r}", f"{k} :")
+        s.text(f"J{r}", hint)
 
 
 # ── W1 Assumption (가정 SSOT) ─────────────────────────────────────────────────
@@ -181,9 +210,16 @@ def build_fs_disagg(wb, n: int = 5):
         for ch in children:
             s.text(f"B{r}", ch)           # 값=[입력] (Claude 가 주석 근거로 채움)
             r += 1
-        s.text(f"B{r}", f"계 (= FS_Hist!{parent}) [수식·합보존]")
-        s.text(f"B{r + 1}", "구성비(%) [수식]")
-        row = r + 3                        # 블록 간 1행 여백
+        s.text(f"B{r}", f"계 (= Σ세분) [수식]")
+        for c in YEAR_COLS[:n]:
+            s.formula(f"{c}{r}", f"SUM({c}{row + 2}:{c}{r - 1}))".replace("))", ")"))
+        s.text(f"B{r + 1}", f"원계정 (= FS_Hist!{parent}) [참조]")
+        # 합보존 CHECK — 세분 계와 원계정이 허용오차 내에서 일치하는지 워크북에서 상시 확인.
+        # 게이트(fs_disagg.py)는 인제스트 시점 1회, 이 행은 **편집 중에도 살아있는** 검증.
+        _check_row(s, r + 2, "CHECK 세분합 = 원계정",
+                   f"{{col}}{r}", f"{{col}}{r + 1}", n)
+        s.text(f"B{r + 3}", "구성비(%) [수식]")
+        row = r + 5                        # 블록 간 1행 여백
     return s
 
 
@@ -229,8 +265,90 @@ def build_fcst_cost(wb, n: int = 5):
     s.text(f"B{ebit_row}", "영업이익 = 매출 − 매출원가 − 판관비 (→ DCF!EBIT 검산)")
     for c in YEAR_COLS[:n]:
         s.formula(f"{c}{ebit_row}", f"{fcst_total_cell('rev', c)}-{c}{cogs_tot}-{c}{sga_tot}")
-    s.text(f"B{ebit_row + 1}", "상각비(원가/판관비)는 Capex_Dep 당기상각에서 배분(초록 참조).")
+    s.text(f"B{ebit_row + 1}", "상각비(원가/판관비)는 Capex_Dep 당기상각에서 배분(아래 ③).")
+    _build_labor_and_allocation(s, ebit_row + 3, n)
     return s
+
+
+def _build_labor_and_allocation(s, start: int, n: int) -> int:
+    """인건비 bottom-up + 성격별 비용 배분(R4). 다음 여유행 반환.
+
+    근거: 모델러스_통합모델_5.4 §2.1(b)(c).
+      ② 인건비 = Σ직군별 인원 × (연근무일 × 일근무시간 × 시급), 시급성장 ← Macro(임금)
+      ③ 배분   = 총액을 매출원가/판관비로. **잔차 방식**(판관비=총액×%, 원가=총액−판관비)
+                 이라 합보존이 수식으로 강제되고, CHECK 행이 그것을 다시 확인한다.
+
+    산출(총인건비·배분액)은 위 세분 블록의 `노무비`(원가)·`급여`(판관비) 행이 참조한다 —
+    성격별 총액을 먼저 쌓고 배분하는 순서가 정본(총액 추정 → 배분)이다.
+    """
+    cols = YEAR_COLS[:n]
+    r = start
+    s.text(f"B{r}", "── ② 인건비 bottom-up (인원 × 시급 × 시간) ──")
+    r += 1
+    _years(s, r, n)
+    r += 1
+    head_first = r
+    for role in LABOR_ROLES:
+        s.text(f"B{r}", f"인원 · {role}")            # [입력] 드라이버당 인원
+        for c in cols:
+            s.text(f"{c}{r}", "[입력]")
+        r += 1
+    head_last = r - 1
+    head_tot = r
+    s.text(f"B{r}", "총인원 (= Σ직군)")
+    for c in cols:
+        s.formula(f"{c}{r}", f"SUM({c}{head_first}:{c}{head_last})")
+    r += 1
+
+    days, hours, wage, per_head, total = r, r + 1, r + 2, r + 3, r + 4
+    s.text(f"B{days}", "연 근무일수")
+    s.text(f"B{hours}", "일 근무시간")
+    s.text(f"B{wage}", "시급 (전기×(1+임금상승률) — 임금상승률은 Macro 참조 [초록])")
+    for c in cols:
+        for rr in (days, hours, wage):
+            s.text(f"{c}{rr}", "[입력]")
+    s.text(f"B{per_head}", "1인 인건비 = 연근무일 × 일근무시간 × 시급")
+    s.text(f"B{total}", "총인건비 = 총인원 × 1인 인건비")
+    for c in cols:
+        s.formula(f"{c}{per_head}", f"{c}{days}*{c}{hours}*{c}{wage}")
+        s.formula(f"{c}{total}", f"{c}{head_tot}*{c}{per_head}")
+    r = total + 2
+
+    s.text(f"B{r}", "── ③ 성격별 비용 배분 (총액 → 매출원가 / 판관비) ──")
+    r += 1
+    s.text(f"B{r}", "배분은 잔차 방식: 판관비=총액×%, 매출원가=총액−판관비 → 합보존 강제.")
+    r += 1
+    for label, to_cogs, to_sga in ALLOCATED_COSTS:
+        src = f"{{col}}{total}" if label == "인건비" else "[입력·Capex_Dep 당기상각 참조]"
+        s.text(f"B{r}", f"{label} 총액" + ("" if label == "인건비" else " (→ Capex_Dep 초록 참조)"))
+        if label == "인건비":
+            for c in cols:
+                s.formula(f"{c}{r}", f"{c}{total}")          # ②에서 산출한 총액을 그대로
+        else:
+            for c in cols:
+                s.text(f"{c}{r}", "[참조]")
+        tot_r = r
+        r += 1
+        s.text(f"B{r}", f"  % 판관비 배분율")
+        for c in cols:
+            s.text(f"{c}{r}", "[입력]")
+        pct_r = r
+        r += 1
+        s.text(f"B{r}", f"  → 판관비 ({to_sga})")
+        for c in cols:
+            s.formula(f"{c}{r}", f"{c}{tot_r}*{c}{pct_r}")
+        sga_r = r
+        r += 1
+        s.text(f"B{r}", f"  → 매출원가 ({to_cogs}) = 총액 − 판관비분 [잔차]")
+        for c in cols:
+            s.formula(f"{c}{r}", f"{c}{tot_r}-{c}{sga_r}")
+        cogs_r = r
+        r += 1
+        _check_row(s, r, f"  CHECK 배분합 = {label} 총액",
+                   f"{{col}}{cogs_r}+{{col}}{sga_r}", f"{{col}}{tot_r}", n)
+        r += 2
+    s.text(f"B{r}", "→ 위 배분 결과를 ① 세분 블록의 해당 행(노무비·급여·경비·감가상각비)이 참조한다.")
+    return r + 2
 
 
 def build_capex_dep(wb, n: int = 5):
@@ -269,6 +387,14 @@ def build_wc(wb, n: int = 5):
     s = wb.add_sheet("WC")
     _header(s, "WC — 운전자본 (회전일 → 잔액 → ΔNWC)")
     s.text("B3", "매출·원가=Fcst 참조(초록), 회전일=Assumption/Research. ⚠️ 회전율 방향 주의(잔액=드라이버×일/365).")
+    # R12: 회전일 드라이버는 대개 과거 N년 평균인데 **N 자체가 판단**이다 — 창과 사유를
+    # 시트에 남긴다(실측: 같은 워크북에서 DSO 3년 / DIO·DPO 5년인데 근거 부재).
+    s.text("B4", "회전일 lookback: 과거 몇 년 평균인지와 그 사유를 아래 열에 필수 기재(항목별로 달라도 됨).")
+    s.text("K5", "lookback(년)")
+    s.text("L5", "lookback 사유")
+    for rr in (8, 9, 10):                       # DSO·DIO·DPO 행
+        s.text(f"K{rr}", "[입력]")
+        s.text(f"L{rr}", "[입력·예: 2020 이상치 제외]")
     _years(s, 5, n)
     cols = YEAR_COLS[:n]
     R = {"rev": 6, "cogs": 7, "d_ar": 8, "d_inv": 9, "d_ap": 10,
@@ -312,28 +438,39 @@ def build_peer(wb, n: int = 5):
                       ["회사", "Ticker", "KSIC", "관련매출%", "상장연수", "거래정지",
                        "판정(유사/비유사/애매)", "사유", "생존스텝"]):
         s.text(f"{col}6", h)
-    for i in range(5):                                    # 후보 placeholder 5행
-        s.text(f"B{7 + i}", "[후보]")
+    cand_first, cand_n = 7, 5
+    for i in range(cand_n):                               # 후보 placeholder 5행
+        s.text(f"B{cand_first + i}", "[후보]")
+    cand_last = cand_first + cand_n - 1
     s.text("B13", "게이트: peer.py — Step1 코드매칭·Step2 판정완비(사유)·Step3 비중≥70%·"
                   "Step4 상장≥2Y/거래정지. uncertain→⚖️큐(자동탈락 금지). 5-10 rule(확정 5~10사).")
 
     # ── ② 확정 peer 무부채화 (Hamada 살아있는 수식) ──
+    # ⚠️ ①의 값을 손으로 옮겨 적지 않는다 — **2차원 INDEX/MATCH**(행=티커, 열=필드명)로
+    # 조회한다. 열 순서가 바뀌어도 깨지지 않고, ① 수정이 ②에 자동 반영된다(단일 진실원).
+    # 근거: 모델러스_통합모델_5.4 §2.4(a) — rTrading 원자료를 전부 이 패턴으로 참조.
     s.text("B15", "── ② 확정 peer 무부채화 (Hamada: βu = βL/(1+(1-t)·D/E)) ──")
-    for col, h in zip("BCDEFGH",
-                      ["회사", "세율 t", "D/Cap", "E/Cap", "D/E", "Levered β", "Unlevered β"]):
-        s.text(f"{col}16", h)
+    for col, h in zip("BCDEFGHI",
+                      ["Ticker", "회사", "세율 t", "D/Cap", "E/Cap", "D/E",
+                       "Levered β", "Unlevered β"]):
+        s.text(f"{col}16", h)          # ⚠️ 헤더 문자열이 곧 조회 키 — ①의 헤더와 **정확히**
+                                       # 같아야 MATCH 가 걸린다("회사(①조회)" 같은 장식 금지)
+    s.text("B14", "② 회사명은 ①에서 2차원 INDEX/MATCH 로 조회한다(손으로 옮겨적기 금지).")
     unl_first, unl_n = 17, 4
+    tbl, key_col, hdr = f"$B$6:$J${cand_last}", f"$C$6:$C${cand_last}", "$B$6:$J$6"
     for i in range(unl_n):
         rr = unl_first + i
-        s.text(f"B{rr}", "[확정 peer]")                   # ①에서 확정된 회사
-        s.formula(f"F{rr}", f"D{rr}/E{rr}")               # D/E = D/Cap ÷ E/Cap (live)
-        s.formula(f"H{rr}", f"G{rr}/(1+(1-C{rr})*F{rr})")  # Hamada 무부채화 (live)
+        s.text(f"B{rr}", "[확정 peer Ticker]")             # ①에서 확정된 회사의 티커만 입력
+        # 행=티커 매칭, 열=필드명 매칭 → 열 위치에 의존하지 않는 조회
+        s.formula(f"C{rr}", f'INDEX({tbl},MATCH($B{rr},{key_col},0),MATCH(C$16,{hdr},0))')
+        s.formula(f"G{rr}", f"E{rr}/F{rr}")                # D/E = D/Cap ÷ E/Cap (live)
+        s.formula(f"I{rr}", f"H{rr}/(1+(1-D{rr})*G{rr})")  # Hamada 무부채화 (live)
     unl_last = unl_first + unl_n - 1
     avg = unl_last + 1
     s.text(f"B{avg}", "평균 (→ WACC)")
-    for col in ("D", "E", "H"):                            # D/Cap·E/Cap·βu 평균
+    for col in ("E", "F", "I"):                            # D/Cap·E/Cap·βu 평균
         s.formula(f"{col}{avg}", f"AVERAGE({col}{unl_first}:{col}{unl_last})")
-    s.text(f"B{avg + 2}", "→ WACC: 무부채β=H평균, 목표자본구조=D/E(=D평균÷E평균). "
+    s.text(f"B{avg + 2}", "→ WACC: 무부채β=I평균, 목표자본구조=D/E(=E평균÷F평균). "
                           "β 2Y weekly 조정베타(adj=⅔·raw+⅓).")
     return s
 

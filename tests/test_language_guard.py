@@ -138,3 +138,23 @@ def test_api_report_lint():
     clean = c.post("/api/report/lint",
                    json={"text": "추가 확인이 필요한 것으로 판단된다."}).json()
     assert clean["ok"] and clean["count"] == 0
+
+
+def test_spurious_precision_rounding_convention():
+    """R16 허위정밀 — 주당가치를 원 단위까지 제시하면 모델 정밀도를 넘어선 확신을 준다.
+
+    관행: DCF=천원(ROUND(...,-3)), 상대가치=백원(ROUND(...,-2)) 반올림.
+    """
+    from report.language_guard import lint_report
+
+    def hit(text):
+        return any(f.rule == "language_spurious_precision"
+                   for f in lint_report(text).findings if f.severity.value != "pass")
+
+    assert hit("본 평가의 주당가치는 144,283원으로 산정되었다.")
+    assert hit("목표주가 159349원")
+    assert hit("주당 8,413원")
+    # 반올림 규약을 지킨 금액은 면제 — 오탐이 나면 규칙이 무시된다
+    assert not hit("본 평가의 주당가치는 144,000원으로 산정되었다.")
+    assert not hit("목표주가 159,300원")
+    assert not hit("내재가치 118,400원")

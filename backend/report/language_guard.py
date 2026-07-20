@@ -77,7 +77,25 @@ _VAGUE = re.compile(
     r"(기타\s*(?:소액|항목|사항)|여러\s*(?:항목|요인)|각종\s*요인|"
     r"various\s+(?:small\s+)?items|miscellaneous|등등)")
 
+# 허위정밀(spurious precision, R16) — 주당가치를 원 단위까지 제시하면 모델 정밀도를
+# 넘어선 확신을 준다. 관행은 DCF=천원, 상대가치=백원 단위 반올림
+# (모델러스 정본 `ROUND(F41/F45*10^3,-3)` / Trading `ROUND(...,-2)`).
+# 4자리 이상 금액이 00 으로 끝나지 **않으면서** 주당/목표주가 문맥에 있으면 지적한다.
+_SPURIOUS_PRECISION = re.compile(
+    r"(?:주당\s*(?:가치|가격)?|목표\s*주가|평가액|내재\s*가치)\s*(?:는|은|이|가|:|=)?\s*"
+    r"(?:약\s*)?(\d{1,3}(?:,\d{3})+|\d{4,})\s*원"
+)
+
+
+def _is_spurious_amount(m: "re.Match[str]") -> bool:
+    """반올림 규약 위반 여부 — 백원 단위 미만(끝 두 자리가 00 이 아님)이면 위반."""
+    return not m.group(1).replace(",", "").endswith("00")
+
+
 _RULES = (
+    _Rule("spurious_precision", "허위정밀(반올림 규약)", _SPURIOUS_PRECISION,
+          "주당가치를 원 단위까지 제시했습니다 — 모델 정밀도를 넘어선 확신을 줍니다. "
+          "DCF=천원, 상대가치=백원 단위로 반올림하세요."),
     _Rule("assertion", "근거 없는 단정", _ASSERTION,
           "감사 trail 없이 결론을 확정했습니다 — '가능성/확인 필요/권고'로 표현하세요."),
     _Rule("circular", "순환설명", _CIRCULAR,
@@ -115,6 +133,10 @@ def check_language(text: str, *, where: str = "", report: ValidationReport | Non
             sentence = _sentence_of(text, m.start())
             # 단정은 같은 문장에 완화 표현이 있으면 면제(오탐 억제).
             if rule.key == "assertion" and _HEDGED.search(sentence):
+                continue
+            # 허위정밀은 **반올림 규약을 지킨 금액이면 면제** — 정규식만으로는
+            # "주당가치 N원" 형태를 전부 잡으므로 자릿수 판정이 따로 필요하다.
+            if rule.key == "spurious_precision" and not _is_spurious_amount(m):
                 continue
             lo = max(0, m.start() - _SPAN_PAD)
             hi = min(len(text), m.end() + _SPAN_PAD)
