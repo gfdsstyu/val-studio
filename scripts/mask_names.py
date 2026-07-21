@@ -7,9 +7,9 @@ Bloomberg·한공회·DART·ECOS·KRX)와 상장 사례회사(공개 재무 기�
 지우면 방법론 근거가 사라져 감사방어·재현성이 무너지기 때문.
 
 마스킹 방침:
-  - 경쟁 서비스(xDCF)  : **흔적 완전 제거**(문서명·본문·링크 전부)
+  - 경쟁 서비스        : **흔적 완전 제거**(문서명·본문·링크 전부, 이니셜조차 남기지 않음)
   - Big4/교육 벤더      : 이니셜 법인명(D사·S사·K사·M사)
-  - 공개 표준 출처      : 유지(FORBIDDEN 에 없음)
+  - 공개 표준 출처      : 유지(forbidden 목록에 없음)
 
 두 가지 모드:
   --check  : 위반 스캔만(수정 없음). 위반 있으면 exit 1 → **푸시 전 가드/CI**
@@ -21,6 +21,7 @@ Bloomberg·한공회·DART·ECOS·KRX)와 상장 사례회사(공개 재무 기�
 """
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -32,61 +33,31 @@ ROOT = Path(__file__).resolve().parents[1]
 TEXT_EXT = {".md", ".py", ".js", ".jsx", ".ts", ".tsx", ".json", ".txt",
             ".toml", ".yml", ".yaml", ".html", ".css", ".cfg", ".ini"}
 
-# ── 파일명 변경 (repo 상대) ─────────────────────────────────────────────────
-RENAMES: dict[str, str] = {
-    "docs/reference/xDCF_계정분류_모델아키텍처.md": "docs/reference/계정분류_모델아키텍처.md",
-    "docs/reference/deloitte_감사인검토_WACC방법론.md": "docs/reference/D사_감사인검토_WACC방법론.md",
-    "docs/reference/msvalue_DCF_교육_정본.md": "docs/reference/M사_DCF_교육_정본.md",
-    "docs/reference/msvalue_리포트예시_클래시스.md": "docs/reference/M사_리포트예시_클래시스.md",
-    "docs/plan/skill_sheet_detail_msvalue.md": "docs/plan/skill_sheet_detail_M사.md",
-    "docs/benchmarks/samil_pwc_easy_view.md": "docs/benchmarks/S사_easy_view.md",
-}
+# ── 규칙표는 **비공개 설정 파일**에서 로드 ─────────────────────────────────
+# 실명 매핑 자체가 민감정보다 — 규칙을 이 스크립트에 하드코딩하면, 스크립트를 공개하는
+# 순간 마스킹하려던 이름이 그대로 공개된다(가드가 자기 자신을 잡는 역설). 그래서
+# 도구(이 파일)는 공개하고 매핑(mask_rules.json)은 .gitignore 로 로컬에만 둔다.
+RULES_PATH = Path(__file__).resolve().parent / "mask_rules.json"
 
-# ── 본문 치환 (순서 = 우선순위, 긴/특수 패턴 먼저) ──────────────────────────
-# ⚠️ 순서 의존: 'xDCF_계정분류' 는 'xDCF' 보다, '삼일 Fulcrum' 은 '삼일' 보다 먼저.
-RULES: list[tuple[str, str]] = [
-    # 경쟁 서비스 — 흔적 제거(이니셜조차 남기지 않음)
-    ("xdcf.co", "타사"),
-    ("xDCF_계정분류_모델아키텍처", "계정분류_모델아키텍처"),
-    ("xDCF_계정분류", "계정분류"),
-    ("xDCF_", "계정분류_"),
-    ("xDCF", "타사"),
-    ("xdcf", "타사"),
-    # 교육 벤더 → M사
-    ("msvalue_", "M사_"),
-    ("MSVALUE", "M사"),
-    ("msvalue", "M사"),
-    ("엠에스밸류", "M사"),
-    # Deloitte/안진 → D사
-    ("deloitte_감사인검토", "D사_감사인검토"),
-    ("deloitte_fas", "dfas"),
-    ("Deloitte VKG=Valuation Knowledge Gateway", "D사"),
-    ("Deloitte VKG", "D사"),
-    ("Deloitte", "D사"),
-    ("deloitte", "D사"),
-    ("딜로이트", "D사"),
-    ("안진", "D사"),
-    # 삼일/PwC → S사
-    ("삼일 Fulcrum Valuation Update", "S사 밸류에이션 자료"),
-    ("삼일_Fulcrum", "S사_자료"),
-    ("삼일 Fulcrum", "S사 자료"),
-    ("Fulcrum", "자료"),
-    ("samil_pwc_easy_view", "S사_easy_view"),
-    ("삼일PwC", "S사"),
-    ("PwC Easy View for Tax preview", "S사 Easy View"),
-    ("PwC Easy View", "S사 Easy View"),
-    ("PwC", "S사"),
-    ("삼일", "S사"),
-    # KPMG/삼정 → K사
-    ("kpmg-korea-anti-aging", "K사-anti-aging"),
-    ("KPMG", "K사"),
-    ("kpmg", "K사"),
-    ("삼정", "K사"),
-]
 
-# ── 유출 가드 — 남아 있으면 안 되는 토큰(대소문자 무시) ────────────────────
-FORBIDDEN = ["xdcf", "deloitte", "딜로이트", "안진", "삼일", "pwc",
-             "kpmg", "삼정", "msvalue", "엠에스밸류", "fulcrum"]
+def load_rules() -> tuple[dict[str, str], list[tuple[str, str]], list[str]]:
+    """(renames, rules, forbidden) 로드. 없으면 **fail-closed** — 조용한 통과 금지.
+
+    규칙이 없는데 '위반 0' 을 반환하면 거짓 안전판이 된다. 가드는 막지 못할 때
+    통과가 아니라 실패해야 한다.
+    """
+    if not RULES_PATH.exists():
+        raise SystemExit(
+            f"[mask] 규칙 파일 없음: {RULES_PATH.name}\n"
+            "  이 파일은 실명 매핑을 담아 비공개(.gitignore)로 관리된다.\n"
+            "  공개 클론에는 포함되지 않으며, 마스킹 가드는 원본 레포에서만 동작한다.")
+    d = json.loads(RULES_PATH.read_text(encoding="utf-8"))
+    return (d.get("renames", {}),
+            [(a, b) for a, b in d.get("rules", [])],
+            d.get("forbidden", []))
+
+
+RENAMES, RULES, FORBIDDEN = load_rules()
 _FORBIDDEN_RE = re.compile("|".join(re.escape(t) for t in FORBIDDEN), re.IGNORECASE)
 
 

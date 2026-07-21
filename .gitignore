@@ -48,3 +48,6 @@ var/
 .coverage
 coverage.xml
 htmlcov/
+
+# 마스킹 실명 매핑(비공개) — 공개 레포에 넣지 않는다
+scripts/mask_rules.json
