@@ -91,7 +91,7 @@ W4/W5 시트는 살아있는 수식: Capex_Dep(기말=기초+CAPEX−상각·정
 | **W0 시작** | 모드 판별·`scaffold.py` | `roundtrip.py` 왕복 재검증 | template_conventions |
 | **W1 리서치** | Company Brief 초안(가용 소스만) | 필수 슬롯·출처 누락 검사 | 기업리서치_양식·참고보고서_활용 |
 | **W2 과거 FS 정합성·무결성 + 이관** | `fs_clean.py`로 정규화·교차검증·재분류 추적 | FAIL 0·재분류 미해결 0·대차·tie-out | 모델링_실무_2강4강·account_dictionary |
-| **W2.5 손익 계정 세분화** | 러프한 IS 라인을 성격별로 분해(매출→제품/상품/용역, 원가·판관비→성격별) — `fs_disagg.py` | **세분합=원계정(합보존) FAIL 0**·구성비 YoY 급변 WARN 표면화 | account_dictionary·모델링_실무_2강4강 |
+| **W2.5 손익 계정 세분화** | ①주석 표(판관비 성격별·제조원가명세서)에서 성격별 금액 **추출** + W4 드라이버 제안 — `footnote_costs.py` → ②러프한 IS 라인을 성격별로 분해 검증 — `fs_disagg.py` | ①**Σ성격별=IS 표기(tie-out) FAIL 0**·카테고리 애매(감가상각 등)는 uncertain 표면화 → ②**세분합=원계정(합보존) FAIL 0**·구성비 YoY 급변 WARN | account_dictionary·모델링_실무_2강4강 |
 | **W3 계정재분류** | PL 4유형·BS 6유형 태깅(모호는 표면화) — `reclass.py`로 파티션 검증 | **분류합=원본 FS합(FAIL 게이트)**·누락·중복·유형오류 0 | xDCF_계정분류·msvalue_DCF_교육_정본 |
 | **W4 추정** | 드라이버 후보 제시→선택분 수식 구현. **`Fcst_Rev`·`Fcst_Cost`는 FS_Disagg 세분 라인(제품/상품/용역, 재료/노무/경비, 급여/상각/광고)과 동일 성격 행 → `계=Σ세분` 살아있는 SUM 롤업 → DCF!매출/원가/판관비** | projection_smoothness·wc_burn·가정 출처 완비·**세분 계=원계정 롤업 일치** | msvalue_리포트예시·모델링_실무 |
 | **W5 WACC** | **`peer.py` 유사회사 퍼널(Step0 자기제외 + 4-step)**(Step1 코드→Step2 유사성[판정]→Step3 비중≥70%→Step4 베타포인트·거래정지) → `Peer` 시트 Hamada 무부채화 → `wacc.py` 빌드업(Kroll size) | 퍼널 게이트(**대상 자기포함 거부**·무근거 판정 거부·uncertain→⚖️큐·5-10 rule)·β/MRP 정합·provenance·8~14% | wacc_할인율서식·베타·deloitte·PGR·msvalue_리포트예시 §E |
@@ -103,7 +103,7 @@ W4/W5 시트는 살아있는 수식: Capex_Dep(기말=기초+CAPEX−상각·정
 
 **게이트 공통**: `앤트로픽_금융스킬_벤치마크.md §2`(audit-xls — BS부터·하드코딩 오버라이드·DCF 버그 5종).
 
-> **⚠️ W2/W2.5/W3은 같은 과거 IS를 다른 방향으로 만진다 (혼동 금지)**: **W2**=합이 맞나 **검증**(러프한 계정 그대로), **W2.5**=한 줄→여러 성격으로 **분해**(매출→제품/상품/용역, 원가→재료/노무/경비), **W3**=성격→평가유형으로 **집계**(Sales/COGS/SGA/NO). 세분화는 리서치(W1 제품·매출 구성)와 추정(W4 드라이버)을 잇는 다리 — IS가 통짜면 W4에서 P×Q·변동/고정을 걸 대상이 없다. **과립도는 원천자료(주석·세그먼트·제조원가명세서)가 지지하고 W4 드라이버에 연관되는 만큼만** — 자료 없으면 총액 유지 + `[성격별 미확보]` 표면화(억지 분해 금지).
+> **⚠️ W2/W2.5/W3은 같은 과거 IS를 다른 방향으로 만진다 (혼동 금지)**: **W2**=합이 맞나 **검증**(러프한 계정 그대로), **W2.5**=한 줄→여러 성격으로 **분해**(매출→제품/상품/용역, 원가→재료/노무/경비), **W3**=성격→평가유형으로 **집계**(Sales/COGS/SGA/NO). 세분화는 리서치(W1 제품·매출 구성)와 추정(W4 드라이버)을 잇는 다리 — IS가 통짜면 W4에서 P×Q·변동/고정을 걸 대상이 없다. **과립도는 원천자료(주석·세그먼트·제조원가명세서)가 지지하고 W4 드라이버에 연관되는 만큼만** — 자료 없으면 총액 유지 + `[성격별 미확보]` 표면화(억지 분해 금지). **`footnote_costs.py`(①추출)를 쓰면 이 원칙이 구조적으로 강제된다** — 주석에 있는 성격만 나오므로 억지 분해가 불가능하고, 각 값이 원문 char span provenance를 갖는다. 추출=결정론 / 카테고리·드라이버 판정=평가인 승인(`uncertain`은 자동확정 금지).
 
 ---
 
@@ -132,8 +132,16 @@ python scripts/scaffold.py --stage W6b --emit-cells    # Model(3표 연결 + Cir
 # W2 과거 FS 무결성 (정규화·교차검증·재분류 추적; 미해결엔 account_dictionary 이관 힌트)
 echo '{"sources":[{"label":"FY2024","periods":{"2024":{"매출액":"1,234",...}}}]}' | python scripts/fs_clean.py
 
-# W2.5 손익 세분화 (세분합=원계정 합보존 게이트 + 구성비 YoY 추이)
+# W2.5 ① 주석 성격별 추출 (Σ성격별=IS 표기 tie-out + W4 드라이버 제안 + ②용 payload)
+echo '{"text":"구분 2024\n급여 12,340\n퇴직급여 1,500","stated_sga":13840,"year":"2024"}' | python scripts/footnote_costs.py
+
+# W2.5 ② 손익 세분화 (세분합=원계정 합보존 게이트 + 구성비 YoY 추이)
 echo '{"blocks":[{"parent":"매출액","periods":{"2024":{"total":"1,234","children":{"제품매출":"800","상품매출":"434"}}}}]}' | python scripts/fs_disagg.py
+
+# ①→② 사슬 (추출 결과를 그대로 세분검증으로)
+python scripts/footnote_costs.py in.json \
+  | python -c "import json,sys;print(json.dumps(json.load(sys.stdin)['disagg_payload'],ensure_ascii=False))" \
+  | python scripts/fs_disagg.py
 
 # W3 평가재분류 (표준계정→유형 파티션; 분류합=원본 FS합·중복·누락·유형오류 0)
 echo '{"items":[{"account":"매출채권","amount":100,"type":"WC"},{"account":"유형자산","amount":700,"type":"FA"}],"original_total":800}' | python scripts/reclass.py

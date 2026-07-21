@@ -43,7 +43,10 @@ DIST = SKILL / "dist"
 VENDOR_PKGS_FULL = ["calc_core", "excel", "report"]       # 디렉터리 통째
 VENDOR_PKG_FILES = {
     # 커넥터(네트워크) 배제. peer_selection=유사회사 4-step 퍼널(stdlib, peer.py 소비).
-    "ingest": ["__init__.py", "provenance.py", "validators.py", "peer_selection.py"],
+    # footnote_costs=성격별 원가 주석 추출(stdlib, footnote_costs.py 소비) + 그 백본
+    # parsers/base(BaseParser). dart_employee 등 네트워크 커넥터는 계속 배제.
+    "ingest": ["__init__.py", "provenance.py", "validators.py", "peer_selection.py",
+               "footnote_costs.py", "parsers/__init__.py", "parsers/base.py"],
     "rag": ["__init__.py", "searcher.py", "embedder.py"],
 }
 
