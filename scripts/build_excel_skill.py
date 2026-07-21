@@ -72,10 +72,14 @@ def vendor_plan() -> list[tuple[Path, str]]:
     for name, files in VENDOR_PKG_FILES.items():
         for fn in files:
             plan.append((BACKEND / name / fn, f"{name}/{fn}"))
+    # 지식(reference)은 **선택적** — 공개 배포본은 저작권상 지식 코퍼스를 포함하지 않는다.
+    # 없으면 조용히 건너뛴다(엔진·도구는 지식 없이도 동작). 있으면 vendoring 대상.
     for md in sorted(REF_SRC.glob("*.md")):
         plan.append((md, f"reference/{md.name}"))
     for j in ("graph.json", "rag_index.json"):
-        plan.append((REF_SRC / "ontology" / j, f"reference/ontology/{j}"))
+        src = REF_SRC / "ontology" / j
+        if src.exists():
+            plan.append((src, f"reference/ontology/{j}"))
     return plan
 
 
