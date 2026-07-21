@@ -276,9 +276,6 @@ PYTHONPATH=backend python tests/test_checks.py   # 가정 게이트
 
 # 스킬 패키징
 python scripts/build_excel_skill.py
-
-# 공개 전 유출 가드
-python scripts/mask_names.py --check
 ```
 
 ---
@@ -296,7 +293,7 @@ frontend/       React + Vite SPA (평가 시트 16)
 .claude/skills/ Claude 스킬 (도구 17 + 지식 31 + vendor)
 tests/          600 테스트 함수 / 69 파일 (golden·skill·unit)
 docs/           방법론 지식 코퍼스 · 설계 문서 · 검증 리포트
-scripts/        빌드·픽스처 추출·마스킹 가드
+scripts/        스킬 빌드·골든 픽스처 추출·재계산 게이트
 ```
 
 주요 문서: `docs/engine_spec.md`(임의 회사 DCF 재현 명세) · `docs/plan.md`(전체 설계).
@@ -306,6 +303,5 @@ scripts/        빌드·픽스처 추출·마스킹 가드
 ## 고지
 
 - **이 공개 레포는 코드(엔진·API·웹·스킬 도구)와 테스트만 담는다.** 방법론 지식 코퍼스(`docs/reference/` 31문서)와 원본 자료(엑셀·PDF)는 저작권상 **포함하지 않는다** — 지식이 없어도 엔진·도구는 그대로 동작하도록 설계했다.
-- 교육 벤더·회계법인 등 **법인 실명은 이니셜로 마스킹**(D사·S사·K사·M사)했다. `scripts/mask_names.py --check`가 푸시 전 유출을 차단한다. 실명 매핑표 자체가 민감정보라 **규칙 파일은 비공개**로 분리했다(도구는 공개, 매핑은 로컬) — 하드코딩했다면 가드를 공개하는 순간 마스킹 대상이 그대로 노출됐을 것이다.
-- 공개 인용이 가능한 표준 출처(Damodaran·Kroll·Bloomberg·한국공인회계사회 가이던스·DART·ECOS·KRX)는 **방법론 근거로서 그대로 표기**한다 — 지우면 감사 방어와 재현성이 무너지기 때문.
+- 방법론 근거는 **공개 인용이 가능한 표준 출처**(Damodaran·Kroll·Bloomberg·한국공인회계사회 가이던스·DART·ECOS·KRX)로 표기한다 — 근거를 밝히지 않으면 감사 방어와 재현성이 성립하지 않기 때문.
 - 실측 검증에 쓴 회사는 **상장사 공개 재무정보** 기반이며 교육 목적의 재현 검증이다. 투자 권유가 아니다.
