@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 """타사·벤더명 마스킹 + 유출 가드 (공개 푸시 전 필수 게이트).
 
-이 레포는 지식 코퍼스에 Big4 교육자료·경쟁 서비스 분석이 섞여 있다. 공개 푸시 시
-**법인·벤더 실명이 나가면 안 된다**. 반면 공개 인용 가능한 표준 출처(Damodaran·Kroll·
-Bloomberg·한공회·DART·ECOS·KRX)와 상장 사례회사(공개 재무 기반)는 **유지**한다 —
-지우면 방법론 근거가 사라져 감사방어·재현성이 무너지기 때문.
+지식 코퍼스에는 공개하면 안 되는 출처(교육 벤더·회계법인 자료, 경쟁 서비스 분석)가
+섞여 있다. 반면 공개 인용 가능한 표준 출처(Damodaran·Kroll·Bloomberg·한공회·DART·
+ECOS·KRX)와 상장 사례회사(공개 재무 기반)는 **유지**한다 — 지우면 방법론 근거가
+사라져 감사방어·재현성이 무너지기 때문.
 
-마스킹 방침:
-  - 경쟁 서비스        : **흔적 완전 제거**(문서명·본문·링크 전부, 이니셜조차 남기지 않음)
-  - Big4/교육 벤더      : 이니셜 법인명(D사·S사·K사·M사)
-  - 공개 표준 출처      : 유지(forbidden 목록에 없음)
+치환은 **2단**이다(rules 가 순서대로 연쇄 적용):
+  1차 실명 → 임시 이니셜,  2차 이니셜 → **중립 서술어**.
+2차가 필요한 이유: 이니셜(X사)만 남기면 "익명화했다" 는 사실 자체가 드러나 무엇이
+가려졌는지 찾아보게 만든다. 최종 산출물에는 익명화 흔적조차 남기지 않는다.
 
 두 가지 모드:
   --check  : 위반 스캔만(수정 없음). 위반 있으면 exit 1 → **푸시 전 가드/CI**
@@ -58,16 +58,44 @@ def load_rules() -> tuple[dict[str, str], list[tuple[str, str]], list[str]]:
 
 
 RENAMES, RULES, FORBIDDEN = load_rules()
-_FORBIDDEN_RE = re.compile("|".join(re.escape(t) for t in FORBIDDEN), re.IGNORECASE)
+
+# 금지어는 두 부류 — 매칭 규칙이 다르다.
+#  ① 실명 토큰: 대소문자 무시(Deloitte/deloitte/DELOITTE 전부 잡아야).
+#  ② 이니셜(X사): **대문자 + 앞에 영문자 없음**. IGNORECASE 로 잡으면 'lookback사유'
+#     의 'k사' 같은 정상 한국어가 오탐된다(실제로 걸렸다).
+_INITIAL_TOKENS = [t for t in FORBIDDEN if re.fullmatch(r"[A-Z]사", t)]
+_NAME_TOKENS = [t for t in FORBIDDEN if t not in _INITIAL_TOKENS]
+
+_NAME_RE = re.compile("|".join(re.escape(t) for t in _NAME_TOKENS), re.IGNORECASE) \
+    if _NAME_TOKENS else None
+_INITIAL_RE = re.compile(r"(?<![A-Za-z])(?:" + "|".join(re.escape(t) for t in _INITIAL_TOKENS) + ")") \
+    if _INITIAL_TOKENS else None
+
+
+def _find_forbidden(s: str):
+    """문자열에서 금지어 매치 이터레이트(두 규칙 합산)."""
+    if _NAME_RE:
+        yield from _NAME_RE.finditer(s)
+    if _INITIAL_RE:
+        yield from _INITIAL_RE.finditer(s)
+
+
+def _has_forbidden(s: str) -> bool:
+    return any(True for _ in _find_forbidden(s))
+
+
+# 자기 자신은 변환 대상에서 제외 — 규칙 문자열이 담긴 파일을 스스로 치환하면
+# 문서·규칙이 깨진다(실제로 독스트링이 한 번 망가졌다). 자기수정 변환기는 금물.
+_SELF = {"scripts/mask_names.py", "scripts/mask_rules.json"}
 
 
 def tracked_text_files() -> list[Path]:
-    """git 추적 텍스트 파일만 — 공개되는 것이 곧 위험 범위."""
+    """git 추적 텍스트 파일만 — 공개되는 것이 곧 위험 범위. 자기 자신은 제외."""
     out = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT,
                          capture_output=True, check=True).stdout
     files = []
     for rel in out.decode("utf-8").split("\0"):
-        if not rel:
+        if not rel or rel in _SELF:
             continue
         p = ROOT / rel
         if p.suffix.lower() in TEXT_EXT and p.is_file():
@@ -86,14 +114,14 @@ def scan() -> list[tuple[str, int, str]]:
     hits: list[tuple[str, int, str]] = []
     for p in tracked_text_files():
         rel = p.relative_to(ROOT).as_posix()
-        if _FORBIDDEN_RE.search(rel):
+        if _has_forbidden(rel):
             hits.append((rel, 0, "[파일명]"))
         try:
             text = p.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
         for i, line in enumerate(text.splitlines(), 1):
-            if _FORBIDDEN_RE.search(line):
+            if _has_forbidden(line):
                 hits.append((rel, i, line.strip()[:110]))
     return hits
 

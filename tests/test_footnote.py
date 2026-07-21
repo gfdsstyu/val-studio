@@ -59,7 +59,7 @@ def test_multi_note_pointer():
 
 # ── FootnoteExtractor 값추출 ─────────────────────────────────────────────────
 def test_extract_pointer_line_values():
-    ex = FootnoteExtractor("S사감사보고서.pdf")
+    ex = FootnoteExtractor("회계법인감사보고서.pdf")
     res = ex.extract(SAMPLE)
     # 유형자산·감가상각비·매출채권 3개 값 방출
     assert res.value_of("유형자산") == Decimal(1234567)
@@ -69,7 +69,7 @@ def test_extract_pointer_line_values():
 
 
 def test_extract_attaches_note_provenance():
-    ex = FootnoteExtractor("S사감사보고서.pdf")
+    ex = FootnoteExtractor("회계법인감사보고서.pdf")
     res = ex.extract(SAMPLE)
     dep = res.by_name("감가상각비")
     assert dep.provenance.locator.note_no == 5

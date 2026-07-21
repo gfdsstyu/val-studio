@@ -1,6 +1,6 @@
 ---
 topic: 감사인 관점 WACC 방법론·검토 체크리스트 (Modified CAPM·Kroll size premium)
-keywords: [D사, Modified CAPM, Kroll, Duff Phelps, size premium, CSRP, WARA, IRR, kd, BBB-, 감사인 검토, ERP, beta]
+keywords: [감사인검토, Modified CAPM, Kroll, Duff Phelps, size premium, CSRP, WARA, IRR, kd, BBB-, 감사인 검토, ERP, beta]
 canonical_questions:
   - "감사인은 WACC를 어떻게 검토하나?"
   - "size premium(규모프리미엄)은 어떻게 정하나?"
@@ -10,9 +10,9 @@ layer: methodology
 parent: 밸류에이션_스코프_로드맵
 doc_type: knowledge
 ---
-# D사 외부평가보고서 검토 유의사항 + WACC 방법론 (감사인 트랙 정본)
+# 감사인검토 외부평가보고서 검토 유의사항 + WACC 방법론 (감사인 트랙 정본)
 
-출처: `0004-D사-외부평가보고서 검토 및 관련 유의사항_교육.pdf` (D사 기준). S사 자료 단편 병합.
+출처: `외부평가검토 자료-외부평가보고서 검토 및 관련 유의사항_교육.pdf` (감사인검토 기준). 회계법인 자료 단편 병합.
 **감사인 트랙의 방법론·체크리스트 정본**. 우리 `wacc.py` + `auditor/` 근거.
 
 ---
@@ -30,7 +30,7 @@ kd   = pre-tax cost of debt
 ### Equity Risk Premium (rm − rf, ERP)
 - 관행: 역사적 초과수익률 평균(stocks − 국채).
 - **Historical ERP** = 과거 차이가 안정적이라 가정 / **Forecast ERP** = 현재 시장정보로 전망.
-- D사: **forward-looking ERP** + **D사 FAS ERP(월별 산정)** 사용 권장. Damodaran EMRP 교차.
+- 감사인검토: **forward-looking ERP** + **감사인검토 FAS ERP(월별 산정)** 사용 권장. Damodaran EMRP 교차.
 - **COVID-19 시 ERP Normalization**("정상" ERP 사용) 유의.
 - (한국 실무: 한공회 시장위험프리미엄 가이던스 7~9% — 리포트 예시 8%.)
 
@@ -81,7 +81,7 @@ kd   = pre-tax cost of debt
 - 분자(현금흐름)와 분모(할인율)의 **일관성**: 명목 vs 실질, 세전 vs 세후, FCFF vs FCFE, 통화 일치.
 - 비영업자산/부채는 FCF에서 제외 → 별도 가산/차감(이중계상 방지).
 
-### S사 자료 단편 (CGU·IFRS 16)
+### 회계법인 자료 단편 (CGU·IFRS 16)
 - **CGU**(현금창출단위) 단위 손상평가, IFRS 16 리스 반영이 CGU CF·WACC에 미치는 영향.
 - Apple-to-Apple: 리스부채 반영 시 CF와 WACC(자본구조) 정합. R&Q(질의응답) 관점.
 - (원본 PDF 한글이 CID폰트라 텍스트 추출 제한 — OCR 시 보강.)
@@ -90,7 +90,7 @@ kd   = pre-tax cost of debt
 
 ## 3. `calc_core`·감사인 트랙 매핑
 
-| D사 방법 | 우리 구현 |
+| 감사인검토 방법 | 우리 구현 |
 |---|---|
 | Modified CAPM ke | `wacc.build_wacc`(size_premium·CRP·company_specific 인자) |
 | guideline β unlever/relever | `wacc.peer_unlevered_beta` + relever |

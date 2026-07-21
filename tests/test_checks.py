@@ -210,7 +210,7 @@ def test_diagnosis_assumption_gap_when_no_match():
     assert f.severity is Severity.WARN and "가정 차이" in f.message
 
 
-# ── 흑자도산: 운전자본 급증 (M사 교육 §2.4 승격) ─────────────────────────
+# ── 흑자도산: 운전자본 급증 (참고 모델 교육 §2.4 승격) ─────────────────────────
 def test_wc_burn_warns_when_worsening():
     # 매출 성장에도 운전자본 현금유출 비중이 매년 악화 → 흑자도산 WARN (교육 예시 패턴)
     rev = [1000.0, 1200.0, 1440.0, 1728.0, 2074.0]
@@ -233,7 +233,7 @@ def test_wc_burn_needs_both_worsening_and_threshold():
     assert check_working_capital_burn(rev, dnwc).severity is Severity.PASS
 
 
-# ── WARA↔IRR↔WACC reconciliation (D사 체크리스트 승격) ─────────────────
+# ── WARA↔IRR↔WACC reconciliation (감사인 검토 체크리스트 승격) ─────────────────
 def test_wara_recon_within_tolerance_passes():
     f = check_wara_irr_wacc(wara=0.095, irr=0.10, wacc=0.092)
     assert f.severity is Severity.PASS

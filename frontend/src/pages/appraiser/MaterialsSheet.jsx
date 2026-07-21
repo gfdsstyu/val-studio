@@ -137,7 +137,7 @@ function FilesSheet({ project, onSave }) {
               <tr key={i}>
                 <td><input type="text" value={r.name} onChange={setRow(i, "name")} style={{ width: 140 }} /></td>
                 <td><select value={r.kind} onChange={setRow(i, "kind")} style={{ fontSize: 12 }}>
-                  {["사업보고서", "감사보고서", "IR", "Big4 의견서", "복붙자료", "기타"].map((k) =>
+                  {["사업보고서", "감사보고서", "IR", "외부평가의견서", "복붙자료", "기타"].map((k) =>
                     <option key={k} value={k}>{k}</option>)}</select></td>
                 <td><input type="text" value={r.note} onChange={setRow(i, "note")} style={{ width: 160 }} /></td>
                 <td><input type="text" value={r.link} onChange={setRow(i, "link")} style={{ width: 120 }} placeholder="경로/URL" /></td>

@@ -742,7 +742,7 @@ async def assumptions_build(request: Request) -> dict:
 # ── FS 계정 자동 분류 (NOA/IBD 등 버킷 제안) ─────────────────────────────────
 @app.post("/api/assumptions/costs-build")
 async def costs_build(request: Request) -> dict:
-    """성격별 원가 라인 → 매출원가·판관비 벡터(비올/M사 다중 드라이버).
+    """성격별 원가 라인 → 매출원가·판관비 벡터(비올/참고 모델 다중 드라이버).
 
     body: {years, cpi?:[연율], fa_dep?:[감가상각], lines:[{name, category:'cogs'|'sga',
     method:'growth'|'ratio'|'headcount'|'cpi'|'fa_dep'|'fixed', ...params}]}.

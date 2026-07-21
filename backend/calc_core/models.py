@@ -52,7 +52,7 @@ class DcfSpineInput:
     # 정상상태(steady state)이므로 그 FCFF 를 성장시키는 것이 자연스럽다.
     # 우선순위: fcff_override > terminal_from_last_fcff > reinvestment_rate > (D&A=CAPEX−WC).
     terminal_from_last_fcff: bool = False
-    # 정규화 운전자본 재조정(M사 정본 §Normalized CF). 터미널 ΔWC = 추정말매출 × g ×
+    # 정규화 운전자본 재조정(참고 모델 정본 §Normalized CF). 터미널 ΔWC = 추정말매출 × g ×
     # WC비율(운전자본/매출). 기본 None → ΔWC=0(D&A=CAPEX 만) = g>0 시 과대계상 위험.
     # reinvestment_rate 미사용 시에만 적용(둘 다 주면 reinvestment_rate 가 WC 를 이미 번들).
     # 옳은 방식(정본): 추정말매출 × g × ratio (틀린 방식=말WC투자×(1+g), TV 21% 왜곡).

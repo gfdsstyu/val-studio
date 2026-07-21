@@ -19,14 +19,14 @@
 | [파서_아키텍처_매트릭스](파서_아키텍처_매트릭스.md) | ⭐ **불러오기 방식(엑셀·PDF·XBRL·DART API) × 자료유형(사업보고서·IR·리서치·의견서)** 2층 구조 + DART PDF 한글 CID→XBRL우선/OCR폴백 | 삼성 XBRL·PDF 실측 |
 | 문서 | 내용 | 소스 |
 |---|---|---|
-| [M사_리포트예시_클래시스](M사_리포트예시_클래시스.md) | ⭐ **2차 리포트 양식 정본** + 비올 peer 6사 + CAPM + 상세 가정(매출트리·원가/판관비 성격별·WC 회전기일·유사회사 4-step) | (M사) 리포트 예시 |
+| [리포트예시_클래시스](리포트예시_클래시스.md) | ⭐ **2차 리포트 양식 정본** + 비올 peer 6사 + CAPM + 상세 가정(매출트리·원가/판관비 성격별·WC 회전기일·유사회사 4-step) | (참고 모델) 리포트 예시 |
 | [peer_dcf_클래시스_솔루엠](peer_dcf_클래시스_솔루엠.md) | 클래시스(비올 동종)·솔루엠 실무 DCF 가정·로직·CAPM | pe양식(복호화) |
 | [wacc_할인율서식](wacc_할인율서식.md) | WACC 서식 **셀 수식 논리**(Hamada·규모별세율·베타옵션·빌드업) | 할인율 서식·강의자료 |
 | [외부평가의견서_활용](외부평가의견서_활용.md) | DART 공시 의견서 활용(감사인 트랙·report 양식·정형문구+슬롯·방법론 taxonomy) | 외부평가의견서 13건 + dcf공시사례.pptx |
 | [참고보고서_활용](참고보고서_활용.md) | 증권사·산업 IR 리포트 → RAG 지식원천·산업 CAGR·컨센서스·provenance | 참고보고서 11건 |
-| [D사_감사인검토_WACC방법론](D사_감사인검토_WACC방법론.md) | ⭐ **감사인 트랙 정본**: Modified CAPM·Kroll size premium deciles·kd(BBB-)·WARA↔IRR↔WACC·검토 체크리스트 | D사 교육 PDF + S사 자료 |
+| [감사인검토_WACC방법론](감사인검토_WACC방법론.md) | ⭐ **감사인 트랙 정본**: Modified CAPM·Kroll size premium deciles·kd(BBB-)·WARA↔IRR↔WACC·검토 체크리스트 | 감사인검토 교육 PDF + 회계법인 자료 |
 | [합병_주식교환_방법론](합병_주식교환_방법론.md) | 상장=기준주가/비상장=본질가치(자산1:수익1.5), 두산 주식교환비율 사례 | 두산 합병 특강 |
-| [모델링_실무_2강4강](모델링_실무_2강4강.md) | 매출 P×Q 사업유형 사전(구독ARPU·웹툰ARPPU)·구분실익·Finalize 연결체크 | M사 2강/4강 |
+| [모델링_실무_2강4강](모델링_실무_2강4강.md) | 매출 P×Q 사업유형 사전(구독ARPU·웹툰ARPPU)·구분실익·Finalize 연결체크 | 참고 모델 2강/4강 |
 | [베타_Bloomberg_vs_KICPA](베타_Bloomberg_vs_KICPA.md) | β 기준시장 선택(S&P500 vs KOSPI)·Adjusted β(0.67/0.33)·CAPM 체계적위험 한계·CSRP·고성장 과대평가 | 회계업계 실무 이슈노트 |
 | [영구성장률_PGR_적합성](영구성장률_PGR_적합성.md) | TV 비중 ~75%·한국관행 0~1% vs 글로벌 2~4%(평균3%)·PGR≤GDP 철칙·민감도 | 실무 이슈노트 |
 | [검증_클래시스_DCF](검증_클래시스_DCF.md) | ⭐ 2차 실사례 교차검증: EBIT 완전일치, 세금주입·터미널정규화 개선점(A/B), checks.py 위험포착 입증 | pe양식 클래시스 DCF |
@@ -37,10 +37,10 @@
 | [기업리서치_양식](기업리서치_양식.md) | ⭐ **Company Brief 10섹션 정본**(0단계 산출물): 개요·부문매출·제품·ValueChain·경쟁사·시장·peer배수 | pe양식 리서치 예시 2건 |
 | [FDD_재무실사_정상화](FDD_재무실사_정상화.md) | 재무실사: QOE(normalized EBITDA)·NWC(peg·pro forma·가격조정)·정상화 | 블로그 |
 | [모델링_워크플로우_기초](모델링_워크플로우_기초.md) | ⭐ **업무 프로세스 8단계(RFI→Skeleton→Projection→장표)**·모델 유형 3·엑셀 규율(단방향 참조·hard 1곳·컬러코딩 정본·Sanitizing) | 컨설팅 교육 docx 2편 |
-| [M사_DCF_교육_정본](M사_DCF_교육_정본.md) | ⭐ **DCF 이론 백본(도식 Mermaid 재현)**: 3대 접근법·FCFF/FCFE·BS 재분류·재투자 루프·FCFF 산출·WACC(MRP·Hamada·조정베타·size)·TV 정규화·**K-IFRS 1036.35 VIU 5년 상한** | M사 교육 hardcopy 38p |
+| [DCF_교육_정본](DCF_교육_정본.md) | ⭐ **DCF 이론 백본(도식 Mermaid 재현)**: 3대 접근법·FCFF/FCFE·BS 재분류·재투자 루프·FCFF 산출·WACC(MRP·Hamada·조정베타·size)·TV 정규화·**K-IFRS 1036.35 VIU 5년 상한** | 참고 모델 교육 hardcopy 38p |
 | [장표_작성법](장표_작성법.md) | 리포트 산출물 규율: Head/Body·MECE 축·**차트 선택표 8종**(Waterfall·Mekko 등) | 컨설팅 교육 docx |
 | [상대가치_계절성_LTM](상대가치_계절성_LTM.md) | ⏳상대가치 트랙 첫 챕터: 분·반기 평가 연환산 왜곡·계절성 peer 제외 원칙·**LTM 보정**·보고서 문구 3종 | polaris 블로그 |
-| [MnA_실사_가격구조_SPA](MnA_실사_가격구조_SPA.md) | ⭐ **딜 관점 정본**: 실사 4단계·QoE 조정 사다리·Net Debt/Debt-like·목표운전자본 함정 2종·SPA 7조항·가격조정 3방식+De Minimis/Basket/Cap | M&A ESSENCE(중기부·S사 2020) |
+| [MnA_실사_가격구조_SPA](MnA_실사_가격구조_SPA.md) | ⭐ **딜 관점 정본**: 실사 4단계·QoE 조정 사다리·Net Debt/Debt-like·목표운전자본 함정 2종·SPA 7조항·가격조정 3방식+De Minimis/Basket/Cap | M&A ESSENCE(중기부·회계법인 2020) |
 | [MnA_구조화_합병규제_세무](MnA_구조화_합병규제_세무.md) | Structuring 4유형·**합병가액 법제(기준시가 ±30%·본질가치 0.4/0.6)**·주식매수청구 가격·적격합병 요건 5·양도세 | M&A ESSENCE |
 | [MnA_사례집_유형별_시사점](MnA_사례집_유형별_시사점.md) | 10사례(SPAC·회생·PEF·U-turn 등) 구조·교훈 — 가격조정 75억 실측·SI/FI 가격차 | M&A CASEBOOK(2021) |
 | [앤트로픽_금융스킬_벤치마크](앤트로픽_금융스킬_벤치마크.md) | 공식 dcf/lbo/comps·audit-xls 원문 감사 — 채택 규약·DCF 버그 5종·서사 규격 | anthropics/financial-services |
@@ -52,11 +52,11 @@
 
 ## 소스 자료 위치 (D:\Valuation\)
 - `DCF_비올\` — 메인 벤치마크 비올 (엔진 파일 `DCF Model_최종본.xlsx`, IR, 참고보고서, 유사회사재무)
-- `DCF_비올\강의자료\` — M사 강의(2강 모델링·4강·리포트 예시/템플릿·할인율 서식/강의자료·dcf공시사례.pptx·두산합병 특강)
+- `DCF_비올\강의자료\` — 참고 모델 강의(2강 모델링·4강·리포트 예시/템플릿·할인율 서식/강의자료·dcf공시사례.pptx·두산합병 특강)
 - `외부평가의견서\` — DART 공시 의견서 13건(스캔 이미지 → **OCR 필요**)
 - `pe양식\` — 실무 DCF 템플릿(암호화, 비번=`파일명_비번`, ㅁ→동일위치 영문키)
-- `0003-S사_자료`, `0004-D사-외부평가검토` — Big4 교육자료
-- `M사강의자료\` — NOA IBD 참고자료, 한공회 MRP 가이던스, dcf공시사례.pptx
+- `0003-밸류에이션_자료`, `외부평가검토 자료-외부평가검토` — 회계법인 교육자료
+- `참고 모델강의자료\` — NOA IBD 참고자료, 한공회 MRP 가이던스, dcf공시사례.pptx
 - `모델러스엑셀\` — The Modellers 트레이닝: `5.4(COMPLETED).xlsx`(**Hugel 통합모델 정본** — 14시트 3표연결+DCF+Comps), Excel Practice Materials(EMP), Total Shortcuts Summary
 
 ## 핵심 확정 사실 (전 자료 종합)
@@ -74,6 +74,6 @@
 - **매출 P×Q 사전**: 구독=고객수×ARPU, 웹툰=결제자×ARPPU, 공간=점포×점포매출, 수주=건수×프로젝트.
 
 ## 남은 문서화 (TODO)
-- [ ] S사 자료 전문 — CGU·IFRS16·할인율(한글 CID폰트 → OCR 시 보강). 현재 단편만.
+- [ ] 회계법인 자료 전문 — CGU·IFRS16·할인율(한글 CID폰트 → OCR 시 보강). 현재 단편만.
 - [ ] NOA IBD 구분 참고자료 정밀(스캔 여부 확인).
 - [ ] 리포트 템플릿(빈 양식) 셀 구조 → report 슬롯 스키마.

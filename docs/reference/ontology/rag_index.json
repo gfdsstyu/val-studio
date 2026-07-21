@@ -1,36 +1,82 @@
 {
   "chapters": [
     {
-      "id": "D사_감사인검토_WACC방법론",
-      "path": "docs/reference/D사_감사인검토_WACC방법론.md",
-      "title": "D사 외부평가보고서 검토 유의사항 + WACC 방법론 (감사인 트랙 정본)",
-      "topic": "감사인 관점 WACC 방법론·검토 체크리스트 (Modified CAPM·Kroll size premium)",
-      "track": "검증·감사인",
+      "id": "DCF_교육_정본",
+      "path": "docs/reference/DCF_교육_정본.md",
+      "title": "참고 모델 DCF 교육 정본 — 도식 중심 정리",
+      "topic": "참고 모델 DCF 교육 정본 — 평가접근법·FCFF/FCFE·재무제표 재분류·FCFF 산출·WACC·영구가치(도식 포함)",
+      "track": "손상·FV",
       "layer": "methodology",
-      "parent": "밸류에이션_스코프_로드맵",
+      "parent": "모델링_실무_2강4강",
       "doc_type": "knowledge",
       "keywords": [
-        "D사",
-        "Modified CAPM",
-        "Kroll",
+        "DCF",
+        "FCFF",
+        "FCFE",
+        "DDM",
+        "이익접근법",
+        "시장접근법",
+        "자산접근법",
+        "GPC",
+        "GTC",
+        "조정순자산법",
+        "Enterprise Value",
+        "영업가치",
+        "비영업자산",
+        "Working Capital",
+        "Operating Net Fixed Assets",
+        "Invested Capital",
+        "순차입자본",
+        "Net Borrowing",
+        "NOPLAT",
+        "EBIT",
+        "재투자",
+        "Reinvestment",
+        "Value Chain",
+        "재무제표 재분류",
+        "CAPEX",
+        "감가상각 절세효과",
+        "순운전자본",
+        "흑자도산",
+        "WACC",
+        "Ke",
+        "Kd",
+        "CAPM",
+        "Hamada",
+        "조정베타",
+        "Marshall Blume",
+        "Rf",
+        "MRP",
+        "시장위험프리미엄",
+        "한공회",
+        "Size Premium",
         "Duff Phelps",
-        "size premium",
-        "CSRP",
-        "WARA",
-        "IRR",
-        "kd",
-        "BBB-",
-        "감사인 검토",
-        "ERP",
-        "beta"
+        "Terminal Value",
+        "Normalized CF",
+        "영구성장률",
+        "K-IFRS 1036",
+        "사용가치",
+        "VIU"
       ],
       "canonical_questions": [
-        "감사인은 WACC를 어떻게 검토하나?",
-        "size premium(규모프리미엄)은 어떻게 정하나?",
-        "WARA·IRR·WACC 정합은 무엇인가?",
-        "cost of debt(kd)는 어떻게 산정하나?"
+        "DCF 3대 평가접근법(수익·시장·자산)은 무엇이고 실무에서 무엇을 주로 쓰나?",
+        "FCFF와 FCFE는 어떻게 다르고 언제 쓰나?",
+        "DCF를 위해 재무상태표를 어떻게 영업/비영업으로 재분류하나?",
+        "FCFF(잉여현금흐름)는 어떤 순서로 산출하나?",
+        "Terminal Value의 Normalized CF는 어떻게 정규화하나?",
+        "손상 사용가치(VIU)의 추정기간 상한은?"
       ],
-      "links": [],
+      "links": [
+        "MnA_실사_가격구조_SPA",
+        "감사인검토_WACC방법론",
+        "검증_클래시스_DCF",
+        "리포트예시_클래시스",
+        "모델링_실무_2강4강",
+        "밸류에이션_스코프_로드맵",
+        "베타_Bloomberg_vs_KICPA",
+        "손상검사_impairment",
+        "영구성장률_PGR_적합성"
+      ],
       "has_frontmatter": true
     },
     {
@@ -232,121 +278,6 @@
       "has_frontmatter": true
     },
     {
-      "id": "M사_DCF_교육_정본",
-      "path": "docs/reference/M사_DCF_교육_정본.md",
-      "title": "M사 DCF 교육 정본 — 도식 중심 정리",
-      "topic": "M사 DCF 교육 정본 — 평가접근법·FCFF/FCFE·재무제표 재분류·FCFF 산출·WACC·영구가치(도식 포함)",
-      "track": "손상·FV",
-      "layer": "methodology",
-      "parent": "모델링_실무_2강4강",
-      "doc_type": "knowledge",
-      "keywords": [
-        "DCF",
-        "FCFF",
-        "FCFE",
-        "DDM",
-        "이익접근법",
-        "시장접근법",
-        "자산접근법",
-        "GPC",
-        "GTC",
-        "조정순자산법",
-        "Enterprise Value",
-        "영업가치",
-        "비영업자산",
-        "Working Capital",
-        "Operating Net Fixed Assets",
-        "Invested Capital",
-        "순차입자본",
-        "Net Borrowing",
-        "NOPLAT",
-        "EBIT",
-        "재투자",
-        "Reinvestment",
-        "Value Chain",
-        "재무제표 재분류",
-        "CAPEX",
-        "감가상각 절세효과",
-        "순운전자본",
-        "흑자도산",
-        "WACC",
-        "Ke",
-        "Kd",
-        "CAPM",
-        "Hamada",
-        "조정베타",
-        "Marshall Blume",
-        "Rf",
-        "MRP",
-        "시장위험프리미엄",
-        "한공회",
-        "Size Premium",
-        "Duff Phelps",
-        "Terminal Value",
-        "Normalized CF",
-        "영구성장률",
-        "K-IFRS 1036",
-        "사용가치",
-        "VIU"
-      ],
-      "canonical_questions": [
-        "DCF 3대 평가접근법(수익·시장·자산)은 무엇이고 실무에서 무엇을 주로 쓰나?",
-        "FCFF와 FCFE는 어떻게 다르고 언제 쓰나?",
-        "DCF를 위해 재무상태표를 어떻게 영업/비영업으로 재분류하나?",
-        "FCFF(잉여현금흐름)는 어떤 순서로 산출하나?",
-        "Terminal Value의 Normalized CF는 어떻게 정규화하나?",
-        "손상 사용가치(VIU)의 추정기간 상한은?"
-      ],
-      "links": [
-        "D사_감사인검토_WACC방법론",
-        "MnA_실사_가격구조_SPA",
-        "M사_리포트예시_클래시스",
-        "검증_클래시스_DCF",
-        "모델링_실무_2강4강",
-        "밸류에이션_스코프_로드맵",
-        "베타_Bloomberg_vs_KICPA",
-        "손상검사_impairment",
-        "영구성장률_PGR_적합성"
-      ],
-      "has_frontmatter": true
-    },
-    {
-      "id": "M사_리포트예시_클래시스",
-      "path": "docs/reference/M사_리포트예시_클래시스.md",
-      "title": "M사 리포트 예시 (클래시스) — 최종 리포트 양식 정본 명세",
-      "topic": "밸류에이션 리포트 양식 + 미용의료기기 peer + 상세 추정가정",
-      "track": "거래평가·DCF",
-      "layer": "practice",
-      "parent": "모델링_실무_2강4강",
-      "doc_type": "knowledge",
-      "keywords": [
-        "리포트양식",
-        "유사회사선정",
-        "peer",
-        "비올",
-        "이루다",
-        "제이시스메디칼",
-        "클래시스",
-        "하이로닉",
-        "한스바이오메드",
-        "CAPM",
-        "매출트리",
-        "원가성격별",
-        "운전자본 회전기일"
-      ],
-      "canonical_questions": [
-        "밸류에이션 리포트는 어떤 구조로 작성하나?",
-        "유사회사(peer)는 어떻게 선정하나?",
-        "미용 의료기기 업종 비교기업은?",
-        "매출·원가·판관비 추정 가정은 어떻게 잡나?"
-      ],
-      "links": [
-        "모델링_워크플로우_기초",
-        "장표_작성법"
-      ],
-      "has_frontmatter": true
-    },
-    {
       "id": "peer_dcf_클래시스_솔루엠",
       "path": "docs/reference/peer_dcf_클래시스_솔루엠.md",
       "title": "Peer/실무 DCF 템플릿 명세 — 클래시스·솔루엠",
@@ -407,7 +338,7 @@
         "TAB(세금상각편익)는 무엇이고 왜 더하나?"
       ],
       "links": [
-        "D사_감사인검토_WACC방법론",
+        "감사인검토_WACC방법론",
         "밸류에이션_스코프_로드맵",
         "손상검사_impairment"
       ],
@@ -439,6 +370,39 @@
         "Hamada 언레버/리레버 공식은?",
         "베타를 자본구조로 조정하는 법은?",
         "규모별 유효세율은 어떻게 적용하나?"
+      ],
+      "links": [],
+      "has_frontmatter": true
+    },
+    {
+      "id": "감사인검토_WACC방법론",
+      "path": "docs/reference/감사인검토_WACC방법론.md",
+      "title": "감사인검토 외부평가보고서 검토 유의사항 + WACC 방법론 (감사인 트랙 정본)",
+      "topic": "감사인 관점 WACC 방법론·검토 체크리스트 (Modified CAPM·Kroll size premium)",
+      "track": "검증·감사인",
+      "layer": "methodology",
+      "parent": "밸류에이션_스코프_로드맵",
+      "doc_type": "knowledge",
+      "keywords": [
+        "감사인검토",
+        "Modified CAPM",
+        "Kroll",
+        "Duff Phelps",
+        "size premium",
+        "CSRP",
+        "WARA",
+        "IRR",
+        "kd",
+        "BBB-",
+        "감사인 검토",
+        "ERP",
+        "beta"
+      ],
+      "canonical_questions": [
+        "감사인은 WACC를 어떻게 검토하나?",
+        "size premium(규모프리미엄)은 어떻게 정하나?",
+        "WARA·IRR·WACC 정합은 무엇인가?",
+        "cost of debt(kd)는 어떻게 산정하나?"
       ],
       "links": [],
       "has_frontmatter": true
@@ -510,7 +474,7 @@
         "재무제표를 DCF 모델로 자동 변환하는 서비스의 구조는?"
       ],
       "links": [
-        "D사_감사인검토_WACC방법론",
+        "감사인검토_WACC방법론",
         "모델링_실무_2강4강",
         "영구성장률_PGR_적합성",
         "외부평가의견서_활용"
@@ -556,6 +520,42 @@
       "has_frontmatter": true
     },
     {
+      "id": "리포트예시_클래시스",
+      "path": "docs/reference/리포트예시_클래시스.md",
+      "title": "참고 모델 리포트 예시 (클래시스) — 최종 리포트 양식 정본 명세",
+      "topic": "밸류에이션 리포트 양식 + 미용의료기기 peer + 상세 추정가정",
+      "track": "거래평가·DCF",
+      "layer": "practice",
+      "parent": "모델링_실무_2강4강",
+      "doc_type": "knowledge",
+      "keywords": [
+        "리포트양식",
+        "유사회사선정",
+        "peer",
+        "비올",
+        "이루다",
+        "제이시스메디칼",
+        "클래시스",
+        "하이로닉",
+        "한스바이오메드",
+        "CAPM",
+        "매출트리",
+        "원가성격별",
+        "운전자본 회전기일"
+      ],
+      "canonical_questions": [
+        "밸류에이션 리포트는 어떤 구조로 작성하나?",
+        "유사회사(peer)는 어떻게 선정하나?",
+        "미용 의료기기 업종 비교기업은?",
+        "매출·원가·판관비 추정 가정은 어떻게 잡나?"
+      ],
+      "links": [
+        "모델링_워크플로우_기초",
+        "장표_작성법"
+      ],
+      "has_frontmatter": true
+    },
+    {
       "id": "모델러스_통합모델_5.4",
       "path": "docs/reference/모델러스_통합모델_5.4.md",
       "title": "모델러스 통합모델 5.4 — 3표 연결 + DCF + Trading Comps 정본",
@@ -586,7 +586,7 @@
     {
       "id": "모델링_실무_2강4강",
       "path": "docs/reference/모델링_실무_2강4강.md",
-      "title": "DCF 모델링 실무 (M사 2강·4강)",
+      "title": "DCF 모델링 실무 (참고 모델 2강·4강)",
       "topic": "DCF 매출추정 P×Q 사업유형 + Finalize 체크리스트",
       "track": "거래평가·DCF",
       "layer": "methodology",
@@ -696,9 +696,9 @@
         "DCF 말고 어떤 평가방법론이 있나?"
       ],
       "links": [
-        "D사_감사인검토_WACC방법론",
+        "DCF_교육_정본",
         "MnA_구조화_합병규제_세무",
-        "M사_DCF_교육_정본",
+        "감사인검토_WACC방법론",
         "손상검사_impairment",
         "외부평가의견서_활용",
         "파서_아키텍처_매트릭스",
@@ -816,7 +816,7 @@
       ],
       "links": [
         "FDD_재무실사_정상화",
-        "M사_리포트예시_클래시스"
+        "리포트예시_클래시스"
       ],
       "has_frontmatter": true
     },
@@ -852,7 +852,7 @@
         "손상차손은 어떤 순서로 인식하나?"
       ],
       "links": [
-        "D사_감사인검토_WACC방법론",
+        "감사인검토_WACC방법론",
         "밸류에이션_스코프_로드맵"
       ],
       "has_frontmatter": true
@@ -1092,7 +1092,7 @@
         "복합금융상품 평가에서 이자율 커브는 왜 필요한가?"
       ],
       "links": [
-        "D사_감사인검토_WACC방법론",
+        "감사인검토_WACC방법론",
         "복합금융상품_평가",
         "외부평가의견서_고정양식_구조"
       ],

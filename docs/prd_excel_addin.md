@@ -14,7 +14,7 @@
 
 ### 1.1 왜 이 PRD인가
 
-Val-Studio(valuation-platform)는 M사 기업가치평가 DCF 워크플로우를 **결정론적 Python 엔진(`calc_core`)** + **로컬 FastAPI/React SPA**로 구현 중이다. 실무자의 작업 환경은 **Excel(데스크톱·웹 Excel)** 이며, “웹에 올린다”와 “Excel과 연동한다”는 서로 다른 목표로 자주 혼동된다.
+Val-Studio(valuation-platform)는 참고 모델 기업가치평가 DCF 워크플로우를 **결정론적 Python 엔진(`calc_core`)** + **로컬 FastAPI/React SPA**로 구현 중이다. 실무자의 작업 환경은 **Excel(데스크톱·웹 Excel)** 이며, “웹에 올린다”와 “Excel과 연동한다”는 서로 다른 목표로 자주 혼동된다.
 
 본 PRD는 **현재 로컬 HTML MVP에서 Excel Office Web Add-in을 배포 가능한 수준까지 올리는** 범위·아키텍처·일정·검증 기준을 한 문서로 고정한다.
 
@@ -152,7 +152,7 @@ cd frontend && npm run dev
 | 페르소나 | 목표 | MVP Must에서의 가치 |
 |----------|------|---------------------|
 | **평가 실무자** | Excel 옆에서 DCF sanity check | Task Pane 계산·TV WARN·민감도 |
-| **M사 수강생** | 연수 모델과 숫자 대조 | 비올 골든 입력 → 주당가치 검증 |
+| **참고 모델 수강생** | 연수 모델과 숫자 대조 | 비올 골든 입력 → 주당가치 검증 |
 | **감사인 (후일)** | 의견서 주장 vs 독립 재계산 | `claimed_per_share` + gap_diagnosis |
 
 ### 5.2 Must MVP 사용자 스토리
@@ -506,7 +506,7 @@ v3.0       ──► AppSource, 감사인 full track, RAG ingest in Add-in
 
 | # | 질문 | 결정 필요 시점 |
 |---|------|----------------|
-| OQ-1 | Add-in 표시명·아이콘 최종 (Val-Studio vs M사 연수 브랜드) | P1 전 |
+| OQ-1 | Add-in 표시명·아이콘 최종 (Val-Studio vs 참고 모델 연수 브랜드) | P1 전 |
 | OQ-2 | API/앱 도메인 (`valstudio.*` vs 임시 Vercel URL) | P2 전 |
 | OQ-3 | MVP 배포: 개인 sideload vs 특정 M365 테넌트 | P5 전 |
 | OQ-4 | Level 1 Must 출시 후 바로 Office.js(v1.2) vs xlsx export(v1.1) 우선 | Must 완료 후 |

@@ -15,7 +15,7 @@ doc_type: knowledge
 
 > PPA(Purchase Price Allocation, 매수가격배분): 사업결합 취득원가를 식별가능 자산·부채에 공정가치로
 > 배분. 무형자산(고객관계·상표·기술)을 **소득접근법**으로 평가. [[밸류에이션_스코프_로드맵]] FV/PPA 트랙.
-> WARA↔IRR↔WACC 정합([[D사_감사인검토_WACC방법론]])이 여기 핵심.
+> WARA↔IRR↔WACC 정합([[감사인검토_WACC방법론]])이 여기 핵심.
 
 ## 1. MEEM (다기간초과이익법, Multi-period Excess Earnings Method)
 무형자산 현금흐름에서 **다른 자산이 기여한 부분을 차감**한 초과이익. PPA **고객관계 평가 최표준**.

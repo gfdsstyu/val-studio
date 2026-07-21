@@ -7,7 +7,7 @@ ingest/validators.py 의 tie-out(데이터가 원본과 일치하나? — 라운
 근거 문서(docs/reference/):
   - 영구성장률_PGR_적합성.md  : TV 비중 ~75%, PGR ≤ GDP 철칙, PGR < WACC(Gordon 수렴)
   - 베타_Bloomberg_vs_KICPA.md : β provenance(source·market) 필수
-  - D사_감사인검토_WACC방법론.md : 감사인 검토 체크리스트
+  - 감사인검토_WACC방법론.md : 감사인 검토 체크리스트
 
 감사인 트랙 자동 경고:
   ① PGR ≥ WACC           → FAIL (Gordon 발산: TV 음수/무한대, 수학적 무효)
@@ -305,7 +305,7 @@ def check_projection_smoothness(
     return f
 
 
-# WARA↔IRR↔WACC 정합 허용폭(±1%p). 근거: D사_감사인검토 — PPA calibration 에서
+# WARA↔IRR↔WACC 정합 허용폭(±1%p). 근거: 감사인검토 — PPA calibration 에서
 # 세 수익률의 reconciliation 은 감사인 검토 체크리스트 항목.
 WARA_RECON_TOL = 0.01
 
@@ -381,7 +381,7 @@ def check_peer_seasonality(
 
 
 # 운전자본 현금유출이 매출 대비 이 비중을 넘고 계속 악화하면 흑자도산 신호.
-# 근거: M사_DCF_교육_정본 §2.4 — 매출 성장에도 회전기일 악화로 FCFF 마이너스 전환.
+# 근거: DCF_교육_정본 §2.4 — 매출 성장에도 회전기일 악화로 FCFF 마이너스 전환.
 WC_BURN_WARN_SHARE = 0.05
 
 

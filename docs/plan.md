@@ -2,7 +2,7 @@
 
 ## Context (왜 만드는가)
 
-M사 기업가치평가연수 과제(정종범 _비올_ DCF Model)는 손으로 만든 엑셀 DCF다. 목표는 이 엑셀의 **로직을 1:1로 재현**하되, 앞단(가정 도출·리서치·컨텍스트 관리)을 **DART API + RAG + LLM**으로 자동화하고, 뒷단(산출물)을 **감사인이 셀 수식을 추적할 수 있는 살아있는 xlsx**로 내보내는 웹 플랫폼을 새 GitHub 레포로 구축하는 것.
+참고 모델 기업가치평가연수 과제(정종범 _비올_ DCF Model)는 손으로 만든 엑셀 DCF다. 목표는 이 엑셀의 **로직을 1:1로 재현**하되, 앞단(가정 도출·리서치·컨텍스트 관리)을 **DART API + RAG + LLM**으로 자동화하고, 뒷단(산출물)을 **감사인이 셀 수식을 추적할 수 있는 살아있는 xlsx**로 내보내는 웹 플랫폼을 새 GitHub 레포로 구축하는 것.
 
 두 개의 화이트보드 해석(제미나이·챗지피티 계획.md)이 공통으로 그리는 파이프라인:
 `데이터 수집 → 파싱/매핑 → 재무DB → Assumption 생성(AI) → DCF 엔진 → Reporting`.
@@ -19,7 +19,7 @@ M사 기업가치평가연수 과제(정종범 _비올_ DCF Model)는 손으로 
 | 첫 마일스톤 | **결정론적 DCF 코어 + 비올 1:1 재현** (AI 없이, 골든 테스트) |
 | 스택 | **Python(FastAPI) 백엔드 + React+Vite SPA + Postgres(Supabase)** |
 | 배포(MVP) | 프론트=**Vercel** · 백엔드=**Railway/Render 컨테이너** · DB/Auth/Storage/벡터=**Supabase(pgvector)** |
-| 외부 데이터 | **OpenDART API** + IR/교육 PDF + Big4 평가의견서 |
+| 외부 데이터 | **OpenDART API** + IR/교육 PDF + 외부평가의견서 |
 | LLM | **실서비스=Claude 작업별 티어링(Sonnet 5 기본/Opus 정밀)** + Gemini(검색그라운딩·임베딩)+Groq 폴백 — §LLM 모델 전략 |
 
 ## 원본 엑셀에서 확인된 실제 로직 (재현 대상)
@@ -74,7 +74,7 @@ valuation-platform/               # 새 GitHub 레포
 │   │   ├── wacc.py               #   CAPM 빌드업 + 자본구조
 │   │   ├── dcf.py                #   FCFF→EV→주당가치 + 민감도
 │   │   └── tax.py                #   한국 법인세 구간세율
-│   ├── ingest/                   # Phase 2: DART API·주석·IR PDF·Big4 의견서 수집
+│   ├── ingest/                   # Phase 2: DART API·주석·IR PDF·외부평가의견서 수집
 │   │   ├── dart_client.py        #   OpenDART: 정형 계정 API(fnlttSinglAcntAll, BS/IS/CF 값)
 │   │   ├── macro_client.py       #   ★ 거시가정: GDP·CPI·임금성장률 (EIU 복붙 / 한국은행 ECOS API / IMF WEO)
 │   │   ├── dart_document.py      #   사업보고서 원본(document API) → 주석 HTML/XBRL
@@ -89,7 +89,7 @@ valuation-platform/               # 새 GitHub 레포
 │   ├── rag/                      # Phase 3: 3-코퍼스 벡터 검색 (감린이 RAG 포팅)
 │   │   ├── chunker.py            #   build_chunks.mjs subsplit 포팅(window/overlap/표-atomic)
 │   │   ├── ingest.py             #   contextual-prefix + Qdrant dense+sparse RRF (ingest.mjs)
-│   │   ├── corpora.py            #   기초/경영진자료/지식원천(Big4) 분리 + authority tier
+│   │   ├── corpora.py            #   기초/경영진자료/지식원천(전문가 자료) 분리 + authority tier
 │   │   ├── retrieve.py           #   hybrid+rerank+parent확장+citation검증 (chatHandler 포팅)
 │   │   └── eval_metrics.py       #   nDCG/Recall/MRR 회귀 게이트 (eval_metrics.mjs)
 │   ├── rag_inference/            # embed/rerank 마이크로서비스 (services/rag-inference 직접 복사)
@@ -98,7 +98,7 @@ valuation-platform/               # 새 GitHub 레포
 │   │   └── router.py             #   OpenAI 호환 멀티프로바이더 + RPM 페일오버(Gemini/Groq)
 │   ├── assist/                   # Phase 3: 가정도출 챗 오케스트레이터
 │   │   ├── chat.py               #   가정 제안 + "경영진 자료 필요" 요청 루프
-│   │   └── provenance.py         #   각 가정에 출처(공개/경영진/Big4) 태깅
+│   │   └── provenance.py         #   각 가정에 출처(공개/경영진/대형 회계법인) 태깅
 │   ├── auditor/                  # Phase 5: 감사인 트랙
 │   │   ├── ingest_opinion.py     #   제공된 평가의견서 파싱
 │   │   ├── tests.py              #   유의적 가정·방법·데이터 대조 테스트
@@ -133,7 +133,7 @@ Supabase)은 그대로 목표로 두되 **착수를 연기** — 지금 가치�
   localStorage 저장 → 요청 헤더로 로컬 백엔드에 전달, 백엔드는 통과만(디스크 저장
   금지). 감린이 검증 패턴 재사용(키 검증·손상키 방어 경험 이식).
 - **로컬 강점 활용**: 원자료(엑셀·PDF·XBRL)가 로컬 디스크 — 업로드 없이 **경로
-  기반 인제스트**(파일 피커→절대경로). 유료 강의·Big4 자료가 클라우드에 안 올라감
+  기반 인제스트**(파일 피커→절대경로). 유료 강의·대형 회계법인 자료가 클라우드에 안 올라감
   (지식 마스킹 정책과 정합).
 - **저장**: Supabase 대신 로컬 파일(JSON)·SQLite. 모델 버전·감사로그도 로컬.
 - 첫 화면 후보: ①Brief 프리필+딥서치 실행 ②DCF 입력→결과·민감도·시나리오
@@ -234,7 +234,7 @@ parsers/
 2. **calc_core 구현**: 위 의존 그래프대로 순수 함수 모듈. `dcf.run(inputs) -> DcfResult`.
    - 반기 할인 컨벤션(YEARFRAC), 구간 법인세, Terminal `FCFF_T/(WACC−g)`, 2-way 민감도 정확 재현.
    - **매출추정 전략 선택**(`revenue.py`, `revenue_method` 토글, 하류 EBIT→FCFF 불변):
-     - `top_down` (**기본·구현 쉬움**): `산업 TAM × 산업 CAGR^t × 점유율(share)` → 연도별 매출. CAGR은 지식원천(리서치·Big4 의견서) RAG에서 주입, 입력 3파라미터. 비올 Assumption 시트의 시장규모 CAGR(Precedence Research/Medical Insight) 데이터가 실제 사례.
+     - `top_down` (**기본·구현 쉬움**): `산업 TAM × 산업 CAGR^t × 점유율(share)` → 연도별 매출. CAGR은 지식원천(리서치·외부평가의견서) RAG에서 주입, 입력 3파라미터. 비올 Assumption 시트의 시장규모 CAGR(Precedence Research/Medical Insight) 데이터가 실제 사례.
      - `bottom_up`: `Σ(세그먼트 P×Q)` 제품군별 가격·수량. 검증(세그먼트 합계=총매출) 추가.
      - 비올 원본은 세그먼트 성장률(bottom-up 근사)을 썼으므로 골든 테스트는 bottom_up 경로로 1:1 재현, top_down은 별도 단위테스트로 검증.
 3. **골든 테스트**: `pytest tests/golden/test_viol.py` — calc_core 출력이 `expected.json`과 **셀 단위 허용오차 내 일치**(부동소수 rel_tol 1e-6). 주당가치·EV·민감도 셀 전부 대조.
@@ -280,7 +280,7 @@ API가 없는 소스(Bloomberg 채권수익률 매트릭스·베타, 한공회 �
 5. **provenance 태깅**: "Bloomberg 수기 붙여넣기 @날짜/사용자" 로 신뢰수준 별도(경영진 코퍼스와 동급). 감사인이 출처 물으면 붙여넣은 원본까지 추적.
 > 원칙: **자동(DART)든 수동(복붙)이든 동일한 검증 게이트를 통과**해야 calc_core에 입력된다. 소스만 다르고 규율은 하나.
 
-## 밸류에이션 입력 데이터 출처 (SSOT) — S사/D사/한공회 교육자료 기준
+## 밸류에이션 입력 데이터 출처 (SSOT) — 회계법인·한공회 교육자료 기준
 
 원본 WACC·Assumption 시트의 각 입력이 어디서 오는지 확정(교육 PDF에서 방법론 확인). 모든 입력은 자동/수동 무관 `validators.py` 게이트 통과 + provenance 태깅.
 
@@ -318,7 +318,7 @@ API가 없는 소스(Bloomberg 채권수익률 매트릭스·베타, 한공회 �
   - ✅ vintage 가 평가기준일 직전 최신판 → PASS(그 시점 이용가능 최신).
 - **LLM 프롬프트는 2차 레이어**(권고): "이 거시치는 {vintage} 기준 — 평가기준일 {date}에
   적합한지 확인" 안내. 하지만 강제는 가드가, 프롬프트는 보조(판단보조 원칙과 동일).
-- 교육 정본의 "Rf 가정과 위험프리미엄 가정 일관성"([[M사_DCF_교육_정본]] §3.2)의 시간축 판.
+- 교육 정본의 "Rf 가정과 위험프리미엄 가정 일관성"([[DCF_교육_정본]] §3.2)의 시간축 판.
   → 거시뿐 아니라 Rf·MRP·베타 vintage 도 같은 평가기준일 창에 정렬돼야 함(확장 적용).
 
 ### WACC 입력 (할인율 서식 로직 — 교육자료 근거)
@@ -331,9 +331,9 @@ API가 없는 소스(Bloomberg 채권수익률 매트릭스·베타, 한공회 �
 | **Size premium(CSRP)** | Deciles 1–10 | Duff&Phelps/Kroll(현 Kroll Cost of Capital) 복붙 |
 | **Kd 타인자본비용** | **신용등급×만기 회사채 수익률 매트릭스**; BBB-=최저투자등급; Moody's Baa proxy | KOFIABOND 등급별 민평수익률 / 신용등급=KIS·NICE·한기평, DART 사업보고서, **NICE-bizline(복붙)** |
 | **자본구조 D/E** | minority=현행 유지 / controlling=산업표준·최적 | peer 시총·부채 |
-> **검증(정합성)**: WARA ↔ IRR ↔ WACC reconciliation(PPA calibration, ±1% 이내) — D사 교육자료 강조. 감사인 트랙 테스트 항목으로도 재사용.
+> **검증(정합성)**: WARA ↔ IRR ↔ WACC reconciliation(PPA calibration, ±1% 이내) — 감사인 검토 방법론 자료 강조. 감사인 트랙 테스트 항목으로도 재사용.
 
-### ⭐ 외부 데이터 조달 갭·우선순위 (2026-07-18, M사 DCF 교육 정본 대조)
+### ⭐ 외부 데이터 조달 갭·우선순위 (2026-07-18, 참고 모델 DCF 교육 정본 대조)
 설계(macro_client·price_client·manual_paste)는 있으나 **커넥터는 아직 0개 구축**. 로컬 BYOK
 도구라 4대법인의 **Bloomberg(유료·API無)는 배제**, 무료 소스로 대체 — 교육 정본이 "평가인 직접
 계산 Daily beta(자산평가사·Local 법인)" 를 정당한 실무로 인정하므로 **β도 우리가 직접 계산 가능**.
@@ -384,8 +384,8 @@ vintage 고정)으로 받는 게 규칙. price_client 의 주가 look-ahead 가�
 
 ### 유사기업(peer) — WACC 정확도의 핵심 (사용자 강조)
 
-**선정 로직 = M사 할인율 서식 4-step 정본**(서식 `유사기업선정 Step0~3` + 클래시스
-리포트 실측 83→11→9→6사; 북 M사_리포트예시 §E·wacc_할인율서식 §1):
+**선정 로직 = 할인율 서식 4-step 정본**(서식 `유사기업선정 Step0~3` + 클래시스
+리포트 실측 83→11→9→6사; 북 리포트예시 §E·wacc_할인율서식 §1):
 
 | Step | 기준 | 담당 | 구현 |
 |---|---|---|---|
@@ -416,17 +416,17 @@ Skill 도구 `scripts/peer.py`(--seeds 역산 / --judgments 퍼널 실행).
 > `relative_valuation`(배수)} 구조로 — Brief ⑨(경쟁사 밸류 비교)가 초기 후보군 힌트.
 
 ### NOA/IBD 계정 분류 — EV→Equity bridge
-`fs_mapper.py`가 계정을 **영업/비영업(NOA)** 과 **이자부부채(IBD)** 로 분류 → DCF의 `(+)비영업자산 (−)순차입부채`(원본 H_FS D53-67) 정확 매핑. 참고: `NOA IBD 구분 참고자료.pdf` + S사/D사 교육자료.
+`fs_mapper.py`가 계정을 **영업/비영업(NOA)** 과 **이자부부채(IBD)** 로 분류 → DCF의 `(+)비영업자산 (−)순차입부채`(원본 H_FS D53-67) 정확 매핑. 참고: `NOA IBD 구분 참고자료.pdf` + 회계법인 교육자료.
 
 ### 참고자료 (docs/reference/로 색인)
-- `(M사) 2강 강의자료(배포용).xlsx` — STEP0-5 모델링 튜토리얼 + `유사회사FS`·`감가상각`·`BackData` 시트(구현 레퍼런스).
-- `0004-D사 외부평가보고서 검토 유의사항` — **감사인 트랙 직결**(외부평가 검토 체크리스트, WACC/beta/MRP/Kd 유의사항).
-- `0003-S사 밸류에이션 자료` — 할인율·CGU·Size premium 방법론.
+- `(참고 모델) 2강 강의자료(배포용).xlsx` — STEP0-5 모델링 튜토리얼 + `유사회사FS`·`감가상각`·`BackData` 시트(구현 레퍼런스).
+- `외부평가검토 자료 외부평가보고서 검토 유의사항` — **감사인 트랙 직결**(외부평가 검토 체크리스트, WACC/beta/MRP/Kd 유의사항).
+- `밸류에이션 방법론 자료` — 할인율·CGU·Size premium 방법론.
 - `NOA IBD 구분 참고자료.pdf`, 한공회 MRP 가이던스.
 
 ## Phase 3 — RAG + 가정 챗 (감린이 RAG 서버 포팅)
 
-3-코퍼스(기초/경영진자료/지식원천Big4) 분리 벡터DB. 챗이 매출추정·마진·WACC 가정을 제안하고, 부족 시 "경영진으로부터 ~자료 필요" 발화 → 답을 넣으면 **경영진 코퍼스에 별도 저장**(신뢰수준 태깅). Big4 의견서(로컬 13건: CJ·아모레퍼시픽·다산네트웍스·롯데케미칼…)에서 산업별 방법론·가정 선례 검색. 모든 가정에 **provenance 태그**.
+3-코퍼스(기초/경영진자료/지식원천대형 회계법인) 분리 벡터DB. 챗이 매출추정·마진·WACC 가정을 제안하고, 부족 시 "경영진으로부터 ~자료 필요" 발화 → 답을 넣으면 **경영진 코퍼스에 별도 저장**(신뢰수준 태깅). 외부평가의견서(로컬 13건: CJ·아모레퍼시픽·다산네트웍스·롯데케미칼…)에서 산업별 방법론·가정 선례 검색. 모든 가정에 **provenance 태그**.
 
 ## Phase 4 — Reporting + 웹↔엑셀 양방향 동기화
 
@@ -475,14 +475,14 @@ Skill 도구 `scripts/peer.py`(--seeds 역산 / --judgments 퍼널 실행).
 |---|---|---|
 | `services/rag-inference/main.py`,`models.py` | **이미 Python** FastAPI embed/rerank, `EMBED_MODEL`/`RERANK_MODEL` env 스왑, bge-m3 dense+sparse, scale-to-zero | `rag_inference/` **거의 직접 복사** |
 | `functions/chat/chatHandler.js:181-248` | 8단계 오케스트레이터: 쿼리변환→임베드→하이브리드+RRF→리랭크→(confusion gate)→**parent 확장**→grounded gen→**citation 검증(Self-RAG)** | `rag/retrieve.py` — parent확장·citation검증이 감사추적 핵심 |
-| `scripts/rag/build_chunks.mjs` | 통합 청크 스키마(authority tier=`gun`, `parent_id`, version, `clause_id` provenance) + `subsplit`(MAX 1100/WINDOW 900/OVERLAP 150, **표 atomic**) | `rag/chunker.py` — Big4 의견서를 방법론/할인율/성장률 섹션 provenance로 청킹 |
+| `scripts/rag/build_chunks.mjs` | 통합 청크 스키마(authority tier=`gun`, `parent_id`, version, `clause_id` provenance) + `subsplit`(MAX 1100/WINDOW 900/OVERLAP 150, **표 atomic**) | `rag/chunker.py` — 외부평가의견서를 방법론/할인율/성장률 섹션 provenance로 청킹 |
 | `scripts/rag/ingest.mjs` | **contextual-prefix**(LLM 없이 결정론적 온톨로지 문맥 프리픽스) + Qdrant dense+sparse RRF upsert | `rag/ingest.py` |
 | `scripts/lib/gradingRouter.js` | OpenAI 호환 멀티프로바이더 레지스트리 + RPM 슬라이딩윈도우 + 429/5xx 페일오버 | `llm/router.py` (Gemini→Groq) |
 | `js/services/ragService.js:558-685` | 결정론적 리랭크 부스트(정확 조항매치 +0.4, 타입 prior) 뉴럴점수와 블렌드 | `rag/retrieve.py` stage-b — 번호매긴 규제/조항에 고정밀 |
 | `scripts/rag/eval_metrics.mjs` | nDCG@k·Recall·MRR + 도메인지표, 회귀 게이트 | `rag/eval_metrics.py` — 골든셋 회귀 |
 | `js/services/geminiApi.js:48-73` | 4-레이어 캐스케이드 폴백(flash-lite→Groq→gemma), 타임아웃 즉시폴백 | `llm/router.py` 폴백 체인 |
 
-**핵심 원칙 이식(감사추적):** 작게 검색·작은 단위로 인용하되 parent 전문으로 grounding → 두 번째 LLM 패스가 각 인용을 근거와 대조해 미지원 인용 제거(faithfulness 0.95). 밸류에이션에선 "이 가정은 [S사 CJ의견서 §할인율]에 근거" 식 감사방어 인용으로 직결.
+**핵심 원칙 이식(감사추적):** 작게 검색·작은 단위로 인용하되 parent 전문으로 grounding → 두 번째 LLM 패스가 각 인용을 근거와 대조해 미지원 인용 제거(faithfulness 0.95). 밸류에이션에선 "이 가정은 [회계법인 CJ의견서 §할인율]에 근거" 식 감사방어 인용으로 직결.
 
 **골든 스냅샷 습관**: 감린이 Phase 0.3.5 "출력 0변경 증명" 방식 그대로 DCF 재현(Milestone 1)에 적용.
 

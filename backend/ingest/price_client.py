@@ -4,7 +4,7 @@
 pluggable**(OCR TextExtractor·임베더와 동일 패턴). FinanceDataReader/pykrx 는 lazy import —
 미설치여도 SyntheticProvider 로 전 로직 테스트 가능, 로컬 실사용 시 `pip install`.
 
-방법론([[M사_DCF_교육_정본]] §3.2): Bloomberg 2년 Weekly 또는 5년 Monthly 조정베타.
+방법론([[DCF_교육_정본]] §3.2): Bloomberg 2년 Weekly 또는 5년 Monthly 조정베타.
 조정베타 = 0.67·raw + 0.33·1.0(Marshall Blume). 회귀 Raw β = Cov(주식,시장)/Var(시장).
 
 ⭐ look-ahead 가드(vintage 원칙): 회귀 구간은 **평가기준일에서 끝난다** — 기준일 이후

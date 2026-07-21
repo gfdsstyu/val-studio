@@ -69,7 +69,7 @@
 
 ### 2.4 references/
 
-- `index.md` — 단계↔지식 바인딩 색인(1.5 표), M사 복제 금지 명시.
+- `index.md` — 단계↔지식 바인딩 색인(1.5 표), 참고 모델 복제 금지 명시.
 - `template_conventions.md` — 2.1 빌드가 생성(소스는 build 스크립트 내 문자열/편집 로직).
 - `account_dictionary.md` — 2.1 빌드가 생성.
 - 1.5 표 원본 md 복사(기업리서치_양식·참고보고서_활용 등 포함).
