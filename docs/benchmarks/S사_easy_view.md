@@ -1,7 +1,7 @@
-# 삼일PwC (PwC Easy View) UI/UX 벤치마크
+# S사 (S사 Easy View) UI/UX 벤치마크
 
 ## 개요
-이 문서는 업로드된 **'PwC Easy View for Tax preview'** 화면을 바탕으로 `valuation-platform (val-studio)`의 정통 엔터프라이즈(빅4) UI/UX 구현을 위한 가이드라인을 정의합니다.
+이 문서는 업로드된 **'S사 Easy View'** 화면을 바탕으로 `valuation-platform (val-studio)`의 정통 엔터프라이즈(빅4) UI/UX 구현을 위한 가이드라인을 정의합니다.
 
 ## 핵심 UI 원칙 (Enterprise Big 4 Aesthetic)
 
@@ -9,7 +9,7 @@
 무채색(화이트/그레이) 캔버스에 **브랜드 컬러(오렌지)를 포인트로만 강렬하게 사용**합니다.
 *   **Background (배경):** 옅은 회색 (`bg-gray-100`)을 사용하여 흰색 패널(Card)들이 돋보이도록 함.
 *   **Surface (패널):** 순백색 (`bg-white`).
-*   **Brand/Point Color:** PwC 고유의 오렌지색.
+*   **Brand/Point Color:** S사 고유의 오렌지색.
     *   상단 주요 KPI 위젯의 배경색 (백색 텍스트와 대비).
     *   사이드바/하단 탭의 '활성화(Active)' 상태 표시선 및 텍스트.
     *   테이블 헤더 텍스트 및 게이지 차트의 채움 색상.

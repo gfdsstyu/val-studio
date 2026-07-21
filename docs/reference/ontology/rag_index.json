@@ -1,16 +1,16 @@
 {
   "chapters": [
     {
-      "id": "deloitte_감사인검토_WACC방법론",
-      "path": "docs/reference/deloitte_감사인검토_WACC방법론.md",
-      "title": "Deloitte 외부평가보고서 검토 유의사항 + WACC 방법론 (감사인 트랙 정본)",
+      "id": "D사_감사인검토_WACC방법론",
+      "path": "docs/reference/D사_감사인검토_WACC방법론.md",
+      "title": "D사 외부평가보고서 검토 유의사항 + WACC 방법론 (감사인 트랙 정본)",
       "topic": "감사인 관점 WACC 방법론·검토 체크리스트 (Modified CAPM·Kroll size premium)",
       "track": "검증·감사인",
       "layer": "methodology",
       "parent": "밸류에이션_스코프_로드맵",
       "doc_type": "knowledge",
       "keywords": [
-        "Deloitte",
+        "D사",
         "Modified CAPM",
         "Kroll",
         "Duff Phelps",
@@ -232,10 +232,10 @@
       "has_frontmatter": true
     },
     {
-      "id": "msvalue_DCF_교육_정본",
-      "path": "docs/reference/msvalue_DCF_교육_정본.md",
-      "title": "MSVALUE DCF 교육 정본 — 도식 중심 정리",
-      "topic": "MSVALUE DCF 교육 정본 — 평가접근법·FCFF/FCFE·재무제표 재분류·FCFF 산출·WACC·영구가치(도식 포함)",
+      "id": "M사_DCF_교육_정본",
+      "path": "docs/reference/M사_DCF_교육_정본.md",
+      "title": "M사 DCF 교육 정본 — 도식 중심 정리",
+      "topic": "M사 DCF 교육 정본 — 평가접근법·FCFF/FCFE·재무제표 재분류·FCFF 산출·WACC·영구가치(도식 포함)",
       "track": "손상·FV",
       "layer": "methodology",
       "parent": "모델링_실무_2강4강",
@@ -298,9 +298,9 @@
         "손상 사용가치(VIU)의 추정기간 상한은?"
       ],
       "links": [
+        "D사_감사인검토_WACC방법론",
         "MnA_실사_가격구조_SPA",
-        "deloitte_감사인검토_WACC방법론",
-        "msvalue_리포트예시_클래시스",
+        "M사_리포트예시_클래시스",
         "검증_클래시스_DCF",
         "모델링_실무_2강4강",
         "밸류에이션_스코프_로드맵",
@@ -311,9 +311,9 @@
       "has_frontmatter": true
     },
     {
-      "id": "msvalue_리포트예시_클래시스",
-      "path": "docs/reference/msvalue_리포트예시_클래시스.md",
-      "title": "MSVALUE 리포트 예시 (클래시스) — 최종 리포트 양식 정본 명세",
+      "id": "M사_리포트예시_클래시스",
+      "path": "docs/reference/M사_리포트예시_클래시스.md",
+      "title": "M사 리포트 예시 (클래시스) — 최종 리포트 양식 정본 명세",
       "topic": "밸류에이션 리포트 양식 + 미용의료기기 peer + 상세 추정가정",
       "track": "거래평가·DCF",
       "layer": "practice",
@@ -407,7 +407,7 @@
         "TAB(세금상각편익)는 무엇이고 왜 더하나?"
       ],
       "links": [
-        "deloitte_감사인검토_WACC방법론",
+        "D사_감사인검토_WACC방법론",
         "밸류에이션_스코프_로드맵",
         "손상검사_impairment"
       ],
@@ -444,8 +444,35 @@
       "has_frontmatter": true
     },
     {
-      "id": "xDCF_계정분류_모델아키텍처",
-      "path": "docs/reference/xDCF_계정분류_모델아키텍처.md",
+      "id": "검증_클래시스_DCF",
+      "path": "docs/reference/검증_클래시스_DCF.md",
+      "title": "엔진 검증 — 클래시스 DCF (2차 실사례)",
+      "topic": "엔진 검증 사례 — 클래시스 DCF 재현 + 세금주입·터미널정규화",
+      "track": "검증·감사인",
+      "layer": "practice",
+      "parent": "모델링_실무_2강4강",
+      "doc_type": "reference",
+      "keywords": [
+        "클래시스",
+        "검증",
+        "골든",
+        "세금주입",
+        "tax_override",
+        "터미널 정규화",
+        "terminal_fcff_override",
+        "WACC≈g"
+      ],
+      "canonical_questions": [
+        "클래시스 DCF를 엔진으로 재현하면?",
+        "세금·터미널 처리 차이는?",
+        "WACC와 g가 가까우면 터미널이 왜 폭발하나?"
+      ],
+      "links": [],
+      "has_frontmatter": true
+    },
+    {
+      "id": "계정분류_모델아키텍처",
+      "path": "docs/reference/계정분류_모델아키텍처.md",
       "title": "DCF 계정분류 체계 & 자동화 모델 아키텍처",
       "topic": "DCF 계정분류·추정방법 taxonomy + 자동화 모델 아키텍처",
       "track": "파서·인제스트",
@@ -483,38 +510,11 @@
         "재무제표를 DCF 모델로 자동 변환하는 서비스의 구조는?"
       ],
       "links": [
-        "deloitte_감사인검토_WACC방법론",
+        "D사_감사인검토_WACC방법론",
         "모델링_실무_2강4강",
         "영구성장률_PGR_적합성",
         "외부평가의견서_활용"
       ],
-      "has_frontmatter": true
-    },
-    {
-      "id": "검증_클래시스_DCF",
-      "path": "docs/reference/검증_클래시스_DCF.md",
-      "title": "엔진 검증 — 클래시스 DCF (2차 실사례)",
-      "topic": "엔진 검증 사례 — 클래시스 DCF 재현 + 세금주입·터미널정규화",
-      "track": "검증·감사인",
-      "layer": "practice",
-      "parent": "모델링_실무_2강4강",
-      "doc_type": "reference",
-      "keywords": [
-        "클래시스",
-        "검증",
-        "골든",
-        "세금주입",
-        "tax_override",
-        "터미널 정규화",
-        "terminal_fcff_override",
-        "WACC≈g"
-      ],
-      "canonical_questions": [
-        "클래시스 DCF를 엔진으로 재현하면?",
-        "세금·터미널 처리 차이는?",
-        "WACC와 g가 가까우면 터미널이 왜 폭발하나?"
-      ],
-      "links": [],
       "has_frontmatter": true
     },
     {
@@ -586,7 +586,7 @@
     {
       "id": "모델링_실무_2강4강",
       "path": "docs/reference/모델링_실무_2강4강.md",
-      "title": "DCF 모델링 실무 (MSVALUE 2강·4강)",
+      "title": "DCF 모델링 실무 (M사 2강·4강)",
       "topic": "DCF 매출추정 P×Q 사업유형 + Finalize 체크리스트",
       "track": "거래평가·DCF",
       "layer": "methodology",
@@ -696,9 +696,9 @@
         "DCF 말고 어떤 평가방법론이 있나?"
       ],
       "links": [
+        "D사_감사인검토_WACC방법론",
         "MnA_구조화_합병규제_세무",
-        "deloitte_감사인검토_WACC방법론",
-        "msvalue_DCF_교육_정본",
+        "M사_DCF_교육_정본",
         "손상검사_impairment",
         "외부평가의견서_활용",
         "파서_아키텍처_매트릭스",
@@ -816,7 +816,7 @@
       ],
       "links": [
         "FDD_재무실사_정상화",
-        "msvalue_리포트예시_클래시스"
+        "M사_리포트예시_클래시스"
       ],
       "has_frontmatter": true
     },
@@ -852,7 +852,7 @@
         "손상차손은 어떤 순서로 인식하나?"
       ],
       "links": [
-        "deloitte_감사인검토_WACC방법론",
+        "D사_감사인검토_WACC방법론",
         "밸류에이션_스코프_로드맵"
       ],
       "has_frontmatter": true
@@ -1092,7 +1092,7 @@
         "복합금융상품 평가에서 이자율 커브는 왜 필요한가?"
       ],
       "links": [
-        "deloitte_감사인검토_WACC방법론",
+        "D사_감사인검토_WACC방법론",
         "복합금융상품_평가",
         "외부평가의견서_고정양식_구조"
       ],

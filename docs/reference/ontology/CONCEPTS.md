@@ -7,18 +7,18 @@
   - 🧱 **베타_Bloomberg_vs_KICPA** (foundation) — 베타(β) 산출: Bloomberg(S&P500) vs KICPA(KOSPI) + CAPM 한계
   - 🧱 **영구성장률_PGR_적합성** (foundation) — 영구성장률(Terminal Growth Rate) 적합성 — 0~1% vs 2~4%
   - 🧱 **채권_기간구조_할인율기초** (foundation) — 채권수익률 기간구조·위험구조 — 할인율·옵션평가의 기초
+  - 📐 **D사_감사인검토_WACC방법론** (methodology) — 감사인 관점 WACC 방법론·검토 체크리스트 (Modified CAPM·Kroll size premium)
   - 📐 **FDD_재무실사_정상화** (methodology) — 재무실사(FDD) — QOE·NWC·정상화(Normalization)
     - 📐 **MnA_실사_가격구조_SPA** (methodology) — M&A 실사(DD)·인수가격 결정구조·주식매매계약(SPA) — 실사 3단계, QoE 조정 사다리, Net D
       - 🛠 **MnA_사례집_유형별_시사점** (practice) — M&A 사례집 10선 — 유형별(동종·유관·다각화·CrossBorder·PEF·SPAC·회생·U-turn·스
   - 📐 **PPA_무형자산평가** (methodology) — PPA(매수가격배분) 무형자산 평가 — MEEM·RFRM·TAB
-  - 📐 **deloitte_감사인검토_WACC방법론** (methodology) — 감사인 관점 WACC 방법론·검토 체크리스트 (Modified CAPM·Kroll size premium)
   - 📐 **wacc_할인율서식** (methodology) — WACC 할인율 서식의 셀 수식 논리 (Hamada·규모별세율·베타옵션)
   - 📐 **기업리서치_양식** (methodology) — 기업 리서치 정본 양식 — Company Brief 10섹션 (0단계 기업·산업 이해 산출물)
   - 📐 **모델링_실무_2강4강** (methodology) — DCF 매출추정 P×Q 사업유형 + Finalize 체크리스트
-    - 📐 **msvalue_DCF_교육_정본** (methodology) — MSVALUE DCF 교육 정본 — 평가접근법·FCFF/FCFE·재무제표 재분류·FCFF 산출·WACC·영구
+    - 📐 **M사_DCF_교육_정본** (methodology) — M사 DCF 교육 정본 — 평가접근법·FCFF/FCFE·재무제표 재분류·FCFF 산출·WACC·영구가치(도식
     - 📐 **모델링_워크플로우_기초** (methodology) — 모델링 워크플로우 기초 — 업무 프로세스 8단계·모델러 역할·엑셀 규율(가독성/무결성)
       - 📐 **장표_작성법** (methodology) — 장표(슬라이드) 작성법 — 메시지 우선·MECE 축·차트 선택 정본 (리포트 단계 산출물 규율)
-    - 🛠 **msvalue_리포트예시_클래시스** (practice) — 밸류에이션 리포트 양식 + 미용의료기기 peer + 상세 추정가정
+    - 🛠 **M사_리포트예시_클래시스** (practice) — 밸류에이션 리포트 양식 + 미용의료기기 peer + 상세 추정가정
     - 🛠 **peer_dcf_클래시스_솔루엠** (practice) — 동종업종 실무 DCF 가정·로직·CAPM (클래시스·솔루엠)
     - 🛠 **검증_클래시스_DCF** (practice) — 엔진 검증 사례 — 클래시스 DCF 재현 + 세금주입·터미널정규화
   - 📐 **복합금융상품_평가** (methodology) — 복합금융상품 평가 — 전환사채(CB)·RCPS·신주인수권(BW) 옵션평가
@@ -28,7 +28,7 @@
     - 📐 **MnA_구조화_합병규제_세무** (methodology) — M&A 구조화(양수도·합병·분할·주식교환)와 합병가액 법제·적격합병 세무
   - 🔩 **앤트로픽_금융스킬_벤치마크** (infrastructure) — Anthropic 공식 금융 스킬(dcf-model·audit-xls·comps·lbo·finance 플러그
   - 🔩 **파서_아키텍처_매트릭스** (infrastructure) — 파서 아키텍처 — 불러오기 방식 × 자료유형 매트릭스
-    - 🔩 **xDCF_계정분류_모델아키텍처** (infrastructure) — DCF 계정분류·추정방법 taxonomy + 자동화 모델 아키텍처
+    - 🔩 **계정분류_모델아키텍처** (infrastructure) — DCF 계정분류·추정방법 taxonomy + 자동화 모델 아키텍처
     - 🛠 **외부평가의견서_활용** (practice) — 외부평가의견서 활용 — 방법론 taxonomy·감사인 트랙·리포트 정형문구
       - 🛠 **외부평가의견서_고정양식_구조** (practice) — 외부평가의견서 고정 양식 — 고정부(skeleton) vs 가변부(slot) 구조
     - 🛠 **참고보고서_활용** (practice) — 증권사·산업 리포트를 RAG 지식원천으로 — 산업 CAGR·컨센서스
@@ -39,18 +39,18 @@
 ### 거래평가·DCF
 - **M&A 구조화·합병 규제가액·세무 — Structuring 정본** ([MnA_구조화_합병규제_세무](MnA_구조화_합병규제_세무.md)) — M&A 구조화(양수도·합병·분할·주식교환)와 합병가액 법제·적격합병 세무
 - **M&A 사례집 10선 — 유형별 구조·시사점** ([MnA_사례집_유형별_시사점](MnA_사례집_유형별_시사점.md)) — M&A 사례집 10선 — 유형별(동종·유관·다각화·CrossBorder·PEF·SPAC·회생·U-turn·스타트업) 구조와 실무 시사점
-- **MSVALUE 리포트 예시 (클래시스) — 최종 리포트 양식 정본 명세** ([msvalue_리포트예시_클래시스](msvalue_리포트예시_클래시스.md)) — 밸류에이션 리포트 양식 + 미용의료기기 peer + 상세 추정가정
+- **M사 리포트 예시 (클래시스) — 최종 리포트 양식 정본 명세** ([M사_리포트예시_클래시스](M사_리포트예시_클래시스.md)) — 밸류에이션 리포트 양식 + 미용의료기기 peer + 상세 추정가정
 - **Peer/실무 DCF 템플릿 명세 — 클래시스·솔루엠** ([peer_dcf_클래시스_솔루엠](peer_dcf_클래시스_솔루엠.md)) — 동종업종 실무 DCF 가정·로직·CAPM (클래시스·솔루엠)
 - **할인율(WACC) 서식·강의자료 — 시트 논리 정본 명세** ([wacc_할인율서식](wacc_할인율서식.md)) — WACC 할인율 서식의 셀 수식 논리 (Hamada·규모별세율·베타옵션)
 - **모델러스 통합모델 5.4 — 3표 연결 + DCF + Trading Comps 정본** ([모델러스_통합모델_5.4](모델러스_통합모델_5.4.md)) — 통합 3표 연결모델 + DCF + Trading Comps (트레이닝 정본)
-- **DCF 모델링 실무 (MSVALUE 2강·4강)** ([모델링_실무_2강4강](모델링_실무_2강4강.md)) — DCF 매출추정 P×Q 사업유형 + Finalize 체크리스트
+- **DCF 모델링 실무 (M사 2강·4강)** ([모델링_실무_2강4강](모델링_실무_2강4강.md)) — DCF 매출추정 P×Q 사업유형 + Finalize 체크리스트
 - **베타(β) 산출: Bloomberg β vs KICPA β** ([베타_Bloomberg_vs_KICPA](베타_Bloomberg_vs_KICPA.md)) — 베타(β) 산출: Bloomberg(S&P500) vs KICPA(KOSPI) + CAPM 한계
 - **영구성장률(Perpetual/Terminal Growth Rate) 적합성** ([영구성장률_PGR_적합성](영구성장률_PGR_적합성.md)) — 영구성장률(Terminal Growth Rate) 적합성 — 0~1% vs 2~4%
 - **장표 작성법 — 리포트 단계의 산출물 규율** ([장표_작성법](장표_작성법.md)) — 장표(슬라이드) 작성법 — 메시지 우선·MECE 축·차트 선택 정본 (리포트 단계 산출물 규율)
 - **합병·주식교환 평가 방법론 (두산 사례)** ([합병_주식교환_방법론](합병_주식교환_방법론.md)) — 합병·주식교환 평가방법 (상장=기준주가 / 비상장=본질가치)
 
 ### 검증·감사인
-- **Deloitte 외부평가보고서 검토 유의사항 + WACC 방법론 (감사인 트랙 정본)** ([deloitte_감사인검토_WACC방법론](deloitte_감사인검토_WACC방법론.md)) — 감사인 관점 WACC 방법론·검토 체크리스트 (Modified CAPM·Kroll size premium)
+- **D사 외부평가보고서 검토 유의사항 + WACC 방법론 (감사인 트랙 정본)** ([D사_감사인검토_WACC방법론](D사_감사인검토_WACC방법론.md)) — 감사인 관점 WACC 방법론·검토 체크리스트 (Modified CAPM·Kroll size premium)
 - **엔진 검증 — 클래시스 DCF (2차 실사례)** ([검증_클래시스_DCF](검증_클래시스_DCF.md)) — 엔진 검증 사례 — 클래시스 DCF 재현 + 세금주입·터미널정규화
 - **Anthropic 공식 금융 스킬 벤치마크 (2026-07-17 원문 감사)** ([앤트로픽_금융스킬_벤치마크](앤트로픽_금융스킬_벤치마크.md)) — Anthropic 공식 금융 스킬(dcf-model·audit-xls·comps·lbo·finance 플러그인) 벤치마크 — 채택 규약과 우리 대비
 - **외부평가의견서 고정 양식 — 고정부 vs 가변부** ([외부평가의견서_고정양식_구조](외부평가의견서_고정양식_구조.md)) — 외부평가의견서 고정 양식 — 고정부(skeleton) vs 가변부(slot) 구조
@@ -67,7 +67,7 @@
 - **복합금융상품 평가 (CB·RCPS·BW) — ⏳ 미래 트랙** ([복합금융상품_평가](복합금융상품_평가.md)) — 복합금융상품 평가 — 전환사채(CB)·RCPS·신주인수권(BW) 옵션평가
 
 ### 손상·FV
-- **MSVALUE DCF 교육 정본 — 도식 중심 정리** ([msvalue_DCF_교육_정본](msvalue_DCF_교육_정본.md)) — MSVALUE DCF 교육 정본 — 평가접근법·FCFF/FCFE·재무제표 재분류·FCFF 산출·WACC·영구가치(도식 포함)
+- **M사 DCF 교육 정본 — 도식 중심 정리** ([M사_DCF_교육_정본](M사_DCF_교육_정본.md)) — M사 DCF 교육 정본 — 평가접근법·FCFF/FCFE·재무제표 재분류·FCFF 산출·WACC·영구가치(도식 포함)
 - **PPA 무형자산 평가 (MEEM·RFRM) — ⏳ 미래 트랙** ([PPA_무형자산평가](PPA_무형자산평가.md)) — PPA(매수가격배분) 무형자산 평가 — MEEM·RFRM·TAB
 - **손상검사 (Impairment Test)** ([손상검사_impairment](손상검사_impairment.md)) — 손상검사(Impairment Test) — CGU·회수가능액·사용가치 DCF
 
@@ -75,33 +75,33 @@
 - **재무실사(FDD) — QOE·NWC·정상화** ([FDD_재무실사_정상화](FDD_재무실사_정상화.md)) — 재무실사(FDD) — QOE·NWC·정상화(Normalization)
 
 ### 파서·인제스트
-- **DCF 계정분류 체계 & 자동화 모델 아키텍처** ([xDCF_계정분류_모델아키텍처](xDCF_계정분류_모델아키텍처.md)) — DCF 계정분류·추정방법 taxonomy + 자동화 모델 아키텍처
+- **DCF 계정분류 체계 & 자동화 모델 아키텍처** ([계정분류_모델아키텍처](계정분류_모델아키텍처.md)) — DCF 계정분류·추정방법 taxonomy + 자동화 모델 아키텍처
 - **DART 외부평가기관 평가의견서 — 활용 설계** ([외부평가의견서_활용](외부평가의견서_활용.md)) — 외부평가의견서 활용 — 방법론 taxonomy·감사인 트랙·리포트 정형문구
 - **참고보고서(증권사·산업 IR 리포트) 활용 설계** ([참고보고서_활용](참고보고서_활용.md)) — 증권사·산업 리포트를 RAG 지식원천으로 — 산업 CAGR·컨센서스
 - **파서 아키텍처 — 불러오기 방식 × 자료유형 매트릭스** ([파서_아키텍처_매트릭스](파서_아키텍처_매트릭스.md)) — 파서 아키텍처 — 불러오기 방식 × 자료유형 매트릭스
 
 ## 다중 챕터 개념(교차 주제)
 - **본질가치**: MnA_구조화_합병규제_세무, 밸류에이션_스코프_로드맵, 합병_주식교환_방법론
-- **CAPM**: msvalue_DCF_교육_정본, msvalue_리포트예시_클래시스, peer_dcf_클래시스_솔루엠
-- **Hamada**: msvalue_DCF_교육_정본, wacc_할인율서식, 외부평가의견서_고정양식_구조
-- **영구성장률**: msvalue_DCF_교육_정본, 영구성장률_PGR_적합성, 외부평가의견서_고정양식_구조
-- **클래시스**: msvalue_리포트예시_클래시스, peer_dcf_클래시스_솔루엠, 검증_클래시스_DCF
+- **CAPM**: M사_DCF_교육_정본, M사_리포트예시_클래시스, peer_dcf_클래시스_솔루엠
+- **Hamada**: M사_DCF_교육_정본, wacc_할인율서식, 외부평가의견서_고정양식_구조
+- **영구성장률**: M사_DCF_교육_정본, 영구성장률_PGR_적합성, 외부평가의견서_고정양식_구조
+- **클래시스**: M사_리포트예시_클래시스, peer_dcf_클래시스_솔루엠, 검증_클래시스_DCF
 - **베타**: peer_dcf_클래시스_솔루엠, wacc_할인율서식, 베타_Bloomberg_vs_KICPA
 - **외부평가의견서**: 외부평가의견서_고정양식_구조, 외부평가의견서_활용, 파서_아키텍처_매트릭스
-- **Duff Phelps**: deloitte_감사인검토_WACC방법론, msvalue_DCF_교육_정본
-- **CSRP**: deloitte_감사인검토_WACC방법론, 베타_Bloomberg_vs_KICPA
-- **WARA**: PPA_무형자산평가, deloitte_감사인검토_WACC방법론
+- **Duff Phelps**: D사_감사인검토_WACC방법론, M사_DCF_교육_정본
+- **CSRP**: D사_감사인검토_WACC방법론, 베타_Bloomberg_vs_KICPA
+- **WARA**: D사_감사인검토_WACC방법론, PPA_무형자산평가
 - **normalization**: FDD_재무실사_정상화, 상대가치_계절성_LTM
-- **순운전자본**: FDD_재무실사_정상화, msvalue_DCF_교육_정본
+- **순운전자본**: FDD_재무실사_정상화, M사_DCF_교육_정본
 - **M&A**: MnA_구조화_합병규제_세무, MnA_실사_가격구조_SPA
 - **자산양수도**: MnA_구조화_합병규제_세무, 외부평가의견서_활용
 - **합병**: MnA_구조화_합병규제_세무, 합병_주식교환_방법론
 - **주식교환**: MnA_구조화_합병규제_세무, 합병_주식교환_방법론
-- **Value Chain**: msvalue_DCF_교육_정본, 기업리서치_양식
-- **WACC**: msvalue_DCF_교육_정본, wacc_할인율서식
-- **Rf**: msvalue_DCF_교육_정본, 채권_기간구조_할인율기초
-- **MRP**: msvalue_DCF_교육_정본, 베타_Bloomberg_vs_KICPA
-- **사용가치**: msvalue_DCF_교육_정본, 손상검사_impairment
+- **Value Chain**: M사_DCF_교육_정본, 기업리서치_양식
+- **WACC**: M사_DCF_교육_정본, wacc_할인율서식
+- **Rf**: M사_DCF_교육_정본, 채권_기간구조_할인율기초
+- **MRP**: M사_DCF_교육_정본, 베타_Bloomberg_vs_KICPA
+- **사용가치**: M사_DCF_교육_정본, 손상검사_impairment
 - **PPA**: PPA_무형자산평가, 밸류에이션_스코프_로드맵
 - **모델링**: 모델링_실무_2강4강, 모델링_워크플로우_기초
 - **Leveling**: 모델링_워크플로우_기초, 장표_작성법

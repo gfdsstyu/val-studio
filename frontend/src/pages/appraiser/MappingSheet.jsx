@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { api } from "../../api.js";
 
 /* 1.계정분류 — pl(손익)·bs(BS NOA/IBD). 계정 → 밸류에이션 버킷 수동 매핑.
-   자동 분류(LLM)는 후속 — v1 은 유저 수동(정확성 우선, xDCF 자동분류 Sales 오분류 약점 회피).
+   자동 분류(LLM)는 후속 — v1 은 유저 수동(정확성 우선, 타사 자동분류 Sales 오분류 약점 회피).
    PL 버킷: Sales/COGS/SGA/NonOp. BS 버킷: WC(운전자본)/FA(유형)/NOA(비영업)/IBD(이자부부채)/EQU.
    BS 의 NOA/IBD 분류는 EV→Equity 브리지(비영업자산 +, 순차입부채 −)에 직결. */
 

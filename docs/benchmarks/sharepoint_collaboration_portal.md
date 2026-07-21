@@ -1,7 +1,7 @@
 # SharePoint 기반 연결결산/감사 협업 포털 UI 벤치마크
 
 ## 개요
-이 문서는 업로드된 **'ABC홀딩스 연결플랫폼 (SharePoint 기반)'** 화면을 바탕으로 `valuation-platform (val-studio)`의 **클라이언트 협업 및 파일 관리(Document Management)** 화면 설계를 위한 가이드라인을 정의합니다. 삼일회계법인 등 빅4가 실제 클라이언트와 엑셀 패키지를 주고받을 때 사용하는 전형적인 포털 화면입니다.
+이 문서는 업로드된 **'ABC홀딩스 연결플랫폼 (SharePoint 기반)'** 화면을 바탕으로 `valuation-platform (val-studio)`의 **클라이언트 협업 및 파일 관리(Document Management)** 화면 설계를 위한 가이드라인을 정의합니다. S사회계법인 등 빅4가 실제 클라이언트와 엑셀 패키지를 주고받을 때 사용하는 전형적인 포털 화면입니다.
 
 ## 핵심 UI 원칙 (Minimalist Document Portal)
 
@@ -20,7 +20,7 @@
     1.  **아이콘:** 좌측에 엑셀(.xlsm) 전용 아이콘 배치.
     2.  **파일명:** 파일명은 가장 길기 때문에 좌측 정렬.
     3.  **시간:** 상대적 시간 표기 ("1분 전", "어제 5:16 PM").
-    4.  **작성자/역할:** 담당자명 명시 ("ABC홀딩스 관리회계팀장", "삼일회계법인 S 회계사").
+    4.  **작성자/역할:** 담당자명 명시 ("ABC홀딩스 관리회계팀장", "S사회계법인 S 회계사").
 
 ### 3. 색상 (Color Palette)
 *   **메인 텍스트:** 검은색 가까운 짙은 회색 (`text-gray-900`).
@@ -73,7 +73,7 @@
       </div>
       <div class="flex-1 text-gray-900">ABC그룹패키지_202306_F부문.xlsm</div>
       <div class="w-48 text-gray-500 text-sm">1시간 전</div>
-      <div class="w-64 text-gray-900 text-sm">삼일회계법인 S 회계사</div>
+      <div class="w-64 text-gray-900 text-sm">S사회계법인 S 회계사</div>
     </div>
   </div>
 </div>

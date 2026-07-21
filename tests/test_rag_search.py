@@ -37,7 +37,7 @@ def test_impairment_query():
 
 def test_wacc_audit_query():
     top = _top("감사인은 WACC를 어떻게 검토하나")
-    assert "deloitte_감사인검토_WACC방법론" in top[:2], top
+    assert "D사_감사인검토_WACC방법론" in top[:2], top
 
 
 def test_meem_query():

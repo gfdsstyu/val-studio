@@ -7,7 +7,7 @@
 셀: 숫자 `<v>`, 문자열 `<c t="inlineStr"><is><t>`, 수식 `<f>expr</f><v>cached</v>`.
 외부 xlsx 호환(2026-07 실측 보강): `t="s"`(sharedStrings)·`t="str"`(수식의 문자열
 결과 — 예: `="Downside"`)·`t="b"`/`t="e"` 도 처리. 이전엔 t="str" 을 숫자로 강제
-변환하다 크래시(MSVALUE 리포트 예시로 발견).
+변환하다 크래시(M사 리포트 예시로 발견).
 """
 from __future__ import annotations
 

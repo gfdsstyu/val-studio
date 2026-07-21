@@ -1,4 +1,4 @@
-"""터미널 정규화 WC 재조정 테스트 — MSVALUE 정본 §Normalized CF 과대계상 방어.
+"""터미널 정규화 WC 재조정 테스트 — M사 정본 §Normalized CF 과대계상 방어.
 
 정본 예시: 추정말매출 1,100, g=3%, WC/매출=30% → 옳은 터미널 WC 투자 = 1,100×3%×30% = 9.9.
 기본값(ΔWC=0)은 이 투자를 안 빼 FCFF·TV 과대계상. terminal_wc_ratio 로 정본 공식 반영.
@@ -50,7 +50,7 @@ def test_default_overstates_vs_normalized():
     assert close(base_norm.terminal_value, (1133.0 - 9.9) / 0.07)
 
 
-def test_wc_normalization_matches_msvalue_formula():
+def test_wc_normalization_matches_reference_formula():
     # 정본 공식 직접 확인: 터미널 WC 투자 = 추정말매출 × g × 비율
     inp = _inp(terminal_wc_ratio=0.30)
     expected_wc = 1100.0 * 0.03 * 0.30              # = 9.9

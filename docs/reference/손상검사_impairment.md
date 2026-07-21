@@ -15,7 +15,7 @@ doc_type: knowledge
 
 > **밸류에이션의 다른 목적축.** 우리 북 대부분은 "합병·양수도 평가"(계속기업 DCF, 거래가치)지만,
 > 손상검사는 **자산 장부금액이 회수가능한가**를 보는 회계목적 평가다. DCF를 쓰되 **규칙이 다르다**.
-> 출처: joy-accounting.netlify.app(회계 실무 블로그). 삼일 Fulcrum CGU 조각([[deloitte_감사인검토_WACC방법론]])과 연결.
+> 출처: joy-accounting.netlify.app(회계 실무 블로그). S사 자료 CGU 조각([[D사_감사인검토_WACC방법론]])과 연결.
 
 ---
 
@@ -37,7 +37,7 @@ doc_type: knowledge
 | 할인율 | **세전**(기준서) | 시장 기준 |
 | 처분비용 | 미차감 | **차감** |
 > **손상 = VIU 중심**이지만 FVLCD가 더 크면 그걸로. FV 평가(합병·양수도·PPA)는 market-participant
-> 기준이라 VIU와 규칙이 다르다 — 삼일 Fulcrum도 이 경계·CGU를 다룸([[deloitte_감사인검토_WACC방법론]]).
+> 기준이라 VIU와 규칙이 다르다 — S사 자료도 이 경계·CGU를 다룸([[D사_감사인검토_WACC방법론]]).
 
 ## 2. CGU (현금창출단위, Cash-Generating Unit)
 - 개별 자산이 **독립적 현금흐름을 못 내면**, 현금흐름을 공유하는 최소 자산군(CGU)으로 묶어 평가.

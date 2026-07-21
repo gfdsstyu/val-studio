@@ -80,7 +80,7 @@ def _header(s, title: str) -> None:
 
 # ── W1 Assumption (가정 SSOT) ─────────────────────────────────────────────────
 def build_assumption(wb, n: int = 5):
-    """가정 SSOT(MSVALUE Assumption 시트). 모든 가정의 단일 소스 — Fcst/Capex_Dep/WC/WACC 가
+    """가정 SSOT(M사 Assumption 시트). 모든 가정의 단일 소스 — Fcst/Capex_Dep/WC/WACC 가
     Green 참조("hard number 1곳" 절차화). 값=Research 근거로 평가인 확정(연도별 [입력])."""
     s = wb.add_sheet("Assumption")
     _header(s, "Assumption — 가정 SSOT (하류 시트 Green 참조)")
@@ -427,7 +427,7 @@ def build_wc(wb, n: int = 5):
 def build_peer(wb, n: int = 5):
     """W5 유사회사 선정 — 4-step 퍼널(peer.py 게이트) + 확정 peer 무부채화(Hamada 살아있는 수식).
 
-    정본: 할인율서식 §1(Step0~3)·MSVALUE §E(83→11→9→6). Step2(사업유사성)만 판단,
+    정본: 할인율서식 §1(Step0~3)·M사 §E(83→11→9→6). Step2(사업유사성)만 판단,
     나머지(코드·비중·베타포인트·거래정지) 결정론. 확정 peer 평균 βu·자본구조 → WACC 시트."""
     s = wb.add_sheet("Peer")
     _header(s, "Peer — 유사회사 선정 4-step + 무부채화 (peer.py 미러)")

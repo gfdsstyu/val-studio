@@ -2,7 +2,7 @@
 """유사회사(peer) 선정 4-step 퍼널 (Skill 도구, W5) — 웹 /api/peer/select 미러.
 
 벤더 `ingest.peer_selection`(정본 엔진) 얇은 래퍼. 웹 PeerSheet 와 **같은 엔진·같은 결과**.
-방법론: 할인율서식 §1(Step0~3) + MSVALUE §E(83→11→9→6). Step2(사업유사성)만 LLM 판정,
+방법론: 할인율서식 §1(Step0~3) + M사 §E(83→11→9→6). Step2(사업유사성)만 LLM 판정,
 나머지(코드·매출비중·베타포인트·거래정지)는 결정론. uncertain 은 자동 탈락 금지 → ⚖️큐.
 
 입력 (stdin, JSON):

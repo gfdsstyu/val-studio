@@ -41,7 +41,7 @@
 **`scripts/build_excel_skill.py`** (레포 루트):
 - 빌드 전 `docs/reference/ontology/build.py` 재실행 (온톨로지 drift 방지).
 - **vendor 복사**: `backend/calc_core/` → `scripts/vendor/calc_core/`, `ingest/validators.py`, `excel/{xlsx_writer,xlsx_reader,dcf_export,dcf_import,workbook_diff}.py`, `backend/rag/{searcher,embedder,__init__}.py`, `docs/reference/ontology/{graph,rag_index}.json` + `docs/reference/*.md`.
-- **references 복사**: 1.5 표 매핑대로 `docs/reference/*.md` → 스킬 `references/`. `account_dictionary.md` 생성(xDCF §2 taxonomy 기반 표준 계정 사전·동의어). `template_conventions.md` 편집 생성(Val-Studio 시트 아키텍처 1.3b 정본 + 색상 규약 + 함수 화이트리스트).
+- **references 복사**: 1.5 표 매핑대로 `docs/reference/*.md` → 스킬 `references/`. `account_dictionary.md` 생성(타사 §2 taxonomy 기반 표준 계정 사전·동의어). `template_conventions.md` 편집 생성(Val-Studio 시트 아키텍처 1.3b 정본 + 색상 규약 + 함수 화이트리스트).
 - **패키징**: `dist/excel-valuation-workbook.zip`.
 - **SHA256 동기 매니페스트**: vendor ↔ backend 원본 해시 기록(테스트에서 drift 검사).
 
@@ -69,7 +69,7 @@
 
 ### 2.4 references/
 
-- `index.md` — 단계↔지식 바인딩 색인(1.5 표), MSVALUE 복제 금지 명시.
+- `index.md` — 단계↔지식 바인딩 색인(1.5 표), M사 복제 금지 명시.
 - `template_conventions.md` — 2.1 빌드가 생성(소스는 build 스크립트 내 문자열/편집 로직).
 - `account_dictionary.md` — 2.1 빌드가 생성.
 - 1.5 표 원본 md 복사(기업리서치_양식·참고보고서_활용 등 포함).

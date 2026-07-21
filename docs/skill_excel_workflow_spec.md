@@ -117,7 +117,7 @@ Anthropic 금융스킬의 Office.js↔openpyxl 이중환경 패턴 채택.
 
 두 모드 모두 `_VS_STATE` 시트(1.7)를 함께 생성.
 
-### 1.3b 점진 성장 풀모델 + 자체 시트 아키텍처 (MSVALUE 비복제)
+### 1.3b 점진 성장 풀모델 + 자체 시트 아키텍처 (M사 비복제)
 
 스킬을 끝까지 따라가면 **풀모델이 완성**된다 — 처음부터 멀티시트를 찍어내는 게 아니라, **각 단계가 자기 시트를 만들며 워크북이 자란다**(리서치하면서 Research 시트, CapEx·상각 계산하면서 Capex_Dep 시트를 만드는 식).
 
@@ -134,9 +134,9 @@ Anthropic 금융스킬의 Office.js↔openpyxl 이중환경 패턴 채택.
 | W5 | `Peer`(유사회사 4-step 퍼널 + Hamada 무부채화)·`WACC`(CAPM 빌드업) | Claude + `peer.py`(웹 미러) |
 | W6~W8 | `DCF` 가정 블록을 상류 시트 참조로 전환, `Scenario`·`Sens` | Claude + 결정론 검증 |
 
-#### 정체성 원칙 (MSVALUE 비복제)
+#### 정체성 원칙 (M사 비복제)
 
-시트명·레이아웃·색상 규약은 **위 자체 정의**를 따른다. MSVALUE 시트명(H_FS/EBIT/BackData 등)·레이아웃을 복제하지 않는다. MSVALUE·xDCF 문서는 **방법론 지식**(무엇을 계산·검증할지)으로만 쓰고, viol/클래시스 픽스처는 **수치 검증 골든**으로만 쓴다.
+시트명·레이아웃·색상 규약은 **위 자체 정의**를 따른다. M사 시트명(H_FS/EBIT/BackData 등)·레이아웃을 복제하지 않는다. M사·타사 문서는 **방법론 지식**(무엇을 계산·검증할지)으로만 쓰고, viol/클래시스 픽스처는 **수치 검증 골든**으로만 쓴다.
 
 - 참조 방향은 **단방향**(`뒤 시트 → 앞 시트`, 순환 금지).
 - 색상 3색: Blue(직접 입력 hard) / Black(해당 시트 계산) / Green(타시트 참조) + 핵심가정 yellow fill.
@@ -162,7 +162,7 @@ Anthropic 금융스킬의 Office.js↔openpyxl 이중환경 패턴 채택.
 Research 시트·template_conventions 저술 시 아래 실무 양식의 항목 구성·레이아웃을 참조해 **자체 아키텍처로 정제**:
 - `D:\Valuation\pe양식\(티XXX)기업리서치_20231220V2*.xlsx` — 기업리서치 양식(빈 템플릿)
 - `D:\Valuation\pe양식\티에스이_리서치_20231220.xlsx` — 채워진 실례
-- `D:\Valuation\DCF_비올\` — 비올 DCF Model 최종본 + (MSVALUE) 2차 리포트(사용자 제작 러프 예시)
+- `D:\Valuation\DCF_비올\` — 비올 DCF Model 최종본 + (M사) 2차 리포트(사용자 제작 러프 예시)
 - (참고) `금융권_컨설팅_리서치바이블*.xlsb`, `Simplified_DCF_솔루엠*.xlsx`
 - **열람 암호**: 파일명 "비번"/구분자 뒤 문자열(`1a2a3a4a5a`, `1ㅁ2ㅁ3ㅁ`→`1a2a3a`). 0단계에서 복호화·열람해 레이아웃 참조(구현 참조용, 산출물엔 암호 미기록).
 
@@ -227,7 +227,7 @@ W2는 **과거 재무제표의 정합성·무결성을 검증하는 절차**이�
 #### ⚠️ W2·W3 두 계정 작업은 다른 층위다 (혼동 금지)
 
 - **W2 계정 연속성 추적**: 같은 회사가 **사업연도 사이에 회계처리방법·원칙을 바꿔** 계정 재분류가 일어났을 때, **어떤 계정이 어디로 이관됐는지 추적**해 과거 시계열의 비교가능성 확보. 탐지 신호 = 당기/전기 교차 불일치. 판단 대상 = "24년 A계정이 25년 재작성에서 B로 옮겨갔는가". 근거 = 금액 보존 매칭 + `account_dictionary.md`.
-- **W3 평가목적 재분류**: 정합성 확보된 시계열을 **WC/NOA(OA)/OAL(OL)/FA/IBD/EQU**로 밸류에이션 관점 재분류(유동성기준 B/S → 사업연관성기준 Valuation B/S). 판단 대상 = 영업성·현금성·자본성. 근거 = `xDCF §2 taxonomy`.
+- **W3 평가목적 재분류**: 정합성 확보된 시계열을 **WC/NOA(OA)/OAL(OL)/FA/IBD/EQU**로 밸류에이션 관점 재분류(유동성기준 B/S → 사업연관성기준 Valuation B/S). 판단 대상 = 영업성·현금성·자본성. 근거 = `타사 §2 taxonomy`.
 - `_VS_STATE` 매핑 대장도 두 층 분리 기록(연도간 계정 이관 이력 / 표준계정→평가유형).
 
 ### 1.4b·2 W2.5 손익 계정 세분화 파이프라인 (`fs_disagg.py`)
@@ -261,7 +261,7 @@ W2는 **과거 재무제표의 정합성·무결성을 검증하는 절차**이�
 ### 1.4c 민감도 2층 구조 (엔진 검증 ≠ 워크북 산출물)
 
 - **엔진 3×3** (`dcf.run` sensitivity): WACC×g, step ±1%p, 중심 [1][1]==base. **내부 self-consistency 앵커만** — 리포트용 아님. 엔진 변경 없음.
-- **워크북 그리드** (W8 산출물): WACC×PGR **5×5 살아있는 Excel 수식**(셀마다 독립 DCF 재계산). `scripts/sensitivity.py`(→`backend/excel/sensitivity_grid.py`)가 생성 — **명시연도 FCFF 는 WACC·g 무관(고정)이라 `DCF!FCFF` 행 참조, 할인·터미널만 축값 반응하는 closed-form**(엔진 `_compute` 대수 1:1). 셀 캐시=엔진 재계산값, 수식은 그 closed-form 에서 생성. 내부 3×3 == 엔진 자체 민감도로 교차검증, Excel 문법은 recalc 게이트가 확인. MSVALUE 리포트 관행(부록F) 그리드 크기 계승.
+- **워크북 그리드** (W8 산출물): WACC×PGR **5×5 살아있는 Excel 수식**(셀마다 독립 DCF 재계산). `scripts/sensitivity.py`(→`backend/excel/sensitivity_grid.py`)가 생성 — **명시연도 FCFF 는 WACC·g 무관(고정)이라 `DCF!FCFF` 행 참조, 할인·터미널만 축값 반응하는 closed-form**(엔진 `_compute` 대수 1:1). 셀 캐시=엔진 재계산값, 수식은 그 closed-form 에서 생성. 내부 3×3 == 엔진 자체 민감도로 교차검증, Excel 문법은 recalc 게이트가 확인. M사 리포트 관행(부록F) 그리드 크기 계승.
 - **연결**: 워크북 그리드 중심 == 엔진 3×3 중심 == base per_share (3자 일치 게이트). 외곽 셀은 Excel recalc 게이트(LibreOffice headless, `scripts/recalc_gate.py`)가 검증.
 
 **recalc 게이트(`scripts/recalc_gate.py`) — 수식 정확성 CI 도구**: 우리 export 는 `<f>수식</f><v>엔진캐시값</v>` 를 함께 쓰므로 지금까지 테스트는 캐시(엔진값)만 봤다. 이 게이트는 **cached 를 제거한 '수식만' xlsx** 를 LibreOffice 로 recalc-on-load(OOXMLRecalcMode=0) 시켜, 계산된 값을 엔진값과 대조 → `<f>` 수식(셀참조·중첩 IF 구간세율·`^`·크로스시트 참조)이 진짜 Calc 엔진에서 우리 엔진과 동일하게 계산되는지 확인한다. cached 제거가 핵심(안 하면 recalc 미동작 시 캐시 echo 로 false pass). `soffice` 미설치면 skip(오탐 아님). W6 승격 셀(`=Fcst_*!계`)·W8 그리드 외곽 셀의 수식 검증에 사용. `tests/skill/test_recalc_gate.py`.
@@ -305,15 +305,15 @@ W2는 **과거 재무제표의 정합성·무결성을 검증하는 절차**이�
 | W1 리서치 | `기업리서치_양식.md`(Brief 10섹션) + `참고보고서_활용.md`(산업 CAGR·컨센서스 출처) |
 | W2 이관 | `모델링_실무_2강4강.md`(§3 Finalize 연결 체크) + `account_dictionary.md`(표준 계정 사전·동의어) |
 | W2.5 세분화 | `account_dictionary.md`(성격별 원가·매출 항목 사전) + `모델링_실무_2강4강.md`(제조원가명세서·판관비 성격별 구조) |
-| W3 재분류 | `xDCF_계정분류_모델아키텍처.md`(§2 유형·§3 방법) + `msvalue_DCF_교육_정본.md`(§1.4 Valuation B/S 재분류 이론) |
-| W4 추정 | `msvalue_리포트예시_클래시스.md`(§2 주요가정·부록A~D 실측 비율) + 모델링_실무 P×Q 사전 |
-| W5 WACC | `wacc_할인율서식.md` + `베타_Bloomberg_vs_KICPA.md` + `deloitte_감사인검토_WACC방법론.md` + `영구성장률_PGR_적합성.md` |
+| W3 재분류 | `계정분류_모델아키텍처.md`(§2 유형·§3 방법) + `M사_DCF_교육_정본.md`(§1.4 Valuation B/S 재분류 이론) |
+| W4 추정 | `M사_리포트예시_클래시스.md`(§2 주요가정·부록A~D 실측 비율) + 모델링_실무 P×Q 사전 |
+| W5 WACC | `wacc_할인율서식.md` + `베타_Bloomberg_vs_KICPA.md` + `D사_감사인검토_WACC방법론.md` + `영구성장률_PGR_적합성.md` |
 | W6 DCF | `engine_spec.md`(§0 컨벤션·§4 절차·§6 검증) + `검증_클래시스_DCF.md`(tax_override·terminal_fcff_override 선례) |
-| W7 시나리오 | `msvalue_리포트예시_클래시스.md` 부록F(Driver 3개+CHOOSE 토글) |
+| W7 시나리오 | `M사_리포트예시_클래시스.md` 부록F(Driver 3개+CHOOSE 토글) |
 | W8 민감도 | `앤트로픽_금융스킬_벤치마크.md` §1(중심셀=base 검증) |
 | 게이트 공통 | `앤트로픽_금융스킬_벤치마크.md` §2 audit-xls(BS부터·하드코딩 오버라이드·DCF 버그 5종) |
 
-`references/index.md`에 이 표 수록(자기완결 색인). **MSVALUE 계열 문서는 방법론 지식으로만 주입** — 시트명·레이아웃 복제 금지를 index.md에 명시.
+`references/index.md`에 이 표 수록(자기완결 색인). **M사 계열 문서는 방법론 지식으로만 주입** — 시트명·레이아웃 복제 금지를 index.md에 명시.
 
 ### 1.5b 온톨로지 참조 구조
 
@@ -354,7 +354,7 @@ W2는 **과거 재무제표의 정합성·무결성을 검증하는 절차**이�
 
 ### 1.9 SKILL.md 골격
 
-frontmatter(name: excel-valuation-workbook, description: Excel 워크북 위 DCF 밸류에이션 워크플로우 — 템플릿 인식/생성·리서치·FS 이관·계정재분류·추정·WACC·DCF·시나리오·민감도; 판단은 평가인, 계산·검증은 결정론 도구) → 원칙(역할 3분할·판단보조) → 이중 환경(1.2) → 시작 모드·성장 아키텍처(1.3·1.3b) → 단계표+게이트(1.4) → 자료 요청 프로토콜(1.4a) → 지식 바인딩(1.5) → 추천 모델(1.4d) → provenance(1.6) → 상태 규약(1.7) → 키 원칙(1.8) → 도구 사용법(stdin JSON 예시) → 신뢰 원칙(암산 금지·audit 은폐 금지·모호하면 표면화·MSVALUE 복제 금지).
+frontmatter(name: excel-valuation-workbook, description: Excel 워크북 위 DCF 밸류에이션 워크플로우 — 템플릿 인식/생성·리서치·FS 이관·계정재분류·추정·WACC·DCF·시나리오·민감도; 판단은 평가인, 계산·검증은 결정론 도구) → 원칙(역할 3분할·판단보조) → 이중 환경(1.2) → 시작 모드·성장 아키텍처(1.3·1.3b) → 단계표+게이트(1.4) → 자료 요청 프로토콜(1.4a) → 지식 바인딩(1.5) → 추천 모델(1.4d) → provenance(1.6) → 상태 규약(1.7) → 키 원칙(1.8) → 도구 사용법(stdin JSON 예시) → 신뢰 원칙(암산 금지·audit 은폐 금지·모호하면 표면화·M사 복제 금지).
 
 ---
 

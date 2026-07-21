@@ -1,9 +1,9 @@
-"""WACC — CAPM 빌드업 + 자본구조 (표준 방법론, 삼일/Deloitte 교육자료 근거).
+"""WACC — CAPM 빌드업 + 자본구조 (표준 방법론, S사/D사 교육자료 근거).
 
 비올 원본 WACC 시트는 채권수익률 매트릭스·베타 회귀가 뒤섞인 연구시트라 비트복제 대신
 표준 빌드업을 깨끗한 함수로 구현한다. 최종 WACC 가 DCF 스파인의 자본비용으로 들어간다.
 
-빌드업(Deloitte VKG / 한공회 가이던스 방법론)::
+빌드업(D사 / 한공회 가이던스 방법론)::
 
     Unlever(Hamada):  βu = βL / (1 + (1−t)·D/E)          # 유사기업 관측 βL → 무부채 βu
     Relever:          βL' = βu · (1 + (1−t')·D/E')        # 대상회사 자본구조로 재부채
@@ -31,8 +31,8 @@ def relever_beta(unlevered_beta: float, debt_to_equity: float, tax_rate: float) 
     return unlevered_beta * (1.0 + (1.0 - tax_rate) * debt_to_equity)
 
 
-# Kroll(구 Duff & Phelps) 2019 CRSP Deciles Size Premium — 근거: Deloitte VKG 교육자료
-# (deloitte_감사인검토_WACC방법론.md). (시가총액 하한 $M, decile 라벨, size premium).
+# Kroll(구 Duff & Phelps) 2019 CRSP Deciles Size Premium — 근거: D사 교육자료
+# (D사_감사인검토_WACC방법론.md). (시가총액 하한 $M, decile 라벨, size premium).
 # ⚠️ 실제 평가 시 반드시 당해연도 Valuation Handbook 값으로 갱신할 것(예시 고정치).
 _KROLL_2019_DECILES: list[tuple[float, str, float]] = [
     (13456.0, "1 (Largest)", 0.0052),
@@ -96,7 +96,7 @@ class WaccInputs:
     beta_adjusted: bool | None = None  # Bloomberg Adjusted(0.67·raw+0.33) 여부
     # ↑ 조정베타 계산 헬퍼·주가 회귀는 ingest/price_client.py(β 회귀가 있는 곳이 canonical).
     # MRP provenance — β 와 MRP 는 같은 시장에서 와야 한다(KICPA β ↔ KICPA MRP).
-    mrp_source: str | None = None    # 'kicpa' | 'damodaran' | 'deloitte_fas' ...
+    mrp_source: str | None = None    # 'kicpa' | 'damodaran' | 'dfas' ...
     mrp_market: str | None = None    # 'SP500' | 'KOSPI' — beta_market 와 일치해야 함
 
 

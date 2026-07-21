@@ -2,7 +2,7 @@
 
 ## Context (왜 만드는가)
 
-MSVALUE 기업가치평가연수 과제(정종범 _비올_ DCF Model)는 손으로 만든 엑셀 DCF다. 목표는 이 엑셀의 **로직을 1:1로 재현**하되, 앞단(가정 도출·리서치·컨텍스트 관리)을 **DART API + RAG + LLM**으로 자동화하고, 뒷단(산출물)을 **감사인이 셀 수식을 추적할 수 있는 살아있는 xlsx**로 내보내는 웹 플랫폼을 새 GitHub 레포로 구축하는 것.
+M사 기업가치평가연수 과제(정종범 _비올_ DCF Model)는 손으로 만든 엑셀 DCF다. 목표는 이 엑셀의 **로직을 1:1로 재현**하되, 앞단(가정 도출·리서치·컨텍스트 관리)을 **DART API + RAG + LLM**으로 자동화하고, 뒷단(산출물)을 **감사인이 셀 수식을 추적할 수 있는 살아있는 xlsx**로 내보내는 웹 플랫폼을 새 GitHub 레포로 구축하는 것.
 
 두 개의 화이트보드 해석(제미나이·챗지피티 계획.md)이 공통으로 그리는 파이프라인:
 `데이터 수집 → 파싱/매핑 → 재무DB → Assumption 생성(AI) → DCF 엔진 → Reporting`.
@@ -280,7 +280,7 @@ API가 없는 소스(Bloomberg 채권수익률 매트릭스·베타, 한공회 �
 5. **provenance 태깅**: "Bloomberg 수기 붙여넣기 @날짜/사용자" 로 신뢰수준 별도(경영진 코퍼스와 동급). 감사인이 출처 물으면 붙여넣은 원본까지 추적.
 > 원칙: **자동(DART)든 수동(복붙)이든 동일한 검증 게이트를 통과**해야 calc_core에 입력된다. 소스만 다르고 규율은 하나.
 
-## 밸류에이션 입력 데이터 출처 (SSOT) — 삼일/Deloitte/한공회 교육자료 기준
+## 밸류에이션 입력 데이터 출처 (SSOT) — S사/D사/한공회 교육자료 기준
 
 원본 WACC·Assumption 시트의 각 입력이 어디서 오는지 확정(교육 PDF에서 방법론 확인). 모든 입력은 자동/수동 무관 `validators.py` 게이트 통과 + provenance 태깅.
 
@@ -318,7 +318,7 @@ API가 없는 소스(Bloomberg 채권수익률 매트릭스·베타, 한공회 �
   - ✅ vintage 가 평가기준일 직전 최신판 → PASS(그 시점 이용가능 최신).
 - **LLM 프롬프트는 2차 레이어**(권고): "이 거시치는 {vintage} 기준 — 평가기준일 {date}에
   적합한지 확인" 안내. 하지만 강제는 가드가, 프롬프트는 보조(판단보조 원칙과 동일).
-- 교육 정본의 "Rf 가정과 위험프리미엄 가정 일관성"([[msvalue_DCF_교육_정본]] §3.2)의 시간축 판.
+- 교육 정본의 "Rf 가정과 위험프리미엄 가정 일관성"([[M사_DCF_교육_정본]] §3.2)의 시간축 판.
   → 거시뿐 아니라 Rf·MRP·베타 vintage 도 같은 평가기준일 창에 정렬돼야 함(확장 적용).
 
 ### WACC 입력 (할인율 서식 로직 — 교육자료 근거)
@@ -331,9 +331,9 @@ API가 없는 소스(Bloomberg 채권수익률 매트릭스·베타, 한공회 �
 | **Size premium(CSRP)** | Deciles 1–10 | Duff&Phelps/Kroll(현 Kroll Cost of Capital) 복붙 |
 | **Kd 타인자본비용** | **신용등급×만기 회사채 수익률 매트릭스**; BBB-=최저투자등급; Moody's Baa proxy | KOFIABOND 등급별 민평수익률 / 신용등급=KIS·NICE·한기평, DART 사업보고서, **NICE-bizline(복붙)** |
 | **자본구조 D/E** | minority=현행 유지 / controlling=산업표준·최적 | peer 시총·부채 |
-> **검증(정합성)**: WARA ↔ IRR ↔ WACC reconciliation(PPA calibration, ±1% 이내) — Deloitte 교육자료 강조. 감사인 트랙 테스트 항목으로도 재사용.
+> **검증(정합성)**: WARA ↔ IRR ↔ WACC reconciliation(PPA calibration, ±1% 이내) — D사 교육자료 강조. 감사인 트랙 테스트 항목으로도 재사용.
 
-### ⭐ 외부 데이터 조달 갭·우선순위 (2026-07-18, MSVALUE DCF 교육 정본 대조)
+### ⭐ 외부 데이터 조달 갭·우선순위 (2026-07-18, M사 DCF 교육 정본 대조)
 설계(macro_client·price_client·manual_paste)는 있으나 **커넥터는 아직 0개 구축**. 로컬 BYOK
 도구라 4대법인의 **Bloomberg(유료·API無)는 배제**, 무료 소스로 대체 — 교육 정본이 "평가인 직접
 계산 Daily beta(자산평가사·Local 법인)" 를 정당한 실무로 인정하므로 **β도 우리가 직접 계산 가능**.
@@ -384,8 +384,8 @@ vintage 고정)으로 받는 게 규칙. price_client 의 주가 look-ahead 가�
 
 ### 유사기업(peer) — WACC 정확도의 핵심 (사용자 강조)
 
-**선정 로직 = MSVALUE 할인율 서식 4-step 정본**(서식 `유사기업선정 Step0~3` + 클래시스
-리포트 실측 83→11→9→6사; 북 msvalue_리포트예시 §E·wacc_할인율서식 §1):
+**선정 로직 = M사 할인율 서식 4-step 정본**(서식 `유사기업선정 Step0~3` + 클래시스
+리포트 실측 83→11→9→6사; 북 M사_리포트예시 §E·wacc_할인율서식 §1):
 
 | Step | 기준 | 담당 | 구현 |
 |---|---|---|---|
@@ -416,12 +416,12 @@ Skill 도구 `scripts/peer.py`(--seeds 역산 / --judgments 퍼널 실행).
 > `relative_valuation`(배수)} 구조로 — Brief ⑨(경쟁사 밸류 비교)가 초기 후보군 힌트.
 
 ### NOA/IBD 계정 분류 — EV→Equity bridge
-`fs_mapper.py`가 계정을 **영업/비영업(NOA)** 과 **이자부부채(IBD)** 로 분류 → DCF의 `(+)비영업자산 (−)순차입부채`(원본 H_FS D53-67) 정확 매핑. 참고: `NOA IBD 구분 참고자료.pdf` + 삼일/안진 교육자료.
+`fs_mapper.py`가 계정을 **영업/비영업(NOA)** 과 **이자부부채(IBD)** 로 분류 → DCF의 `(+)비영업자산 (−)순차입부채`(원본 H_FS D53-67) 정확 매핑. 참고: `NOA IBD 구분 참고자료.pdf` + S사/D사 교육자료.
 
 ### 참고자료 (docs/reference/로 색인)
-- `(MSVALUE) 2강 강의자료(배포용).xlsx` — STEP0-5 모델링 튜토리얼 + `유사회사FS`·`감가상각`·`BackData` 시트(구현 레퍼런스).
-- `0004-Deloitte 외부평가보고서 검토 유의사항` — **감사인 트랙 직결**(외부평가 검토 체크리스트, WACC/beta/MRP/Kd 유의사항).
-- `0003-삼일 Fulcrum Valuation Update` — 할인율·CGU·Size premium 방법론.
+- `(M사) 2강 강의자료(배포용).xlsx` — STEP0-5 모델링 튜토리얼 + `유사회사FS`·`감가상각`·`BackData` 시트(구현 레퍼런스).
+- `0004-D사 외부평가보고서 검토 유의사항` — **감사인 트랙 직결**(외부평가 검토 체크리스트, WACC/beta/MRP/Kd 유의사항).
+- `0003-S사 밸류에이션 자료` — 할인율·CGU·Size premium 방법론.
 - `NOA IBD 구분 참고자료.pdf`, 한공회 MRP 가이던스.
 
 ## Phase 3 — RAG + 가정 챗 (감린이 RAG 서버 포팅)
@@ -482,7 +482,7 @@ Skill 도구 `scripts/peer.py`(--seeds 역산 / --judgments 퍼널 실행).
 | `scripts/rag/eval_metrics.mjs` | nDCG@k·Recall·MRR + 도메인지표, 회귀 게이트 | `rag/eval_metrics.py` — 골든셋 회귀 |
 | `js/services/geminiApi.js:48-73` | 4-레이어 캐스케이드 폴백(flash-lite→Groq→gemma), 타임아웃 즉시폴백 | `llm/router.py` 폴백 체인 |
 
-**핵심 원칙 이식(감사추적):** 작게 검색·작은 단위로 인용하되 parent 전문으로 grounding → 두 번째 LLM 패스가 각 인용을 근거와 대조해 미지원 인용 제거(faithfulness 0.95). 밸류에이션에선 "이 가정은 [삼일 CJ의견서 §할인율]에 근거" 식 감사방어 인용으로 직결.
+**핵심 원칙 이식(감사추적):** 작게 검색·작은 단위로 인용하되 parent 전문으로 grounding → 두 번째 LLM 패스가 각 인용을 근거와 대조해 미지원 인용 제거(faithfulness 0.95). 밸류에이션에선 "이 가정은 [S사 CJ의견서 §할인율]에 근거" 식 감사방어 인용으로 직결.
 
 **골든 스냅샷 습관**: 감린이 Phase 0.3.5 "출력 0변경 증명" 방식 그대로 DCF 재현(Milestone 1)에 적용.
 

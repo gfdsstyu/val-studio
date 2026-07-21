@@ -1,4 +1,4 @@
-# ② 전체 시트 MSVALUE 상세화 — 명세
+# ② 전체 시트 M사 상세화 — 명세
 
 | 항목 | 내용 |
 |------|------|
@@ -12,11 +12,11 @@
 
 ## 0. 목표
 
-MSVALUE 4강 모델 시트 골격(`Assumption · DCF · EBIT · FA · WC · WACC · H_FS · BackData · 상각비계산 · 유사회사FS`)에 맞춰 스킬 스켈레톤을 **모델링 기초 수준으로 세분**. 결정론 부분(상각 스케줄·WC 회전율·EBIT 롤업)은 **살아있는 수식**. MSVALUE 시트명·레이아웃은 **비복제**(방법론·골격만 차용, 자체 아키텍처).
+M사 4강 모델 시트 골격(`Assumption · DCF · EBIT · FA · WC · WACC · H_FS · BackData · 상각비계산 · 유사회사FS`)에 맞춰 스킬 스켈레톤을 **모델링 기초 수준으로 세분**. 결정론 부분(상각 스케줄·WC 회전율·EBIT 롤업)은 **살아있는 수식**. M사 시트명·레이아웃은 **비복제**(방법론·골격만 차용, 자체 아키텍처).
 
-**MSVALUE 시트 ↔ 우리 시트 매핑**:
+**M사 시트 ↔ 우리 시트 매핑**:
 
-| MSVALUE 시트 | 우리 시트 | ① 상태 | ② 상세화 |
+| M사 시트 | 우리 시트 | ① 상태 | ② 상세화 |
 |---|---|---|---|
 | Assumption | **`Assumption`(신규)** | ❌ | 가정 SSOT 블록(성장·마진·회전일·CAPEX%) |
 | H_FS(과거 FS) | `FS_Hist`(W2) | 🔶 IS/BS(①착수) | 검증·보완 |
@@ -33,7 +33,7 @@ MSVALUE 4강 모델 시트 골격(`Assumption · DCF · EBIT · FA · WC · WACC
 
 ## 1. `Assumption` 시트 (신규) — 가정 SSOT
 
-MSVALUE Assumption 시트 = 모든 가정의 단일 소스. 하류 시트가 **Green 참조**("hard number 1곳"). 스캐폴딩은 라벨+placeholder, 값은 Claude/평가인이 Research 근거로 채움.
+M사 Assumption 시트 = 모든 가정의 단일 소스. 하류 시트가 **Green 참조**("hard number 1곳"). 스캐폴딩은 라벨+placeholder, 값은 Claude/평가인이 Research 근거로 채움.
 
 **블록 구조**(연도=열, C..G):
 - **매출 드라이버**: 성장률 or 시장CAGR·목표점유율(방식=평가인). → `Fcst_Rev`
@@ -58,7 +58,7 @@ MSVALUE Assumption 시트 = 모든 가정의 단일 소스. 하류 시트가 **G
 
 ## 3. `Capex_Dep`(FA·상각비계산) — 상각 스케줄 살아있는 수식
 
-MSVALUE FA+상각비계산 시트 정본. **기존자산 잔여상각 + 신규 CAPEX 상각 분리**(모델링_실무 §1 원가추정: "기존자산 vs 신규 CAPEX 분리, 절세효과").
+M사 FA+상각비계산 시트 정본. **기존자산 잔여상각 + 신규 CAPEX 상각 분리**(모델링_실무 §1 원가추정: "기존자산 vs 신규 CAPEX 분리, 절세효과").
 
 **살아있는 수식 구조**(연도 t):
 ```
@@ -75,7 +75,7 @@ CAPEX_t           = 신규 + 유지보수  (Assumption % of sales × 매출_t; �
 
 ## 4. `WC` — 회전율 → 잔액 → ΔNWC 살아있는 수식
 
-MSVALUE WC 시트(1주차 회전율 방향 오류수정 주의). 회전일 기반 잔액(모델링_실무 §3: WC ← Driver 매출·원가).
+M사 WC 시트(1주차 회전율 방향 오류수정 주의). 회전일 기반 잔액(모델링_실무 §3: WC ← Driver 매출·원가).
 
 **살아있는 수식**(연도 t):
 ```
@@ -124,7 +124,7 @@ WC    ← Driver 매출(Fcst_Rev)·원가(Fcst_Cost)
 
 ## 8. 원칙
 
-- **MSVALUE 비복제**: 방법론·시트 골격만, 셀 레이아웃 자체 정의.
+- **M사 비복제**: 방법론·시트 골격만, 셀 레이아웃 자체 정의.
 - **살아있는 수식**: 상각 스케줄·WC 회전율·EBIT 롤업·마진 검산 = live formula.
 - **Assumption SSOT**: 가정은 Assumption 시트 1곳, 하류 Green 참조(hard number 1곳 절차화).
 - **판단=평가인**: 드라이버 방식·마진·회전일 값은 평가인, 수식 구조는 결정론.
@@ -135,4 +135,4 @@ WC    ← Driver 매출(Fcst_Rev)·원가(Fcst_Cost)
 
 | 버전 | 날짜 | 변경 |
 |------|------|------|
-| 1.0 | 2026-07-19 | ② 상세화 명세 — MSVALUE 시트 매핑 + Assumption 신규·Capex_Dep 상각스케줄·WC 회전율 살아있는 수식·Finalize 연결맵 |
+| 1.0 | 2026-07-19 | ② 상세화 명세 — M사 시트 매핑 + Assumption 신규·Capex_Dep 상각스케줄·WC 회전율 살아있는 수식·Finalize 연결맵 |

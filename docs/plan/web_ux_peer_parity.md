@@ -4,7 +4,7 @@
 |------|------|
 | **문서 ID** | SPEC-EXCEL-SKILL-002-③ |
 | **상위 명세** | [skill_peer_selection_and_sheet_detail.md](skill_peer_selection_and_sheet_detail.md) §3 |
-| **정본** | `backend/ingest/peer_selection.py`(`codes_from_seed_peers`·`select_peers`) · `reference/msvalue_리포트예시_클래시스.md` §E |
+| **정본** | `backend/ingest/peer_selection.py`(`codes_from_seed_peers`·`select_peers`) · `reference/M사_리포트예시_클래시스.md` §E |
 | **작성일** | 2026-07-19 |
 | **상태** | Draft → 구현 착수 |
 

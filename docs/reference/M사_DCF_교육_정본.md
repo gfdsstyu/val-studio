@@ -1,5 +1,5 @@
 ---
-topic: MSVALUE DCF 교육 정본 — 평가접근법·FCFF/FCFE·재무제표 재분류·FCFF 산출·WACC·영구가치(도식 포함)
+topic: M사 DCF 교육 정본 — 평가접근법·FCFF/FCFE·재무제표 재분류·FCFF 산출·WACC·영구가치(도식 포함)
 keywords: [DCF, FCFF, FCFE, DDM, 이익접근법, 시장접근법, 자산접근법, GPC, GTC, 조정순자산법, Enterprise Value, 영업가치, 비영업자산, Working Capital, Operating Net Fixed Assets, Invested Capital, 순차입자본, Net Borrowing, NOPLAT, EBIT, 재투자, Reinvestment, Value Chain, 재무제표 재분류, CAPEX, 감가상각 절세효과, 순운전자본, 흑자도산, WACC, Ke, Kd, CAPM, Hamada, 조정베타, Marshall Blume, Rf, MRP, 시장위험프리미엄, 한공회, Size Premium, Duff Phelps, Terminal Value, Normalized CF, 영구성장률, K-IFRS 1036, 사용가치, VIU]
 canonical_questions:
   - "DCF 3대 평가접근법(수익·시장·자산)은 무엇이고 실무에서 무엇을 주로 쓰나?"
@@ -12,9 +12,9 @@ layer: methodology
 parent: 모델링_실무_2강4강
 doc_type: knowledge
 ---
-# MSVALUE DCF 교육 정본 — 도식 중심 정리
+# M사 DCF 교육 정본 — 도식 중심 정리
 
-> 출처: MSVALUE 「기업가치평가 연수 1기 — Business Valuation: 현금흐름할인법(DCF)」
+> 출처: M사 「기업가치평가 연수 1기 — Business Valuation: 현금흐름할인법(DCF)」
 > 교육자료(2024.08, 38p 하드카피). **PPT 장표의 플로우차트·구조도를 Mermaid 로 재현**하여
 > 표·불릿으로 흩어지지 않게 정리한 정본. [[모델링_실무_2강4강]](실습 모델링)의 이론 백본.
 >
@@ -216,13 +216,13 @@ Ke = Rf + βL × Risk Premium + (country risk) + (size premium) + (specific risk
 |---|---|
 | **Rf** 무위험이자율 | Bloomberg **10년 만기 국채이자율**(4대 법인 주로). Rf 가정과 위험프리미엄 가정은 일관성 유지 |
 | **Risk Premium** | Bloomberg 국가별(Spot·1·3·5·10년 평균). **국내시장은 한공회 제시 MRP(시장위험프리미엄)** ← 공식 명칭 MRP |
-| **β 추정치** | Bloomberg **2년 Weekly 또는 5년 Monthly 조정베타**(4대 법인). **Deloitte Valuation Standard = 60개월 베타**. Capital IQ 관측·조정베타. 평가인 직접 Daily beta(자산평가사·Local 법인 일부). **비상장은 유사상장사 β 기반 대용치**(산업 유사성이 핵심 선정기준). Beta Mean Reversion = **Marshall Blume 조정** |
+| **β 추정치** | Bloomberg **2년 Weekly 또는 5년 Monthly 조정베타**(4대 법인). **D사 Valuation Standard = 60개월 베타**. Capital IQ 관측·조정베타. 평가인 직접 Daily beta(자산평가사·Local 법인 일부). **비상장은 유사상장사 β 기반 대용치**(산업 유사성이 핵심 선정기준). Beta Mean Reversion = **Marshall Blume 조정** |
 | **Kd** 타인자본비용 | 신용도 반영 장기 회사채(예: BBB− 만기수익률). after-tax = Kd×(1−t) |
 | **자본구조 E/V·D/V** | 유사기업 평균 자본구조·대상 장기계획 |
 | **Tax** | 한계법인세율 20.9%(200억 이하)·23.1%(200억 초과) |
 
 > **우리 엔진 매핑**: `wacc.py`(CAPM 빌드업·Hamada·size premium)와 완전 일치. MRP 국내=한공회
-> 는 [[베타_Bloomberg_vs_KICPA]]·checks β/MRP 정합의 근거. Deloitte 60개월은 [[deloitte_감사인검토_WACC방법론]].
+> 는 [[베타_Bloomberg_vs_KICPA]]·checks β/MRP 정합의 근거. D사 60개월은 [[D사_감사인검토_WACC방법론]].
 
 ### 3.3 Hamada — β 언레버/리레버
 관측 Levered β → Unlevered β 전환 → 목표 자본구조로 Re-levering. 체계적 위험 β 는 **법인세율에
@@ -237,11 +237,11 @@ Ke = Rf + βL × Risk Premium + (country risk) + (size premium) + (specific risk
 - **Bloomberg 조정베타 = 0.67 × Raw Beta + 0.33 × 1.0**(사후베타를 시장평균 1.0 쪽으로 회귀).
 - **Size Premium**(Modified CAPM): 소규모 기업일수록 초과수익률/위험 → Duff & Phelps(현 Kroll)
   CSRP Deciles. 예(2023): Mid-Cap 0.62% · Low-Cap 1.21% · Micro-Cap 3.05% · 10-Smallest 4.83%.
-> → `wacc.kroll_size_premium` 와 동일 테이블 계보. [[deloitte_감사인검토_WACC방법론]] Kroll deciles.
+> → `wacc.kroll_size_premium` 와 동일 테이블 계보. [[D사_감사인검토_WACC방법론]] Kroll deciles.
 
 ### 3.5 유사회사 산정
 현재·향후 사업 성격 파악(구글링·증권사 리포트) → 전/후방 산업 검토 → KIND·CIQ 스크리닝
-(유사성·완전성 확보). → 우리 [[msvalue_리포트예시_클래시스]] §E 4-step·`peer_selection` 과 정합.
+(유사성·완전성 확보). → 우리 [[M사_리포트예시_클래시스]] §E 4-step·`peer_selection` 과 정합.
 
 ---
 
@@ -297,7 +297,7 @@ NWC 각각 재조정:
 |---|---|
 | FCFF 스파인·mid-year·EBIT 세금 | `calc_core.dcf`(비올 골든) |
 | BS 재분류(영업/비영업·순차입자본) | NOA/IBD 브리지·[[MnA_실사_가격구조_SPA]] §4 |
-| WACC CAPM·Hamada·조정베타·size | `wacc.py`·[[베타_Bloomberg_vs_KICPA]]·[[deloitte_감사인검토_WACC방법론]] |
+| WACC CAPM·Hamada·조정베타·size | `wacc.py`·[[베타_Bloomberg_vs_KICPA]]·[[D사_감사인검토_WACC방법론]] |
 | 국내 위험프리미엄 = 한공회 **MRP** | checks β/MRP 정합(용어: 국내=MRP) |
 | Normalized CF 운전자본 재조정 | 개선 B `terminal_reinvestment_rate`·[[검증_클래시스_DCF]] |
 | K-IFRS 1036.35 VIU 5년 상한 | 손상 트랙 연결점([[손상검사_impairment]]·로드맵) |

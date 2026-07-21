@@ -19,20 +19,20 @@ description: 기업가치평가(DCF) 수행·검증·해석. 재무제표/사업
 |---|---|---|
 | **0 기업·산업 이해** ⭐ | `brief.py`(XBRL 프리필) + LLM 고투자 | **기업리서치_양식**(Brief 10섹션 정본) + 참고보고서_활용 |
 | 1 인제스트 | `ingest.py` | 파서_아키텍처_매트릭스 (XBRL우선·CID) |
-| 2 계정분류 | (LLM) | **xDCF_계정분류_모델아키텍처** (유형·방법 taxonomy) |
+| 2 계정분류 | (LLM) | **계정분류_모델아키텍처** (유형·방법 taxonomy) |
 | 3a 매출·원가 가정 | (LLM) | **모델링_실무_2강4강** (4방식·P×Q·원가4요소) + 모델링_워크플로우_기초 (프로세스 8단계·driver isolation) |
-| 3b-pre 유사회사 선정 | (LLM=Step2만) | **msvalue_리포트예시 §E**(4-step 정본) + wacc_할인율서식 §1 |
-| 3b WACC | `wacc.py` | **베타_Bloomberg_vs_KICPA** + deloitte_감사인검토 (size premium·kd) |
+| 3b-pre 유사회사 선정 | (LLM=Step2만) | **M사_리포트예시 §E**(4-step 정본) + wacc_할인율서식 §1 |
+| 3b WACC | `wacc.py` | **베타_Bloomberg_vs_KICPA** + D사_감사인검토 (size premium·kd) |
 | 3c 영구성장률 | (LLM) | **영구성장률_PGR_적합성** (0~1% 관행·PGR≤GDP) |
 | 4 DCF 계산·검증 | `dcf.py` | 검증_클래시스_DCF (세금주입·터미널정규화 선례) |
-| 5 리포트 | (LLM) | msvalue_리포트예시_클래시스 (양식) + **장표_작성법** (메시지 우선·차트 선택표) |
-| 감사인 검증 | `audit.py`+`ingest.py` | **외부평가의견서_고정양식_구조** + deloitte 체크리스트 |
+| 5 리포트 | (LLM) | M사_리포트예시_클래시스 (양식) + **장표_작성법** (메시지 우선·차트 선택표) |
+| 감사인 검증 | `audit.py`+`ingest.py` | **외부평가의견서_고정양식_구조** + D사 체크리스트 |
 | 실사 조정 | (LLM) | FDD_재무실사_정상화 (QOE·NWC peg) |
 | CB·RCPS 평가 | `convertible.py` 직호출 | **복합금융상품_평가** (TF·강제전환·Level3) + 채권_기간구조 |
 | 손상(VIU) | `dcf.py`(TV=0) | **손상검사_impairment** (VIU vs FV·CGU·자사주제외) |
 | PPA 무형자산 | (LLM, 코어 미구현) | PPA_무형자산평가 (MEEM·RFRM·TAB) |
 | 합병·주식교환 | `calc_core.merger` 직호출(vwap·기준주가·본질가치·교환비율) | 합병_주식교환_방법론 (두산 골든) |
-| 시나리오 분석 | `calc_core.scenario.run_scenarios` (구성=LLM/유저·가중치=유저 승인) | msvalue_리포트예시 (3-시나리오 구조) |
+| 시나리오 분석 | `calc_core.scenario.run_scenarios` (구성=LLM/유저·가중치=유저 승인) | M사_리포트예시 (3-시나리오 구조) |
 | 상대가치 실적 정규화 | `calc_core.relative`(ltm)·`checks.check_peer_seasonality` | **상대가치_계절성_LTM** (연환산 왜곡·40% 임계) |
 | 트랙 선택 헷갈림 | — | 밸류에이션_스코프_로드맵 (루트 지도) |
 | 비정형 질문 | `book_search.py` | (검색 폴백) |
@@ -65,7 +65,7 @@ python scripts/brief.py <원문XBRL.xbrl> brief.md --name=회사명
 ⑦고객사·경쟁사 ⑧시장 분석(규모·성장) ⑨경쟁사 밸류에이션 비교 ⑩전방 전망+Financials(3개년)
 ```
 **이 단계에서도 북 지식 사용**: 참고보고서_활용(산업 CAGR·컨센서스 어디서), 그리고
-**뒤 단계 챕터를 미리 훑어 "무엇을 수집할지" 역산** — xDCF_계정분류(분류에 필요한 계정 성격 정보),
+**뒤 단계 챕터를 미리 훑어 "무엇을 수집할지" 역산** — 계정분류(분류에 필요한 계정 성격 정보),
 모델링_실무(driver 후보에 필요한 P·Q 정보), 베타 챕터(글로벌/내수 판단 근거).
 
 **Brief 소비처(예)**: ①계정 매핑 시 — "재료비가 변동비인가"는 Brief의 사업모델·원가구조로 판단
@@ -82,15 +82,15 @@ python scripts/ingest.py <파일경로>
 - `.xlsx`(DCF 모델) → 셀 추출. 우리 모델 포맷이면 왕복 import 가능.
 
 ### 2. 계정 분류 (LLM 판단)
-재무제표 각 계정을 **계정유형**과 **분석방법**으로 태깅한다(references/xdcf_계정분류 참조):
+재무제표 각 계정을 **계정유형**과 **분석방법**으로 태깅한다(references/타사_계정분류 참조):
 - 손익: Sales / COGS / SGA / NO(영업외)
 - 재무상태표: WC / FA / NOA / IBD / OAL / EQU
 - 분석방법: 매출성장률·시장점유율·단가×판매량 / 비용은 인건비·변동비·고정비·상각비
 > ⚠️ 매출(Sales) 분석방법은 특히 신중히 — 무조건 "매출성장률"로 몰지 말 것(경쟁사 LLM의 약점).
 
 ### 3. 가정 산정 (LLM 판단 + 북 근거)
-- **유사회사 선정(3b-pre, WACC β·자본구조의 전제)**: MSVALUE 할인율 서식 4-step 정본
-  (references/msvalue_리포트예시 §E — 클래시스 실측 83→11→9→6사). 도구 `peer.py`:
+- **유사회사 선정(3b-pre, WACC β·자본구조의 전제)**: M사 할인율 서식 4-step 정본
+  (references/M사_리포트예시 §E — 클래시스 실측 83→11→9→6사). 도구 `peer.py`:
   | Step | 기준 | 담당 |
   |---|---|---|
   | 1a 코드 확정 | rough 유사회사 시드 → 그들의 KSIC 역산(**2~3개 union**) | **판단**(Brief ⑦⑨ 시드) → `peer.py --seeds` + `ksic.py`(로컬 2,000코드 표 검색·계층) |
@@ -102,12 +102,12 @@ python scripts/ingest.py <파일경로>
   쓰는 게 실무이고, 코드 선택 자체가 시드 유사회사 역산(반복 과정). 흐름:
   `peer.py cands.json --seeds`(코드 역산) → LLM Step2 판정 JSON 작성 →
   `peer.py cands.json --codes=.. --judgments=step2.json` → 퍼널+탈락사유 리포트.
-  탈락/선정 사유는 회사별 전량 기록(감사인 "왜 이 peer" — deloitte 체크리스트).
+  탈락/선정 사유는 회사별 전량 기록(감사인 "왜 이 peer" — D사 체크리스트).
   최종 peer 는 유저 승인 후 확정. 선정 셋은 WACC(β·자본구조)와 **상대가치 peer
   배수(향후)** 둘 다에 쓰인다.
 - **WACC**: CAPM 빌드업(Rf+β·MRP+size). β 출처(Bloomberg=글로벌 / KICPA=한국)와 MRP 시장을
   일치시킬 것. peer 개별 세율로 무부채화 후 평균(Hamada) — references/wacc_할인율서식.
-  references/베타, references/deloitte_감사인검토 참조.
+  references/베타, references/D사_감사인검토 참조.
 - **영구성장률(PGR)**: 한국 관행 0~1%(실측 DART 의견서 다수 1.00%), 글로벌 2~4%.
   **철칙: PGR ≤ 장기 GDP.** references/영구성장률 참조.
 
@@ -145,7 +145,7 @@ echo '{"risk_free":..,"market_risk_premium":..,"unlevered_beta":..,"target_debt_
    - **차이 서사 규격**(variance-analysis 정본): `[항목]: [유/불리] 차이 X (Y%) /
      Driver: 왜(정량 분해) / Outlook: 일회성·지속 / Action: 없음·모니터·조사`.
      금지: "예상보다 높음" 순환설명 · "timing" 무설명 · "기타 소액 항목들"로 뭉개기.
-5. references/deloitte_감사인검토 체크리스트(WARA↔IRR↔WACC·Apple-to-Apple)로 교차확인.
+5. references/D사_감사인검토 체크리스트(WARA↔IRR↔WACC·Apple-to-Apple)로 교차확인.
 > ⚠️ 검증자는 평가자의 결론을 **재사용하지 말 것**(독립성). 원자료에서 다시 계산.
 
 ## 신뢰 원칙

@@ -111,7 +111,7 @@ api/       FastAPI 로컬 단일프로세스 어댑터(BYOK — 키는 헤더 �
 |---|---|---|
 | `terminal_fcff_override` | float? | 영구구간 FCFF_{n+1} 직접 주입(가장 투명) |
 | `terminal_reinvestment_rate` | float? | NOPLAT_T×(1−rate), rate=g/ROIC (CAPEX+WC 번들) |
-| `terminal_wc_ratio` | float? | 터미널 ΔWC = 추정말매출×g×비율 — **정본 공식**(msvalue §279-285). 미지정 시 ΔWC=0 이라 g>0 에서 과대계상 |
+| `terminal_wc_ratio` | float? | 터미널 ΔWC = 추정말매출×g×비율 — **정본 공식**(M사 §279-285). 미지정 시 ΔWC=0 이라 g>0 에서 과대계상 |
 
 > 셋 다 미지정이면 터미널은 관례대로 D&A=CAPEX·ΔNWC=0(=골든 재현 경로).
 
@@ -229,14 +229,14 @@ export_dcf(inp, res, "out/dcf.xlsx")
 |---|---|---|
 | PGR ≥ WACC (Gordon 발산) | **FAIL** | 영구성장률_PGR_적합성 |
 | WACC−PGR < 1%p 스프레드 / PGR > 장기GDP(2%) | WARN | ″ |
-| **F1** PGR>2% 인데 재투자 미반영(D&A=CAPEX, ΔWC=0) → TV 과대 | WARN | msvalue 정본 |
+| **F1** PGR>2% 인데 재투자 미반영(D&A=CAPEX, ΔWC=0) → TV 과대 | WARN | M사 정본 |
 | TV 비중 > 75% 과다편중 | WARN | 앤트로픽 audit-xls 벤치마크 |
 | **F3** β source·market 부재 / β시장 ≠ MRP시장 이중기준 | WARN | 베타_Bloomberg_vs_KICPA |
-| **F2** Kroll size decile — 시총 룩업(자유입력 대신 provenance 강제) | 제안 | deloitte_감사인검토_WACC |
+| **F2** Kroll size decile — 시총 룩업(자유입력 대신 provenance 강제) | 제안 | D사_감사인검토_WACC |
 | 매출 YoY 급변 > 50% (key-in 오류) | WARN | 모델링_워크플로우_기초 |
-| WARA ↔ IRR ↔ WACC ±1%p reconciliation | WARN | deloitte_감사인검토_WACC |
+| WARA ↔ IRR ↔ WACC ±1%p reconciliation | WARN | D사_감사인검토_WACC |
 | peer 최대분기비중 ≥ 40% 연환산 금지 | WARN | 상대가치_계절성_LTM |
-| 운전자본 현금유출 매년 악화 > 5% (흑자도산) | WARN | msvalue 정본 §2.4 |
+| 운전자본 현금유출 매년 악화 > 5% (흑자도산) | WARN | M사 정본 §2.4 |
 | `diagnose_dcf_gap` — 주장값 vs 독립재계산 → 구조버그 5가설 지목 | WARN | 앤트로픽 벤치마크 §2 |
 
 > **FAIL = 결과 무효, WARN = 통과시키되 감사인에게 노출.** 데이터 정합(주석↔FS tie-out·

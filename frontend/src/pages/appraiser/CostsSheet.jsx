@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { api } from "../../api.js";
 import { loadKey } from "../Byok.jsx";
 
-/* 2.가정 > 원가·판관비 — /api/assumptions/costs-build 배선(비올/MSVALUE 성격별 다중드라이버).
+/* 2.가정 > 원가·판관비 — /api/assumptions/costs-build 배선(비올/M사 성격별 다중드라이버).
    단일 COGS%/SGA% 가 아니라 성격별 라인(원재료·노무비·외주비·감가상각·인건비·지급수수료…)을
    각자 경제동인으로 투영 → 카테고리 합산 → 매출총이익·EBIT. 성격별 항목은 1.계정분류(PL 매핑)
    에서 임포트 가능. */
@@ -152,7 +152,7 @@ export default function CostsSheet({ project, onSave }) {
   return (
     <>
       <div className="card">
-        <h2>원가·판관비 <span className="muted">— 성격별 다중 드라이버(비올/MSVALUE)</span></h2>
+        <h2>원가·판관비 <span className="muted">— 성격별 다중 드라이버(비올/M사)</span></h2>
         <div className="pad">
           <div className="muted" style={{ marginBottom: 8 }}>
             성격별(원재료·노무비·외주비·감가상각·인건비·지급수수료…)로 각자 투영합니다.
