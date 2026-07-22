@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Val-Studio DCF — Excel Task Pane Add-in manifest (MVP Level 1).
+  Add-in 본체는 별도 바이너리가 아니라 웹 페이지(우리 HTTPS 앱 ?embed=1).
+  ⚠️ <Id> GUID 는 프로덕션 고정값(배포 후 변경 금지). 로컬 개발 사이드로딩은 manifest.dev.xml
+     (별도 GUID + http://localhost:8000) 사용 — dev/prod add-in 은 서로 다른 GUID 여야 공존.
+  ⚠️ URL(app.example.com / api.example.com)은 실배포 도메인으로 치환(manifest.staging.xml 참조).
+  상세: docs/prd_excel_addin.md §6·§19, docs/skill_excel_workflow_spec.md §3.
+-->
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:type="TaskPaneApp">
+  <Id>fad3c5ee-38a0-4a50-8b91-059839352e32</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Val-Studio</ProviderName>
+  <DefaultLocale>ko-KR</DefaultLocale>
+  <DisplayName DefaultValue="Val-Studio DCF"/>
+  <Description DefaultValue="DCF 결정론 엔진 · 가정 타당성 검증 (Task Pane)"/>
+  <IconUrl DefaultValue="https://app.example.com/logo.png"/>
+  <HighResolutionIconUrl DefaultValue="https://app.example.com/logo@2x.png"/>
+  <SupportUrl DefaultValue="https://github.com/your-org/valuation-platform"/>
+
+  <!-- fetch 대상(우리 앱·API) 도메인 — Task Pane 내 내비게이션 허용 목록.
+       CORS 와 별개(CORS 는 FastAPI allow_origins). -->
+  <AppDomains>
+    <AppDomain>https://app.example.com</AppDomain>
+    <AppDomain>https://api.example.com</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Workbook"/>
+  </Hosts>
+
+  <DefaultSettings>
+    <!-- Task Pane URL = 우리 HTTPS 앱의 embed 모드(LNB·헤더 축소). -->
+    <SourceLocation DefaultValue="https://app.example.com/?embed=1"/>
+  </DefaultSettings>
+
+  <!-- Level 1(Task Pane only)은 ReadDocument 로 시작. Office.js 쓰기(Level 2)부터 ReadWriteDocument. -->
+  <Permissions>ReadDocument</Permissions>
+</OfficeApp>

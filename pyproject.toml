@@ -1,0 +1,37 @@
+[project]
+name = "valuation-platform"
+version = "0.1.0"
+description = "DCF 모델 자동화 플랫폼 — 비올 1:1 재현 결정론적 엔진 + DART/RAG/LLM 자동화"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+# Milestone 1(calc_core + 골든 테스트)은 표준 라이브러리만으로 동작.
+# 이후 페이즈에서 추가: fastapi, uvicorn, openpyxl, pandas, dart-fss, arelle-release 등
+dev = ["pytest>=8", "pytest-cov>=5"]
+
+[tool.pytest.ini_options]
+pythonpath = ["backend"]
+testpaths = ["tests"]
+
+# 커버리지 게이트는 기본 실행에 걸지 않는다 — pytest-cov 미설치 환경(3.14 등 stdlib
+# 러너)에서 전체 스위트가 죽으면 안 되기 때문. 게이트는 명시 실행으로:
+#   py -3.12 -m pytest --cov=backend --cov-fail-under=85
+[tool.coverage.run]
+source = ["backend"]
+omit = ["*/__pycache__/*", "*/rag_inference/*"]
+
+[tool.coverage.report]
+# 실측 86%(2026-07-19, 490 테스트) 기준 1%p 헤드룸. 현재치와 동률로 잡으면 사소한
+# 추가 코드에도 깨져 게이트를 끄게 되므로, 회귀만 막는 선에서 설정한다.
+fail_under = 85
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+[tool.setuptools]
+package-dir = { "" = "backend" }

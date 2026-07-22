@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Val-Studio DCF — Excel Task Pane Add-in manifest (로컬 개발 사이드로딩).
+  로컬 FastAPI(uvicorn :8000)가 frontend/dist 를 서빙하는 상태에서 이 manifest 를
+  Excel > 삽입 > 내 추가 기능 > 공유 폴더/사이드로드 로 등록하면 Task Pane 에 ?embed=1 앱이 뜬다.
+  prod(manifest.xml)와 GUID 가 달라 두 add-in 이 공존 가능. Office 는 개발 시 http://localhost 허용.
+  실행: py -3.12 -m uvicorn backend.api.main:app --port 8000  (레포 루트, frontend 빌드 후)
+-->
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:type="TaskPaneApp">
+  <Id>bcd6d8d6-6c51-42c4-b6a8-e3bf48a1fde2</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Val-Studio (dev)</ProviderName>
+  <DefaultLocale>ko-KR</DefaultLocale>
+  <DisplayName DefaultValue="Val-Studio DCF (dev)"/>
+  <Description DefaultValue="DCF 결정론 엔진 · 로컬 개발 Task Pane"/>
+  <IconUrl DefaultValue="http://localhost:8000/logo.png"/>
+  <HighResolutionIconUrl DefaultValue="http://localhost:8000/logo@2x.png"/>
+  <SupportUrl DefaultValue="https://github.com/gfdsstyu/val-studio"/>
+
+  <AppDomains>
+    <AppDomain>http://localhost:8000</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Workbook"/>
+  </Hosts>
+
+  <DefaultSettings>
+    <SourceLocation DefaultValue="http://localhost:8000/?embed=1"/>
+  </DefaultSettings>
+
+  <Permissions>ReadDocument</Permissions>
+</OfficeApp>

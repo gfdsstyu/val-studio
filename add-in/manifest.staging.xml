@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Val-Studio DCF — Staging manifest (테스트 테넌트/로컬 sideload).
+  로컬 dev: Office dev certs 로 https://localhost:5173 sideload.
+  Prod manifest 와 GUID 는 동일하게 유지(같은 앱), URL 만 스테이징으로 치환.
+-->
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:type="TaskPaneApp">
+  <Id>00000000-0000-0000-0000-000000000000</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Val-Studio</ProviderName>
+  <DefaultLocale>ko-KR</DefaultLocale>
+  <DisplayName DefaultValue="Val-Studio DCF (staging)"/>
+  <Description DefaultValue="DCF 결정론 엔진 · 가정 타당성 검증 — staging"/>
+  <IconUrl DefaultValue="https://localhost:5173/logo.png"/>
+  <HighResolutionIconUrl DefaultValue="https://localhost:5173/logo@2x.png"/>
+  <SupportUrl DefaultValue="https://github.com/your-org/valuation-platform"/>
+  <AppDomains>
+    <AppDomain>https://localhost:5173</AppDomain>
+    <AppDomain>https://staging.valstudio.example</AppDomain>
+    <AppDomain>https://api-staging.valstudio.example</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Workbook"/>
+  </Hosts>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://localhost:5173/?embed=1"/>
+  </DefaultSettings>
+  <Permissions>ReadDocument</Permissions>
+</OfficeApp>

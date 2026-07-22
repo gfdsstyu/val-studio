@@ -1,0 +1,19 @@
+{
+  "_source": "pe양식/DCF_클래시스_1ㅁ2ㅁ3ㅁ.xlsx (복호화 pw=1a2a3a) 시트 '클래시스DCF'",
+  "_note": "개선 A(tax_override)·B(terminal_fcff_override) 실증 사례. 추정 2024F~2028F, 단위 백만원.",
+  "wacc": 0.06239,
+  "terminal_growth": 0.05,
+  "revenue": [227400, 272880, 327456, 392950, 471540],
+  "cogs": [46000, 55200, 66240, 79488, 95386],
+  "sga": [64100, 76920, 92304, 110760, 132920],
+  "dep_amort": [4969.5, 4969.5, 4969.5, 4969.5, 4969.5],
+  "capex": [6112.5, 6112.5, 6112.5, 6112.5, 6112.5],
+  "delta_nwc_cash_adj": [-5493.9, -5493.9, -5493.9, -5493.9, -5493.9],
+  "non_operating_assets": 199400,
+  "net_debt": 99400,
+  "shares_outstanding": 63999519,
+  "mid_year_periods": [0.5, 1.5, 2.5, 3.5, 4.5],
+  "terminal_discount_period": 4.5,
+  "tax_override": [27100, 34100, 37900, 37900, 37900],
+  "terminal_fcff_override": 31557
+}

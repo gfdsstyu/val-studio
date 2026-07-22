@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 환경/비밀
+.env
+.env.*
+*.key
+
+# 대용량/재생성 가능 산출물 (원본 엑셀에서 재추출 가능, 원본은 레포 미포함)
+fixtures/**/raw_dump.json
+
+# 생성된 export 산출물
+out/
+
+# 원본 자료(저작권/기밀) — 레포에 넣지 않음
+data/source/
+*.xlsx
+*.pdf
+
+# OS/IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Node (frontend 추가 시)
+node_modules/
+dist/
+scratch/
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+
+# 로컬 앱 데이터(프로젝트 JSON)
+var/
+
+# 스킬 빌드 산출(vendoring·zip은 build_excel_skill.py 로 재생성) — dist/ 는 위에서 커버
+.claude/skills/*/scripts/vendor/
+
+# 커버리지 산출(pytest-cov)
+.coverage
+coverage.xml
+htmlcov/
+
+# 로컬 전용 설정(공개 대상 아님)
+scripts/mask_rules.json
