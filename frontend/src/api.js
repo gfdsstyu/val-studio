@@ -12,6 +12,20 @@ async function j(method, url, body, headers = {}) {
   return d;
 }
 
+/** 바이너리 응답(zip 등) 헬퍼 — 오류 본문은 JSON detail 로 파싱해 던진다. */
+async function blob(method, url, body, headers = {}) {
+  const r = await fetch(url, {
+    method,
+    headers: body ? { "Content-Type": "application/json", ...headers } : headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.detail || `HTTP ${r.status}`);
+  }
+  return r.blob();
+}
+
 export const api = {
   health: () => j("GET", "/api/health"),
   dcf: (body) => j("POST", "/api/dcf", body),
@@ -40,6 +54,20 @@ export const api = {
     j("POST", "/api/dart/corp-search", { q, listed_only: !!listedOnly }, { "X-Dart-Key": key }),
   dartFilings: (key, body) =>
     j("POST", "/api/dart/filings", body, { "X-Dart-Key": key }),
+  // 공시 원본 zip(document.xml) — JSON 이 아니라 바이너리라 blob 헬퍼로 받는다.
+  dartDocument: (key, body) =>
+    blob("POST", "/api/dart/document", body, { "X-Dart-Key": key }),
+  // 정기보고서 주요정보 5종 — 재무 숫자 밖의 구조·귀속 정보.
+  dartCompany: (key, body) =>
+    j("POST", "/api/dart/company", body, { "X-Dart-Key": key }),
+  dartAuditOpinion: (key, body) =>
+    j("POST", "/api/dart/audit-opinion", body, { "X-Dart-Key": key }),
+  dartShares: (key, body) =>
+    j("POST", "/api/dart/shares", body, { "X-Dart-Key": key }),
+  dartInvestments: (key, body) =>
+    j("POST", "/api/dart/investments", body, { "X-Dart-Key": key }),
+  dartDividends: (key, body) =>
+    j("POST", "/api/dart/dividends", body, { "X-Dart-Key": key }),
   // 직원현황 → 인원·인당급여 집계 + headcount CostLine(노무비 드라이버 실측 시드).
   dartEmployee: (key, body) =>
     j("POST", "/api/dart/employee", body, { "X-Dart-Key": key }),

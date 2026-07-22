@@ -1088,6 +1088,112 @@ async def dart_document(request: Request,
         headers={"Content-Disposition": f'attachment; filename="dart_{rcept}.zip"'})
 
 
+# ── DART 정기보고서 주요정보 5종 (BYOK, 서버 미저장) ─────────────────────────────
+# 재무 숫자(fnlttSinglAcntAll) 밖의 구조·귀속 정보: 개황·감사의견·주식총수·최대주주·
+# 타법인출자·배당. 전부 {corp_code, bsns_year, reprt_code?} 공통(개황만 corp_code).
+def _dart_report_args(d: dict) -> tuple[str, str, str]:
+    corp = str(d.get("corp_code", "")).strip()
+    year = str(d.get("bsns_year") or d.get("year") or "").strip()
+    if not (corp and year):
+        raise HTTPException(422, "corp_code, bsns_year 필요")
+    return corp, year, str(d.get("reprt_code", "11011"))
+
+
+@app.post("/api/dart/company")
+async def dart_company(request: Request,
+                       x_dart_key: str | None = Header(default=None)) -> dict:
+    """{corp_code} + X-Dart-Key → 기업개황. acc_mt(결산월)는 DCF 기간 정합 게이트."""
+    if not x_dart_key:
+        raise HTTPException(400, "X-Dart-Key 헤더 없음")
+    from ingest.dart_reports import DartReportError, fetch_company
+    d = await request.json()
+    corp = str(d.get("corp_code", "")).strip()
+    if not corp:
+        raise HTTPException(422, "corp_code 필요")
+    try:
+        info = fetch_company(x_dart_key, corp)
+    except DartReportError as e:
+        raise HTTPException(422, f"DART 오류: {e.status} {e.message}") from e
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
+    return {"company": info, "corp_code": corp}
+
+
+@app.post("/api/dart/audit-opinion")
+async def dart_audit_opinion(request: Request,
+                             x_dart_key: str | None = Header(default=None)) -> dict:
+    """{corp_code, bsns_year, reprt_code?} → 감사인·감사의견·강조사항·KAM(3개년)."""
+    if not x_dart_key:
+        raise HTTPException(400, "X-Dart-Key 헤더 없음")
+    from ingest.dart_reports import DartReportError, fetch_audit_opinion
+    corp, year, reprt = _dart_report_args(await request.json())
+    try:
+        rows = fetch_audit_opinion(x_dart_key, corp, year, reprt_code=reprt)
+    except DartReportError as e:
+        raise HTTPException(422, f"DART 오류: {e.status} {e.message}") from e
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
+    return {"opinions": rows, "count": len(rows), "corp_code": corp, "year": year}
+
+
+@app.post("/api/dart/shares")
+async def dart_shares(request: Request,
+                      x_dart_key: str | None = Header(default=None)) -> dict:
+    """{corp_code, bsns_year, reprt_code?} → 주식총수(발행/유통) + 최대주주.
+
+    발행주식수와 유통주식수를 함께 반환한다 — 주당가치 분모가 어느 쪽이냐로 갈리는
+    D7 게이트(발행 vs 유통 괴리)의 원천. 최대주주 현황도 같이 실어 지분율을 붙인다.
+    """
+    if not x_dart_key:
+        raise HTTPException(400, "X-Dart-Key 헤더 없음")
+    from ingest.dart_reports import (DartReportError, fetch_major_shareholders,
+                                     fetch_shares_total)
+    corp, year, reprt = _dart_report_args(await request.json())
+    try:
+        shares = fetch_shares_total(x_dart_key, corp, year, reprt_code=reprt)
+        holders = fetch_major_shareholders(x_dart_key, corp, year, reprt_code=reprt)
+    except DartReportError as e:
+        raise HTTPException(422, f"DART 오류: {e.status} {e.message}") from e
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
+    return {"shares": shares, "major_shareholders": holders,
+            "corp_code": corp, "year": year}
+
+
+@app.post("/api/dart/investments")
+async def dart_investments(request: Request,
+                           x_dart_key: str | None = Header(default=None)) -> dict:
+    """{corp_code, bsns_year, reprt_code?} → 타법인 출자현황(장부가액 = NOA 시드)."""
+    if not x_dart_key:
+        raise HTTPException(400, "X-Dart-Key 헤더 없음")
+    from ingest.dart_reports import DartReportError, fetch_investments
+    corp, year, reprt = _dart_report_args(await request.json())
+    try:
+        rows = fetch_investments(x_dart_key, corp, year, reprt_code=reprt)
+    except DartReportError as e:
+        raise HTTPException(422, f"DART 오류: {e.status} {e.message}") from e
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
+    return {"investments": rows, "count": len(rows), "corp_code": corp, "year": year}
+
+
+@app.post("/api/dart/dividends")
+async def dart_dividends(request: Request,
+                         x_dart_key: str | None = Header(default=None)) -> dict:
+    """{corp_code, bsns_year, reprt_code?} → 배당지표(당기/전기/전전기)."""
+    if not x_dart_key:
+        raise HTTPException(400, "X-Dart-Key 헤더 없음")
+    from ingest.dart_reports import DartReportError, fetch_dividends
+    corp, year, reprt = _dart_report_args(await request.json())
+    try:
+        rows = fetch_dividends(x_dart_key, corp, year, reprt_code=reprt)
+    except DartReportError as e:
+        raise HTTPException(422, f"DART 오류: {e.status} {e.message}") from e
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
+    return {"dividends": rows, "count": len(rows), "corp_code": corp, "year": year}
+
+
 # ── 주가·β·시총·환율 (KRX FinanceDataReader — 무료, 키 불요) ──────────────────
 def _fdr_provider():
     from ingest.price_client import FinanceDataReaderProvider
