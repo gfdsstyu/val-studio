@@ -7,6 +7,7 @@ export const NAV = {
       sheets: [{ id: "summary", label: "상태 요약" }] },
     { id: "materials", label: "0. 자료·Brief", sheets: [
       { id: "files", label: "자료함" },
+      { id: "disclosure", label: "공시자료" },
       { id: "brief", label: "Company Brief" },
     ]},
     { id: "mapping", label: "1. 계정분류", sheets: [

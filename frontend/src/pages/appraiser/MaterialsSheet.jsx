@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { api, fileToBase64 } from "../../api.js";
 import { loadKey } from "../Byok.jsx";
+import DisclosureSheet from "./DisclosureSheet.jsx";
 
 /* 0.자료·Brief — files(자료함)·brief(Company Brief).
    업로드/파싱 파이프라인·LLM 자동 브리프는 후속(백엔드 인제스트 미배선) — 지금은
@@ -251,7 +252,7 @@ function BriefSheet({ project, onSave }) {
 }
 
 export default function MaterialsSheet({ project, sheet, onSave }) {
-  return sheet === "brief"
-    ? <BriefSheet project={project} onSave={onSave} />
-    : <FilesSheet project={project} onSave={onSave} />;
+  if (sheet === "brief") return <BriefSheet project={project} onSave={onSave} />;
+  if (sheet === "disclosure") return <DisclosureSheet project={project} onSave={onSave} />;
+  return <FilesSheet project={project} onSave={onSave} />;
 }
