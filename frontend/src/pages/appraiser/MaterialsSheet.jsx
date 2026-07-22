@@ -48,6 +48,7 @@ function DartFetchPanel({ project, onSave }) {
     const rows = res.accounts
       .filter((a) => wanted.includes(a.sj_div) && a.value != null)
       .map((a) => ({ account: a.name, amount: String(Math.round(a.value)),
+        account_id: a.account_id,   // 택사노미 결정론 분류의 1차 키(표기 흔들림 면역)
         bucket: isBs ? "WC(운전자본)" : "Sales" }));
     onSave?.({ [isBs ? "mapping_bs" : "mapping_pl"]: rows });
   };

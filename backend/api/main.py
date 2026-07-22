@@ -880,23 +880,36 @@ async def dart_employee_endpoint(request: Request,
 
 @app.post("/api/fs/classify")
 async def fs_classify(request: Request) -> dict:
-    """계정명 리스트 → 버킷 제안(결정론 규칙). 무매칭 = uncertain(유저 분류 필요).
+    """계정명(+표준 요소명) 리스트 → 버킷 제안. 무매칭 = uncertain(유저 분류 필요).
 
-    body: {statement: "PL"|"BS", accounts: ["매출원가", "단기차입금", ...]}.
-    반환은 **제안**일 뿐 — 최종은 유저 승인(판단 보조 원칙).
+    body: {statement: "PL"|"BS", accounts: [...]}. accounts 원소는 문자열이거나
+        {name, account_id} 객체. account_id(예 `ifrs-full_Revenue`)가 있으면 택사노미로
+        먼저 판정(표기 흔들림 면역), 없으면 계정명 키워드 폴백. 반환은 **제안**일 뿐 —
+        judgment=True(평가목적 재분류 판단 사항)는 자동 확정 금지, 유저 승인 대상.
     """
     from ingest.fs_mapper import classify_all
     d = await request.json()
     stmt = str(d.get("statement", "")).upper()
     if stmt not in ("PL", "BS"):
         raise HTTPException(422, "statement 는 'PL'|'BS'")
+    names: list[str] = []
+    ids: list[str | None] = []
+    for a in (d.get("accounts") or []):
+        if isinstance(a, dict):
+            names.append(str(a.get("name", "")))
+            aid = a.get("account_id")
+            ids.append(str(aid) if aid else None)
+        else:
+            names.append(str(a))
+            ids.append(None)
     try:
-        cls = classify_all([str(a) for a in (d.get("accounts") or [])], stmt)
+        cls = classify_all(names, stmt, account_ids=ids)
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
     return {"classifications": [
         {"account": c.account, "bucket": c.bucket, "confidence": c.confidence,
-         "rule": c.rule, "uncertain": c.uncertain, "note": c.note} for c in cls]}
+         "rule": c.rule, "uncertain": c.uncertain, "note": c.note,
+         "judgment": c.judgment} for c in cls]}
 
 
 # ── Company Brief — DART 원문 XBRL → 프리필 + 마크다운 골격 ───────────────────

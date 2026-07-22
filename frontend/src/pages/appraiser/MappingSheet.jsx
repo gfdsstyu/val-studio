@@ -26,20 +26,25 @@ export default function MappingSheet({ project, sheet, onSave }) {
     const next = rows.slice(); next[i] = { ...next[i], [k]: e.target.value, _sug: undefined }; setRows(next);
   };
 
-  // 자동 분류 제안 — 결정론 규칙(서버). 매칭분만 버킷 채우고, uncertain/저신뢰는 배지로 표기.
+  // 자동 분류 제안 — 서버 2단(택사노미 account_id → 계정명 키워드). judgment(평가목적
+  // 판단 사항)는 버킷을 자동 확정하지 않고 배지로만 제안, uncertain/저신뢰도 배지 표기.
   const autoClassify = async () => {
-    const named = rows.map((r, i) => [i, (r.account || "").trim()]).filter(([, a]) => a);
+    const named = rows.map((r, i) => [i, (r.account || "").trim(), r.account_id])
+      .filter(([, a]) => a);
     if (!named.length) { setErr("계정과목을 먼저 입력하세요."); return; }
     setBusy(true); setErr(null);
     try {
       const { classifications } = await api.fsClassify({
-        statement: isBs ? "BS" : "PL", accounts: named.map(([, a]) => a) });
+        statement: isBs ? "BS" : "PL",
+        accounts: named.map(([, name, account_id]) => ({ name, account_id })) });
       const next = rows.slice();
       named.forEach(([i], k) => {
         const c = classifications[k];
         next[i] = { ...next[i],
-          bucket: c.bucket || next[i].bucket,   // uncertain 이면 기존 유지
-          _sug: { bucket: c.bucket, conf: c.confidence, uncertain: c.uncertain, note: c.note } };
+          // judgment 는 유저 판단 몫 → 자동 확정 금지(기존 버킷 유지). 확정 분류만 채움.
+          bucket: (c.bucket && !c.judgment) ? c.bucket : next[i].bucket,
+          _sug: { bucket: c.bucket, conf: c.confidence, uncertain: c.uncertain,
+                  note: c.note, judgment: c.judgment } };
       });
       setRows(next);
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
@@ -89,6 +94,10 @@ export default function MappingSheet({ project, sheet, onSave }) {
                 <td style={{ fontSize: 11 }}>
                   {r._sug && (r._sug.uncertain
                     ? <span className="muted" title="규칙 무매칭 — 유저 분류">⚖️ 미상</span>
+                    : r._sug.judgment
+                    ? <span style={{ color: "var(--warn)" }}
+                        title={`제안 ${r._sug.bucket} · ${r._sug.note || "평가목적 재분류 판단 필요"}`}>
+                        ⚖️ 판단 → {r._sug.bucket}</span>
                     : <span className={r._sug.conf < 0.7 ? "" : "muted"}
                         style={r._sug.conf < 0.7 ? { color: "var(--warn)" } : {}}
                         title={r._sug.note || `신뢰도 ${(r._sug.conf * 100).toFixed(0)}%`}>
@@ -103,7 +112,9 @@ export default function MappingSheet({ project, sheet, onSave }) {
           <button className="primary" onClick={save}>저장</button>
           {err && <div className="err">{err}</div>}
           <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
-            자동 분류는 <b>제안</b>입니다 — ⚖️ 미상·⚠ 저신뢰(현금 등)는 직접 확인하세요.</div>
+            자동 분류는 <b>제안</b>입니다. DART 계정은 표준코드(account_id)로 결정론 분류하고,
+            ⚖️ 판단(미지급비용·리스부채·초과현금 등 평가목적 재분류)·⚖️ 미상·⚠ 저신뢰는
+            버킷을 자동 확정하지 않으니 직접 확인하세요.</div>
         </div>
       </div>
 

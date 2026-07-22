@@ -15,6 +15,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from . import taxonomy_store
+
+# OpenDART 가 표준계정ID 대신 넣는 문자열. 요소명이 아니므로 택사노미 조회 대상이 아니다.
+NON_STANDARD_ACCOUNT_ID = "-표준계정코드 미사용-"
+
 # 버킷 라벨(프론트와 바이트 동일)
 PL_BUCKETS = ("Sales", "COGS", "SGA", "NonOp(영업외)")
 BS_BUCKETS = ("WC(운전자본)", "FA(유형자산)", "NOA(비영업자산)", "IBD(이자부부채)", "OAL(기타)", "EQU(자본)")
@@ -59,7 +64,12 @@ _RULES = {"PL": _PL_RULES, "BS": _BS_RULES}
 
 @dataclass(frozen=True)
 class Classification:
-    """계정 1건 분류 제안. bucket=None → uncertain(유저 분류 필요, 자동확정 금지)."""
+    """계정 1건 분류 제안. bucket=None → uncertain(유저 분류 필요, 자동확정 금지).
+
+    judgment=True 는 택사노미가 **회계분류는 알지만 평가목적 재분류는 판단 사항**인
+    경우다(미지급비용의 영업성/금융성, 리스부채의 순차입금 포함 여부, 초과현금 등).
+    bucket 제안은 있으나 자동 확정 금지 — 유저 승인 대상으로 올려야 한다.
+    """
     account: str
     statement: str            # 'PL' | 'BS'
     bucket: str | None
@@ -67,32 +77,54 @@ class Classification:
     rule: str                 # 근거 키워드 or 무매칭 사유
     uncertain: bool
     note: str | None = None
+    judgment: bool = False
 
 
 def _norm(s: str) -> str:
     return "".join(str(s).split())          # 공백 제거(계정명 표기 흔들림 흡수)
 
 
-def classify(account: str, statement: str) -> Classification:
-    """계정명 → 버킷 제안(첫 매칭 규칙). 무매칭 = uncertain.
+def classify(
+    account: str, statement: str, *, account_id: str | None = None
+) -> Classification:
+    """계정명(+표준 요소명) → 버킷 제안. 무매칭 = uncertain.
 
     statement: 'PL' | 'BS'. 반환은 제안일 뿐 — 최종은 유저 승인(판단 보조 원칙).
+    account_id: OpenDART `account_id`(예 `ifrs-full_Revenue`). 주면 [[taxonomy_store]]
+        판정을 **먼저** 시도한다. 요소명은 회사가 못 바꾸므로 "매출액 / 영업수익 /
+        수익(매출액)" 같은 표기 흔들림에 면역이다. 앵커 무매칭이면 아래 계정명 키워드로
+        폴백한다(2단 구조). 판단 계정은 bucket 제안 + judgment=True 로 표면화.
     """
-    rules = _RULES.get(statement.upper())
+    stmt = statement.upper()
+    rules = _RULES.get(stmt)
     if rules is None:
         raise ValueError(f"statement 는 'PL'|'BS': {statement}")
+
+    # 1단: 표준 요소명 → 택사노미. `-표준계정코드 미사용-` 은 요소명이 아니므로 제외.
+    if account_id and account_id != NON_STANDARD_ACCOUNT_ID:
+        hint = taxonomy_store.bucket_hint(account_id, stmt)
+        if hint.bucket:
+            return Classification(account, stmt, hint.bucket, hint.confidence,
+                                  hint.rule, False, hint.note, hint.judgment)
+
+    # 2단: 계정명 키워드(첫 매칭 승리).
     acc = _norm(account)
     if not acc:
-        return Classification(account, statement.upper(), None, 0.0, "빈 계정명", True)
+        return Classification(account, stmt, None, 0.0, "빈 계정명", True)
     for bucket, keywords, conf, note in rules:
         for kw in keywords:
             if _norm(kw) in acc:
-                return Classification(account, statement.upper(), bucket, conf,
+                return Classification(account, stmt, bucket, conf,
                                       f"'{kw}' 매칭", False, note)
-    return Classification(account, statement.upper(), None, 0.0,
-                          "무매칭 — 유저 분류 필요", True)
+    return Classification(account, stmt, None, 0.0, "무매칭 — 유저 분류 필요", True)
 
 
-def classify_all(accounts: list[str], statement: str) -> list[Classification]:
-    """계정 리스트 일괄 분류."""
-    return [classify(a, statement) for a in accounts]
+def classify_all(
+    accounts: list[str], statement: str, *, account_ids: list[str | None] | None = None
+) -> list[Classification]:
+    """계정 리스트 일괄 분류. account_ids 를 주면 위치별로 짝지어 택사노미 1단을 태운다."""
+    ids = account_ids or []
+    return [
+        classify(a, statement, account_id=(ids[i] if i < len(ids) else None))
+        for i, a in enumerate(accounts)
+    ]
