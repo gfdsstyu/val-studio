@@ -192,7 +192,10 @@ def _compute(inp: DcfSpineInput, wacc: float, g: float) -> DcfResult:
     # 지배주주 귀속 지분가치 = EV +비영업자산 −순차입부채 −비지배지분(NCI).
     equity_value = (enterprise_value + inp.non_operating_assets - inp.net_debt
                     - inp.non_controlling_interest)
-    per_share = equity_value / inp.shares_outstanding * 1_000_000
+    # 보통주 귀속 = 지분가치 − 희석 청구권 FV(다모다란 가치차감법). 분모는 기본 주식수
+    # — TSM 대신 분자 차감이라 시간가치·OTM 옵션까지 반영(기본 0=기존 동작 불변).
+    per_share = ((equity_value - inp.dilutive_claims_value)
+                 / inp.shares_outstanding * 1_000_000)
 
     return DcfResult(
         ebit=ebit,
@@ -209,6 +212,7 @@ def _compute(inp: DcfSpineInput, wacc: float, g: float) -> DcfResult:
         non_operating_assets=inp.non_operating_assets,
         net_debt=inp.net_debt,
         non_controlling_interest=inp.non_controlling_interest,
+        dilutive_claims_value=inp.dilutive_claims_value,
         equity_value=equity_value,
         shares_outstanding=inp.shares_outstanding,
         per_share=per_share,

@@ -32,6 +32,11 @@ class DcfSpineInput:
     # 정식 용어=비지배지분(구 소수주주지분). 비올·클래시스 실측 브리지: EV +비영업자산
     # −순차입부채 −비지배지분 = 지분가치. 기본 0.
     non_controlling_interest: float = 0.0
+    # 희석 청구권 가치(다모다란 가치차감법, [[주식기준보상_희석_SBC]]): 워런트·전환권·
+    # 스톡옵션(ESO) 등 보통주 외 지분청구권의 공정가치 합(백만원). 주당가치 = (지분가치
+    # − 이 값) ÷ **기본** 주식수 — TSM(자기주식법)의 시간가치·OTM 무시 한계를 회피.
+    # 기본 0(희석 없음/미평가) — 전환증권 존재 시 미평가면 check_dilution_bridge 가 WARN.
+    dilutive_claims_value: float = 0.0
     # 중간연도 할인 컨벤션. 기본 0.5,1.5,... ; terminal 은 마지막 명시연도 factor 로 할인.
     mid_year_periods: list[float] | None = None
     terminal_discount_period: float | None = None
@@ -97,6 +102,7 @@ class DcfResult:
     non_operating_assets: float
     net_debt: float
     non_controlling_interest: float = 0.0    # 비지배지분(NCI) 차감액
+    dilutive_claims_value: float = 0.0       # 희석 청구권(옵션·워런트·전환권) FV 차감액
     equity_value: float = 0.0
     shares_outstanding: int = 0
     per_share: float = 0.0

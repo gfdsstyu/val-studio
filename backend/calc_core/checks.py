@@ -1242,3 +1242,107 @@ def check_market_price_eligibility(
     if report is not None:
         report.add(f)
     return f
+
+
+# ── SBC·희석 게이트 — 근거: [[주식기준보상_희석_SBC]](Issue Paper 524/526/742/743) ──
+def check_dilution_bridge(
+    has_dilutive_instruments: bool,
+    dilutive_claims_value: float,
+    *,
+    method: str = "value_deduction",
+    report: ValidationReport | None = None,
+) -> Finding:
+    """희석 청구권 반영 게이트 (Issue Paper 526 다모다란 주당가치 승격).
+
+    전환증권·옵션·워런트가 존재하는데 주당가치 브리지가 이를 무시하면 과대평가.
+    method:
+      'value_deduction' — 다모다란 가치차감법(권장): 모든 옵션 FV 를 분자에서 차감,
+        분모=기본 주식수. 시간가치·OTM 옵션까지 반영.
+      'treasury_stock'  — TSM(자기주식법): 분모 조정. **시간가치 미반영·OTM 완전 무시**
+        한계(526 Case B: OTM 이면 희석 0 처리) → WARN 으로 한계 표면화.
+      'none'            — 미처리.
+    """
+    allowed = {"value_deduction", "treasury_stock", "none"}
+    if method not in allowed:
+        raise ValueError(f"method 는 {sorted(allowed)} 중 하나")
+    detail = {"has_dilutive_instruments": has_dilutive_instruments,
+              "dilutive_claims_value": dilutive_claims_value, "method": method}
+    if not has_dilutive_instruments:
+        f = Finding("dilution_bridge", Severity.PASS,
+                    "희석 청구권 없음 — 기본 주식수 브리지 정당", detail)
+    elif method == "none" or (method == "value_deduction" and dilutive_claims_value <= 0):
+        f = Finding("dilution_bridge", Severity.WARN,
+                    "전환증권·옵션 존재하는데 희석 미반영 — 주당가치 과대. "
+                    "옵션 FV 를 지분가치에서 차감(가치차감법)하거나 근거 제시", detail)
+    elif method == "treasury_stock":
+        f = Finding("dilution_bridge", Severity.WARN,
+                    "TSM(자기주식법) 사용 — 시간가치 미반영·OTM 옵션 무시 한계. "
+                    "가치차감법(옵션 FV 분자 차감 + 기본 주식수) 검토 권장", detail)
+    else:
+        f = Finding("dilution_bridge", Severity.PASS,
+                    f"희석 청구권 FV {dilutive_claims_value:,.0f} 분자 차감(가치차감법)", detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
+def check_sbc_treatment(
+    sbc_expense_positive: bool,
+    added_back_to_fcf: bool,
+    *,
+    purpose: str = "valuation",
+    cash_settled: bool = False,
+    discount_rate_adjusted: bool = False,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """주식기준보상(SBC) 처리 게이트 (Issue Paper 742/743 승격).
+
+    purpose='valuation' (계속기업 DCF·내재가치):
+      다모다란 — SBC add-back 은 '공짜 점심'. 주식결제형도 현물(in-kind) 실질비용이므로
+      FCF 에서 차감(add-back 금지). add-back 이면 FCF 과대 → WARN.
+    purpose='viu' (IAS 36 손상 사용가치):
+      현금결제형 → 현금유출이므로 포함(제외하면 WARN).
+      주식결제형 → 문언상 현금흐름에서 제외가 원칙. 대신 경제적 희석은 **할인율 상향**으로
+      반영 가능(BDO, 이중계산 방지 원칙과 정합). 현금흐름 차감(비인정 위험)이나
+      제외+할인율 미조정(손상 은폐 위험) 모두 WARN — 전문판단·근거 요구.
+    """
+    if purpose not in {"valuation", "viu"}:
+        raise ValueError("purpose 는 'valuation' | 'viu'")
+    detail = {"sbc_expense_positive": sbc_expense_positive,
+              "added_back_to_fcf": added_back_to_fcf, "purpose": purpose,
+              "cash_settled": cash_settled,
+              "discount_rate_adjusted": discount_rate_adjusted}
+    if not sbc_expense_positive:
+        f = Finding("sbc_treatment", Severity.PASS, "SBC 비용 없음", detail)
+    elif purpose == "valuation":
+        if added_back_to_fcf:
+            f = Finding("sbc_treatment", Severity.WARN,
+                        "SBC 를 FCF 에 add-back — 현물(in-kind) 실질비용 무시로 FCF 과대"
+                        "(다모다란: malpractice). 차감 유지 + 옵션 FV 는 희석 브리지로", detail)
+        else:
+            f = Finding("sbc_treatment", Severity.PASS,
+                        "SBC 를 비용으로 유지(add-back 안 함) — 경제적 실질 정합", detail)
+    else:  # viu
+        if cash_settled:
+            if added_back_to_fcf:
+                f = Finding("sbc_treatment", Severity.WARN,
+                            "현금결제형 SBC 를 VIU 현금흐름에서 제외 — 실제 현금유출이므로 "
+                            "CGU 배분비용에 포함해야 함", detail)
+            else:
+                f = Finding("sbc_treatment", Severity.PASS,
+                            "현금결제형 SBC 를 VIU 현금유출에 포함", detail)
+        elif not added_back_to_fcf:
+            f = Finding("sbc_treatment", Severity.WARN,
+                        "주식결제형 SBC 를 VIU 현금흐름에서 직접 차감 — IAS 36 문언"
+                        "(비현금성 제외)과 충돌, 회계적 비인정 위험. 할인율 조정 경로 검토", detail)
+        elif not discount_rate_adjusted:
+            f = Finding("sbc_treatment", Severity.WARN,
+                        "주식결제형 SBC 를 VIU 에서 제외했으나 할인율 미조정 — 경제적 희석 "
+                        "미반영으로 VIU 과대(손상 은폐 위험). 할인율 상향+주석공시 검토", detail)
+        else:
+            f = Finding("sbc_treatment", Severity.PASS,
+                        "주식결제형 SBC: VIU 현금흐름 제외 + 할인율 조정 반영"
+                        "(이중계산 방지 정합)", detail)
+    if report is not None:
+        report.add(f)
+    return f
