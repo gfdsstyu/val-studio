@@ -239,6 +239,35 @@ def test_relative_psr():
     assert abs(d["psr"]["implied_per_share"] - 7000.0) < 1e-6       # median 7 × 1000
 
 
+def test_backlog_endpoint():
+    from calc_core.backlog import BacklogInputs, project_backlog
+    body = {"opening_backlog": 100000, "conversion_rate": 0.35,
+            "new_orders": [35000] * 5, "normalized_margin": 0.12, "years": 5}
+    r = C.post("/api/backlog", json=body)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    direct = project_backlog(BacklogInputs(
+        opening_backlog=100000, conversion_rate=0.35, new_orders=[35000.0] * 5,
+        normalized_margin=0.12, years=5))
+    assert abs(d["revenue"][0] - direct.revenue[0]) < 1e-9         # API=엔진 무가공
+    assert "revenue" in d["spine_lines"] and "cogs" in d["spine_lines"]
+
+
+def test_backlog_bad_input_422():
+    assert C.post("/api/backlog", json={"conversion_rate": 0.3}).status_code == 422
+
+
+def test_segment_allocation_helper():
+    from ingest.profiles.research_brief import SegmentRevenue, segment_allocation
+    segs = [SegmentRevenue("SegmentsAxis", "DS", "반도체", "2024", 600.0),
+            SegmentRevenue("SegmentsAxis", "DX", "디바이스", "2024", 400.0),
+            SegmentRevenue("SegmentsAxis", "DS", "반도체", "2023", 500.0)]  # 구기간 무시
+    alloc = segment_allocation(segs)
+    assert abs(alloc["반도체"] - 0.6) < 1e-9 and abs(alloc["디바이스"] - 0.4) < 1e-9
+    assert abs(sum(alloc.values()) - 1.0) < 1e-12
+    assert segment_allocation([]) == {}                            # 폴백
+
+
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding="utf-8")

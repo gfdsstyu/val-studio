@@ -77,6 +77,8 @@ export const api = {
   uploadSheet: (body) => j("POST", "/api/upload/sheet", body),
   damodaranCrp: (country) => j("GET", `/api/damodaran/crp${country ? `?country=${encodeURIComponent(country)}` : ""}`),
   relativeValue: (body) => j("POST", "/api/relative/value", body),
+  backlog: (body) => j("POST", "/api/backlog", body),
+  briefFromXbrl: (body) => j("POST", "/api/brief/from_xbrl", body),
   bridgeCheck: (body) => j("POST", "/api/bridge/check", body),
   pgrSuggest: (body) => j("POST", "/api/macro/pgr-suggest", body),
   threeStatement: (body) => j("POST", "/api/three-statement", body),

@@ -921,7 +921,8 @@ async def brief_from_xbrl(request: Request) -> dict:
     있으면(형제 *_lab-ko.xml) 세그먼트 한글명까지, 없으면 축코드로 degrade.
     """
     from ingest.parsers.xbrl import XbrlParser
-    from ingest.profiles.research_brief import extract_research_brief, render_brief_md
+    from ingest.profiles.research_brief import (
+        extract_research_brief, render_brief_md, segment_allocation)
     d = await request.json()
     if "xbrl_b64" not in d:
         raise HTTPException(422, "xbrl_b64 필요")
@@ -946,10 +947,32 @@ async def brief_from_xbrl(request: Request) -> dict:
         "financials": pre.financials,
         "segments": [_seg(s) for s in pre.segments],
         "regions": [_seg(s) for s in pre.regions],
+        "segment_allocation": segment_allocation(pre.segments),   # 부문 트리 배분율 자동
         "issued_shares": pre.issued_shares, "treasury_shares": pre.treasury_shares,
         "floating_ratio": pre.floating_ratio(),
         "periods": sorted(pre.financials), "markdown": md,
     }
+
+
+@app.post("/api/backlog")
+async def backlog_endpoint(request: Request) -> dict:
+    """수주산업 매출 모델: {opening_backlog, conversion_rate, new_orders:[...],
+    normalized_margin, years} → 연도별 매출·EBIT·연말잔고 + 스파인 라인(revenue/cogs/sga).
+    조선·건설·플랜트·방산 등 수주잔고→매출 전환 산업의 DCF 출발점."""
+    from calc_core.backlog import BacklogInputs, project_backlog, to_spine_lines
+    d = await request.json()
+    try:
+        inp = BacklogInputs(
+            opening_backlog=float(d["opening_backlog"]),
+            conversion_rate=float(d["conversion_rate"]),
+            new_orders=[float(x) for x in (d.get("new_orders") or [])],
+            normalized_margin=float(d["normalized_margin"]),
+            years=int(d["years"]))
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"입력 형식 오류: {e}") from e
+    r = project_backlog(inp)
+    return {"revenue": r.revenue, "ebit": r.ebit, "closing_backlog": r.closing_backlog,
+            "spine_lines": to_spine_lines(r), "warnings": r.warnings}
 
 
 # ── DART API 재무제표 (BYOK: X-Dart-Key 헤더 통과, 서버 미저장) ───────────────

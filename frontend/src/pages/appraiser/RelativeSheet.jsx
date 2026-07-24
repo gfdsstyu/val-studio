@@ -10,15 +10,15 @@ const won = (v) => (v == null ? "-" : Math.round(v).toLocaleString("ko-KR"));
 const x = (v) => (v == null ? "-" : Number(v).toFixed(2));
 
 const DEMO = [
-  { name: "유사사A", per: "10", pbr: "1.0", ev_ebitda: "8" },
-  { name: "유사사B", per: "12", pbr: "1.2", ev_ebitda: "10" },
-  { name: "유사사C", per: "14", pbr: "1.4", ev_ebitda: "12" },
+  { name: "유사사A", per: "10", pbr: "1.0", ev_ebitda: "8", psr: "" },
+  { name: "유사사B", per: "12", pbr: "1.2", ev_ebitda: "10", psr: "" },
+  { name: "유사사C", per: "14", pbr: "1.4", ev_ebitda: "12", psr: "" },
 ];
 
 export default function RelativeSheet({ project, onSave }) {
   const [rows, setRows] = useState(project?.data?.relative_peers || DEMO);
   const [t, setT] = useState(project?.data?.relative_target ||
-    { eps: "", bps: "", ebitda: "", net_debt: "0", shares: "" });
+    { eps: "", bps: "", ebitda: "", sps: "", net_debt: "0", shares: "" });
   const [use, setUse] = useState("median");
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
@@ -27,7 +27,7 @@ export default function RelativeSheet({ project, onSave }) {
   const setRow = (i, k) => (e) => {
     const next = rows.slice(); next[i] = { ...next[i], [k]: e.target.value }; setRows(next);
   };
-  const add = () => setRows([...rows, { name: "", per: "", pbr: "", ev_ebitda: "" }]);
+  const add = () => setRows([...rows, { name: "", per: "", pbr: "", ev_ebitda: "", psr: "" }]);
   const rm = (i) => setRows(rows.filter((_, j) => j !== i));
   const setT_ = (k) => (e) => setT({ ...t, [k]: e.target.value });
 
@@ -36,12 +36,15 @@ export default function RelativeSheet({ project, onSave }) {
     try {
       const d = await api.relativeValue({
         peers: rows.filter((r) => r.name.trim()).map((r) => ({
-          name: r.name, per: numOrNull(r.per), pbr: numOrNull(r.pbr), ev_ebitda: numOrNull(r.ev_ebitda) })),
+          name: r.name, per: numOrNull(r.per), pbr: numOrNull(r.pbr),
+          ev_ebitda: numOrNull(r.ev_ebitda), psr: numOrNull(r.psr) })),
         target_eps: numOrNull(t.eps), target_bps: numOrNull(t.bps), target_ebitda: numOrNull(t.ebitda),
+        target_sps: numOrNull(t.sps),
         net_debt: Number(t.net_debt) || 0, shares_outstanding: numOrNull(t.shares), use });
       setRes(d);
       onSave?.({ relative_peers: rows, relative_target: t,
-        relative_summary: { per: d.per.implied_per_share, pbr: d.pbr.implied_per_share } });
+        relative_summary: { per: d.per.implied_per_share, pbr: d.pbr.implied_per_share,
+          psr: d.psr?.implied_per_share } });
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
@@ -54,7 +57,7 @@ export default function RelativeSheet({ project, onSave }) {
       const d = await api.uploadSheet(body);
       // 각 행: 회사, PER, PBR, EV/EBITDA (헤더행 스킵: PER 비숫자면)
       const parsed = d.rows.filter((r) => r.length >= 2 && !Number.isNaN(Number(r[1])))
-        .map((r) => ({ name: r[0], per: r[1] ?? "", pbr: r[2] ?? "", ev_ebitda: r[3] ?? "" }));
+        .map((r) => ({ name: r[0], per: r[1] ?? "", pbr: r[2] ?? "", ev_ebitda: r[3] ?? "", psr: r[4] ?? "" }));
       if (parsed.length) setRows(parsed);
     } catch (e) { setErr(e.message); }
   };
@@ -82,13 +85,14 @@ export default function RelativeSheet({ project, onSave }) {
             pykrx 자동조회는 KRX 로그인 필요 — 수동/업로드가 기본.</div>
           <div style={{ overflowX: "auto" }}>
             <table>
-              <thead><tr><th>유사회사</th><th>PER</th><th>PBR</th><th>EV/EBITDA</th><th></th></tr></thead>
+              <thead><tr><th>유사회사</th><th>PER</th><th>PBR</th><th>EV/EBITDA</th><th>PSR</th><th></th></tr></thead>
               <tbody>{rows.map((r, i) => (
                 <tr key={i}>
                   <td><input type="text" value={r.name} onChange={setRow(i, "name")} style={{ width: 100 }} /></td>
                   <td><input type="text" value={r.per} onChange={setRow(i, "per")} style={{ width: 60 }} /></td>
                   <td><input type="text" value={r.pbr} onChange={setRow(i, "pbr")} style={{ width: 60 }} /></td>
                   <td><input type="text" value={r.ev_ebitda} onChange={setRow(i, "ev_ebitda")} style={{ width: 70 }} /></td>
+                  <td><input type="text" value={r.psr ?? ""} onChange={setRow(i, "psr")} style={{ width: 60 }} /></td>
                   <td><button className="ghost xs" onClick={() => rm(i)}>✕</button></td>
                 </tr>))}</tbody>
             </table>
@@ -107,6 +111,8 @@ export default function RelativeSheet({ project, onSave }) {
               <input type="text" value={t.bps} onChange={setT_("bps")} /></div>
             <div className="row"><label>EBITDA (→ EV/EBITDA, <b>원</b>)</label>
               <input type="text" value={t.ebitda} onChange={setT_("ebitda")} /></div>
+            <div className="row"><label>주당매출 SPS (→ PSR, 적자기업 대안)</label>
+              <input type="text" value={t.sps} onChange={setT_("sps")} /></div>
             <div className="row"><label>순차입부채 (EV→지분, <b>원</b>)</label>
               <input type="text" value={t.net_debt} onChange={setT_("net_debt")} /></div>
             <div className="row"><label>발행주식수 (EV/EBITDA용)</label>
@@ -130,6 +136,7 @@ export default function RelativeSheet({ project, onSave }) {
               <Method label="PER" m={res.per} target={numOrNull(t.eps)} />
               <Method label="PBR" m={res.pbr} target={numOrNull(t.bps)} />
               <Method label="EV/EBITDA" m={res.ev_ebitda} target={numOrNull(t.ebitda)} />
+              <Method label="PSR (적자기업 대안)" m={res.psr} target={numOrNull(t.sps)} />
             </tbody>
           </table>
         </div></div>
