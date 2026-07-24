@@ -14,8 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from calc_core.backsolve import (  # noqa: E402
-    BacksolveResult, OpmParams, WaterfallTranche, allocate_equity,
-    backsolve_equity, bs_call, common_per_share,
+    BacksolveResult, OpmParams, PreferredClass, WaterfallTranche, allocate_equity,
+    backsolve_equity, bs_call, common_per_share, price_rcps,
 )
 from calc_core.checks import (  # noqa: E402
     check_backsolve_anchor, check_day_one_difference, check_fv_hierarchy,
@@ -115,6 +115,50 @@ def test_market_price_eligibility():
     assert check_market_price_eligibility(True, "dcf").severity == Severity.WARN
     assert check_market_price_eligibility(True, "quoted").severity == Severity.PASS
     assert check_market_price_eligibility(False, "model").severity == Severity.PASS
+
+
+# ═══════════════ RCPS/CPS 노드변동 격자 (411) ═══════════════
+def test_rcps_deep_liquidation_floor():
+    # 기업가치가 청산우선권 대비 극소 → 우선주 ≈ 청산우선권 현가, 보통주 ≈ 0
+    pref = PreferredClass("SeriesC", liquidation_preference=450.0, conversion_fraction=0.28)
+    r = price_rcps(50.0, pref, OpmParams(term_years=3, volatility=0.4, risk_free=0.05))
+    # V0(50) < LP(450): 우선주가 사실상 전액, 보통주 음수 아님(잔여)
+    assert r.preferred_value > r.common_value
+    assert r.common_value <= 50.0
+
+
+def test_rcps_deep_conversion():
+    # 기업가치가 청산우선권 대비 극대 → 전환 유리 → 우선주 ≈ V×frac
+    pref = PreferredClass("SeriesC", liquidation_preference=450.0, conversion_fraction=0.28)
+    V0 = 5000.0
+    r = price_rcps(V0, pref, OpmParams(term_years=3, volatility=0.2, risk_free=0.05))
+    # 전환가치 지배 → 우선주 ≈ V0×frac 근처(성장·할인 상쇄), 보통주 ≈ V0×(1−frac)
+    assert r.preferred_value > pref.liquidation_preference
+    assert math.isclose(r.preferred_value + r.common_value, V0, rel_tol=1e-9)
+
+
+def test_rcps_conversion_boundary():
+    pref = PreferredClass("B", liquidation_preference=300.0, conversion_fraction=0.2)
+    r = price_rcps(1000.0, pref, OpmParams(term_years=3, volatility=0.3, risk_free=0.05))
+    # 전환 경계 = LP/frac = 300/0.2 = 1500 (그 이상이면 전환 유리)
+    assert math.isclose(r.conversion_boundary, 1500.0)
+
+
+def test_rcps_value_conservation():
+    # 우선주 + 보통주 = V0 (잔여 항등식)
+    pref = PreferredClass("A", liquidation_preference=200.0, conversion_fraction=0.15)
+    for V0 in (300.0, 800.0, 2000.0):
+        r = price_rcps(V0, pref, OpmParams(term_years=4, volatility=0.35, risk_free=0.04))
+        assert math.isclose(r.preferred_value + r.common_value, V0, rel_tol=1e-9)
+
+
+def test_rcps_american_redemption_ge_european():
+    # 조기 청산/전환 허용(american, 상환권 성격) → 우선주 가치 ≥ 유럽형
+    pref = PreferredClass("RCPS", liquidation_preference=450.0, conversion_fraction=0.3)
+    p = OpmParams(term_years=3, volatility=0.4, risk_free=0.05)
+    eur = price_rcps(400.0, pref, p, american=False).preferred_value
+    ame = price_rcps(400.0, pref, p, american=True).preferred_value
+    assert ame >= eur - 1e-9
 
 
 if __name__ == "__main__":

@@ -147,7 +147,9 @@ doc_type: knowledge
 - **게이트(구현됨)**: `check_viu_discount_rate`(시장관점 우선·gross-up 감지·세전/세후 VIU 일치) ·
   `check_viu_cashflow_scope`(금융활동/법인세/미확정 구조조정/성능향상 CAPEX/복구충당 중복차감 +
   예측기간 5년) · `check_impairment_trigger`(시총<순자산 — **자사주 제외 유통주식수** 기준, §9b).
-- **impairment/VIU 엔진 모드(⏳ 후속)**: 새 엔진이 아니라 기존 `dcf.py` 스파인의 **제약 모드** —
-  TV 미포함(내용연수)·성능향상 CAPEX 필터·세전 관점(유효세전율 역산기)·회수가능액=max(FVLCD, VIU).
+- **impairment/VIU 엔진 모드(✅ 구현 `calc_core/viu.py`)**: 새 엔진이 아닌 제약 모드 —
+  TV 없는 유한 현가(내용연수 N년)·**유효세전율 이분탐색 역산**(세전 VIU==세후 VIU, 단순 gross-up과
+  차이 시 경고)·복구충당부채 장부액 차감(746)·회수가능액=max(FVLCD, VIU)·손상액=max(0, 장부−회수).
+  성능향상 CAPEX·금지 현금흐름 필터는 호출자 책임(게이트가 교차검증). 테스트 6.
 - FV 평가(market-participant)와 VIU(entity-specific)의 경계 규칙(§1 표)을 프로파일로 강제 예정.
 - 스코프 전체 지도: [[밸류에이션_스코프_로드맵]].

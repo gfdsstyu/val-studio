@@ -158,3 +158,70 @@ def common_per_share(result: BacksolveResult, common_class: str,
     if shares_outstanding <= 0:
         raise ValueError("발행주식수는 양수여야 함")
     return result.allocations.get(common_class, 0.0) / shares_outstanding
+
+
+# ═══════════════ RCPS/CPS 노드변동 행사가격 이항 격자 (Issue Paper 411) ═══════════════
+@dataclass(frozen=True)
+class PreferredClass:
+    """전환상환우선주(RCPS)/전환우선주(CPS) 1클래스.
+
+    각 노드에서 우선주는 **청산 vs 전환**을 선택 — 행사가격(전환 임계 기업가치)이
+    노드별로 동적 변동하므로 BSM 폐형 부적합, 이항 격자로 backward induction(411).
+      · liquidation_preference: 유동성 이벤트 시 우선 수령액(투자금 × 청산배수).
+        RCPS 상환권도 하방보장이라 이 값에 통합(상환보장액 = max 로 반영).
+      · conversion_fraction: 전환 시 받는 **전체 기업가치 대비 지분율**(0~1).
+    """
+    name: str
+    liquidation_preference: float
+    conversion_fraction: float
+
+    def payoff(self, enterprise_value: float) -> float:
+        """유동성 노드 페이오프 = max(청산우선권, 전환 지분가치). 411 노드변동의 핵심."""
+        return max(self.liquidation_preference,
+                   enterprise_value * self.conversion_fraction)
+
+
+@dataclass(frozen=True)
+class RcpsResult:
+    preferred_value: float          # 우선주 현재가치(격자 backward induction)
+    common_value: float             # 보통주 잔여가치 = V0 − 우선주
+    conversion_boundary: float | None  # 전환이 청산보다 유리해지는 임계 기업가치(만기)
+
+
+def price_rcps(enterprise_value: float, pref: PreferredClass, params: OpmParams,
+               *, steps: int = 300, american: bool = False) -> RcpsResult:
+    """CRR 격자로 RCPS/CPS 우선주 현재가치 + 보통주 잔여 (411 노드변동 모델).
+
+    기업가치 V 가 위험중립 GBM 격자로 진화. 만기(예상 exit) 노드에서 우선주 페이오프
+    = max(청산, 전환). american=True 면 각 노드에서 조기 청산/전환도 허용(상환권 성격).
+    보통주 = V0 − 우선주(단일 클래스 잔여). 다클래스는 순차 차감으로 확장.
+    """
+    if enterprise_value <= 0:
+        raise ValueError("기업가치는 양수여야 함")
+    n = max(int(steps), 1)
+    dt = params.term_years / n
+    import math
+    v = max(params.volatility, 1e-12)
+    u = math.exp(v * math.sqrt(dt))
+    d = 1.0 / u
+    growth = math.exp((params.risk_free - params.dividend_yield) * dt)
+    p = min(max((growth - d) / (u - d), 0.0), 1.0)
+    disc = math.exp(-params.risk_free * dt)
+
+    # 만기 노드 페이오프
+    vals = [pref.payoff(enterprise_value * u ** j * d ** (n - j)) for j in range(n + 1)]
+    for i in range(n - 1, -1, -1):
+        vals = [disc * (p * vals[j + 1] + (1 - p) * vals[j]) for j in range(i + 1)]
+        if american:
+            vals = [max(vals[j], pref.payoff(enterprise_value * u ** j * d ** (i - j)))
+                    for j in range(i + 1)]
+    pref_pv = vals[0]
+
+    # 전환 경계(만기): LP == V×frac → V = LP/frac
+    boundary = (pref.liquidation_preference / pref.conversion_fraction
+                if pref.conversion_fraction > 0 else None)
+    return RcpsResult(
+        preferred_value=pref_pv,
+        common_value=enterprise_value - pref_pv,
+        conversion_boundary=boundary,
+    )
