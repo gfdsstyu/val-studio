@@ -1084,3 +1084,161 @@ def check_cb_decomposition(
     if report is not None:
         report.add(f)
     return f
+
+
+# ── 공정가치(FV) 게이트 — 근거: [[공정가치_측정_FV]](IFRS Issue Paper 345/346/347/350/411/412/414) ──
+# Backsolve 앵커 시점 괴리 경고 임계(일): 평가일과 최근 라운드가 반 년 이상 떨어지면 조정 필요.
+BACKSOLVE_ANCHOR_STALE_DAYS = 180.0
+
+
+def check_backsolve_anchor(
+    is_arms_length: bool | None,
+    days_gap: float | None,
+    *,
+    stale_days: float = BACKSOLVE_ANCHOR_STALE_DAYS,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """Backsolve 앵커(최근 라운드 거래) 신뢰성 게이트 (Issue Paper 411/412 승격).
+
+    Backsolve 는 "거래가액=공정가액" 전제 위에 서 있다 — 전제가 무너지는 두 축:
+      ① Arm's Length 아님(특수관계·전략적 투자·강요) → 앵커 자체가 오염.
+      ② 평가일과 거래 시점 괴리 → 그 사이 가치변동 미반영, 조정 필요.
+    LLM 대원칙과 동일하게 미확인(None)은 임의 통과 금지 — 확인 요구 WARN.
+    """
+    out: list[Finding] = []
+    if is_arms_length is None:
+        out.append(Finding(
+            "backsolve_anchor_arms_length", Severity.WARN,
+            "앵커 거래의 Arm's Length 여부 미확인 — 투자계약서·거래상대방 확인 필요"
+            "(특수관계·전략적 프리미엄이면 앵커 오염)", {"is_arms_length": None}))
+    elif not is_arms_length:
+        out.append(Finding(
+            "backsolve_anchor_arms_length", Severity.WARN,
+            "앵커 거래가 Arm's Length 아님 — 거래가액≠공정가액, 조정 없이는 Backsolve 부적합",
+            {"is_arms_length": False}))
+    else:
+        out.append(Finding(
+            "backsolve_anchor_arms_length", Severity.PASS,
+            "앵커 거래 독립성(Arm's Length) 확인", {"is_arms_length": True}))
+
+    if days_gap is not None:
+        detail = {"days_gap": days_gap, "stale_days": stale_days}
+        if days_gap > stale_days:
+            out.append(Finding(
+                "backsolve_anchor_staleness", Severity.WARN,
+                f"평가일과 앵커 거래 시점 괴리 {days_gap:.0f}일 > {stale_days:.0f}일 — "
+                f"그 사이 가치변동 조정 필요(411: 시점이 다르면 적절한 조정)", detail))
+        else:
+            out.append(Finding(
+                "backsolve_anchor_staleness", Severity.PASS,
+                f"앵커 거래 시점 괴리 {days_gap:.0f}일 ≤ {stale_days:.0f}일", detail))
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out
+
+
+def check_fv_hierarchy(
+    input_levels: dict[str, int],
+    *,
+    claimed_level: int | None = None,
+    adjusted_level1: bool = False,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """공정가치 수준 판정 게이트 (Issue Paper 345/346 승격).
+
+    핵심 규칙 2개의 결정론 인코딩:
+      ① **가장 낮은 수준이 지배**: 공정가치 수준 = max(사용 변수들의 level 번호).
+         (예: 주가 L1 + 역사적 변동성 L3 → 전체 L3. 대부분의 CB·RCPS 가 L3 인 이유.)
+      ② **조정 = 강등**: Level 1 가격에 조정을 가하면(문단79 예외 포함) 수준이 내려간다.
+    claimed_level 이 계산 수준보다 높으면(숫자가 작으면) WARN — 서열 과대표기.
+    """
+    if not input_levels:
+        raise ValueError("input_levels 비어 있음 — 변수별 수준을 명시할 것")
+    bad = {k: v for k, v in input_levels.items() if v not in (1, 2, 3)}
+    if bad:
+        raise ValueError(f"level 은 1/2/3 만 허용: {bad}")
+    implied = max(input_levels.values())
+    if adjusted_level1 and implied == 1:
+        implied = 2                     # 조정 가한 L1 은 최소 L2 로 강등(345/346)
+    detail = {"input_levels": input_levels, "implied_level": implied,
+              "claimed_level": claimed_level, "adjusted_level1": adjusted_level1}
+    worst = [k for k, v in input_levels.items() if v == max(input_levels.values())]
+    if claimed_level is not None and claimed_level < implied:
+        f = Finding("fv_hierarchy", Severity.WARN,
+                    f"공정가치 수준 과대표기: 주장 Level {claimed_level} < 계산 Level {implied} "
+                    f"(최저수준 변수 {worst} 가 지배 — 상쇄되어도 상향 불가)", detail)
+    else:
+        f = Finding("fv_hierarchy", Severity.PASS,
+                    f"공정가치 수준 = Level {implied} (지배 변수 {worst})", detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
+def check_day_one_difference(
+    transaction_price: float,
+    fair_value: float,
+    level: int,
+    *,
+    tol: float = 1e-6,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """day-one 차이 처리 게이트 (Issue Paper 347 승격).
+
+    거래가격 ≠ 최초 공정가치이면:
+      Level 1·2 → 즉시 당기손익 인식.
+      Level 3   → 차이를 이연 → 만기 상각(한국 실무 정액법 다수).
+    어느 쪽이든 **비금융요소 판단이 선행**(347/이슈8): 거래상대방이 주주·종업원·제3자면
+    비용·배당·급여 처리 후보 — 이연상각으로 덮지 말 것.
+    """
+    if level not in (1, 2, 3):
+        raise ValueError("level 은 1/2/3")
+    diff = fair_value - transaction_price
+    scale = max(abs(transaction_price), 1e-12)
+    detail = {"transaction_price": transaction_price, "fair_value": fair_value,
+              "level": level, "diff": diff}
+    if abs(diff) / scale <= tol:
+        f = Finding("day_one_difference", Severity.PASS,
+                    "거래가격 ≈ 최초 공정가치 — day-one 차이 없음", detail)
+    elif level == 3:
+        f = Finding("day_one_difference", Severity.WARN,
+                    f"day-one 차이 {diff:+,.0f} (Level 3) — 이연 후 상각 대상. "
+                    f"이연 전 비금융요소(특수관계 저가양도 등) 여부 먼저 판단", detail)
+    else:
+        f = Finding("day_one_difference", Severity.WARN,
+                    f"day-one 차이 {diff:+,.0f} (Level {level}) — 즉시 당기손익 인식 대상. "
+                    f"비금융요소 여부 먼저 판단", detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
+def check_market_price_eligibility(
+    level1_available: bool,
+    method_used: str,
+    *,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """활성시장 가격 우선 게이트 (Issue Paper 350/414 승격).
+
+    "Level 1 정보가 이용가능하면 문단79 예외가 아닌 한 모델·matrix·broker 가격을
+    쓸 수 없다"(350). method_used ∈ {'quoted','model','matrix','broker','consensus'}.
+    ⚠️ 역도 성립: 활성시장 시가가 있는데 DCF 단독 채택이면 근거 요구
+    (414: 공정가치 ≠ Level 1 공정가치 구분은 정당하나, L1 을 두고 하위를 쓰는 건 별개).
+    """
+    allowed = {"quoted", "model", "matrix", "broker", "consensus", "dcf"}
+    if method_used not in allowed:
+        raise ValueError(f"method_used 는 {sorted(allowed)} 중 하나")
+    detail = {"level1_available": level1_available, "method_used": method_used}
+    if level1_available and method_used != "quoted":
+        f = Finding("market_price_eligibility", Severity.WARN,
+                    f"활성시장 Level 1 가격이 이용가능한데 '{method_used}' 사용 — "
+                    f"문단79 예외(대량 유사자산 매트릭스/종가 미대변/부채·자기지분)가 "
+                    f"아니면 Level 1 우선", detail)
+    else:
+        f = Finding("market_price_eligibility", Severity.PASS,
+                    f"가격 원천 '{method_used}' — Level 1 우선 규칙 위반 없음", detail)
+    if report is not None:
+        report.add(f)
+    return f
