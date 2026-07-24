@@ -991,3 +991,96 @@ def audit_dcf(
         check_beta_provenance(wacc_inputs, report=report)
         check_beta_mrp_consistency(wacc_inputs, report=report)
     return report
+
+
+# ── 복합금융(CB·RCPS) 게이트 — 근거: [[복합금융상품_평가]](Issue Paper 407·408, T-F 워크북 채록) ──
+# 신용악화 질적분석 임계: 스프레드 ≥ 10% (408: B→CCC 급락 구간, 통상 스프레드의 수 배).
+DISTRESSED_SPREAD_WARN = 0.10
+# 상쇄효과 감지 임계: 스프레드 급등에도 CB 가치 변화율이 이 미만이면 "비현실적 안정" 신호.
+CB_OFFSET_STABILITY_TOL = 0.05
+# with-without 분해 항등식 허용오차(상대).
+CB_DECOMP_TOL = 1e-6
+
+
+def check_convertible_distress(
+    credit_spread: float,
+    value: float,
+    *,
+    baseline_value: float | None = None,
+    spread_threshold: float = DISTRESSED_SPREAD_WARN,
+    offset_tol: float = CB_OFFSET_STABILITY_TOL,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """신용악화 CB 의 T-F 기계 산출값 게이트 (Issue Paper 408 승격).
+
+    408 핵심 관찰: 스프레드가 급등해도 변동성이 전환가치를 떠받쳐 CB 총가치가 거의
+    안 변하는 **상쇄효과** — 그러나 부실기업 주식은 휴지화 가능성이 크므로 이 안정성은
+    비현실적일 수 있다. 두 겹 게이트:
+      ① 스프레드 ≥ 임계 → 질적분석 필수 WARN(주가·변동성 동반 조정, Merton/Reduced-form
+         DP·RR 하향조정 CB_adj = CB×(1−DP) + Bond×R×DP, 유사등급 시장가 교차검증).
+      ② baseline_value(신용악화 전 가치)가 주어지고 가치 변화율 < offset_tol 이면
+         상쇄효과 WARN — 모델이 신용위험을 충분히 반영하지 못했을 신호.
+    """
+    out: list[Finding] = []
+    detail = {"credit_spread": credit_spread, "value": value,
+              "baseline_value": baseline_value, "spread_threshold": spread_threshold}
+    if credit_spread >= spread_threshold:
+        out.append(Finding(
+            "cb_distress", Severity.WARN,
+            f"신용스프레드 {credit_spread:.0%} ≥ {spread_threshold:.0%} — 신용악화 구간. "
+            f"T-F 기계 산출값을 회계 반영 전 질적분석 필수(DP·RR 하향조정, 유사등급 시장가 대조)",
+            detail))
+        if baseline_value is not None and baseline_value > 0:
+            change = abs(value - baseline_value) / baseline_value
+            d2 = dict(detail, change=round(change, 6), offset_tol=offset_tol)
+            if change < offset_tol:
+                out.append(Finding(
+                    "cb_offset_effect", Severity.WARN,
+                    f"스프레드 급등에도 CB 가치 변화 {change:.1%} < {offset_tol:.0%} — "
+                    f"변동성이 채권가치 하락을 상쇄(408). 부실기업 주식 휴지화 가능성 미반영 의심",
+                    d2))
+            else:
+                out.append(Finding(
+                    "cb_offset_effect", Severity.PASS,
+                    f"스프레드 반영 후 CB 가치 변화 {change:.1%} — 상쇄효과 신호 없음", d2))
+    else:
+        out.append(Finding(
+            "cb_distress", Severity.PASS,
+            f"신용스프레드 {credit_spread:.1%} < {spread_threshold:.0%} — 정상 신용 구간", detail))
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out
+
+
+def check_cb_decomposition(
+    total_value: float,
+    bond_value: float,
+    embedded_value: float,
+    *,
+    tol: float = CB_DECOMP_TOL,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """"CB 전체 = 일반사채 + 내재파생" 항등식 게이트 (T-F 워크북 반면교사 승격).
+
+    with-without 분해는 **동일 모델·동일 가정** 안에서만 성립한다. 채록 실측:
+    'TF_Model_CB_Valuation_Detailed_Steps' 는 연속할인·쿠폰無 트리(121.02)에서
+    이산할인·쿠폰 4배 채권(119.67)을 차감해 'Residual 1.35' 를 내재옵션이라 표기 —
+    이종 가정 차감이라 분해가 비정합이다. 외부 평가서·워크북 검증 시 이 게이트로 잡는다.
+    """
+    gap = total_value - bond_value - embedded_value
+    scale = max(abs(total_value), 1e-12)
+    detail = {"total": total_value, "bond": bond_value, "embedded": embedded_value,
+              "gap": gap, "tol": tol}
+    if abs(gap) / scale > tol:
+        f = Finding("cb_decomposition", Severity.WARN,
+                    f"CB 분해 비정합: 전체({total_value:,.2f}) − 채권({bond_value:,.2f}) − "
+                    f"내재파생({embedded_value:,.2f}) = {gap:+,.4f} — 이종 가정 차감 의심"
+                    f"(할인방식·쿠폰 규약이 양변 동일한지 확인)",
+                    detail)
+    else:
+        f = Finding("cb_decomposition", Severity.PASS,
+                    f"CB 분해 정합: 전체 = 채권 + 내재파생 (오차 {gap:+.2e})", detail)
+    if report is not None:
+        report.add(f)
+    return f
