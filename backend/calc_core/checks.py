@@ -1346,3 +1346,134 @@ def check_sbc_treatment(
     if report is not None:
         report.add(f)
     return f
+
+
+# ── 손상(VIU) 게이트 — 근거: [[손상검사_impairment]](Issue Paper 234/235/745/746/747/413) ──
+# 세전·세후 VIU 일치 허용오차(상대) — 유효세전율 역산 수렴 기준.
+VIU_PRE_POST_TOL = 0.01
+
+
+def check_viu_discount_rate(
+    viu_pre_tax: float | None = None,
+    viu_post_tax: float | None = None,
+    *,
+    simple_gross_up_used: bool = False,
+    market_observed_rate_available: bool = False,
+    used_capm_surrogate: bool = True,
+    tol: float = VIU_PRE_POST_TOL,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """VIU 할인율 게이트 (Issue Paper 234 승격).
+
+    ① 시장관점 우선: 동일/유사 거래의 내재 할인율이 관측되면 CAPM WACC(대용치)
+       자동적용 금지. ② 세전율은 세후율의 단순 Gross-Up 이 아니다 — 실무 정석은
+       세후 기준 계산 후 **세전 VIU == 세후 VIU** 가 되는 유효세전율을 시행착오 역산.
+    """
+    out: list[Finding] = []
+    if market_observed_rate_available and used_capm_surrogate:
+        out.append(Finding(
+            "viu_rate_market_first", Severity.WARN,
+            "동일/유사 거래의 내재 할인율이 관측 가능한데 CAPM WACC(대용치) 사용 — "
+            "시장관점 우선(234), 관측 할인율 채택 또는 미채택 근거 필요",
+            {"market_observed_rate_available": True}))
+    if simple_gross_up_used:
+        out.append(Finding(
+            "viu_rate_gross_up", Severity.WARN,
+            "세전 할인율을 세후율의 단순 Gross-Up 으로 산출 — 정석은 세전 VIU == 세후 "
+            "VIU 가 되는 유효세전율 역산(gross-up 은 우연히만 일치)",
+            {"simple_gross_up_used": True}))
+    if viu_pre_tax is not None and viu_post_tax is not None:
+        scale = max(abs(viu_post_tax), 1e-12)
+        gap = abs(viu_pre_tax - viu_post_tax) / scale
+        detail = {"viu_pre_tax": viu_pre_tax, "viu_post_tax": viu_post_tax,
+                  "rel_gap": round(gap, 6), "tol": tol}
+        if gap > tol:
+            out.append(Finding(
+                "viu_pre_post_consistency", Severity.WARN,
+                f"세전 VIU 와 세후 VIU 괴리 {gap:.1%} > {tol:.0%} — 유효세전율이 "
+                f"수렴하지 않음(두 VIU 는 동일해야 함)", detail))
+        else:
+            out.append(Finding(
+                "viu_pre_post_consistency", Severity.PASS,
+                f"세전·세후 VIU 일치(괴리 {gap:.2%}) — 유효세전율 정합", detail))
+    if not out:
+        out.append(Finding("viu_discount_rate", Severity.PASS,
+                           "VIU 할인율 위반 신호 없음", {}))
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out
+
+
+def check_viu_cashflow_scope(
+    *,
+    includes_financing: bool = False,
+    includes_tax: bool = False,
+    includes_uncommitted_restructuring: bool = False,
+    includes_enhancement_capex: bool = False,
+    provision_double_counted: bool = False,
+    forecast_years: int | None = None,
+    forecast_justified: bool = False,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """VIU 현금흐름 스코프 게이트 (Issue Paper 745/746 승격).
+
+    IAS 36 '현금흐름 순수성': 금융활동(할인율에 기반영 — 이중계산)·법인세·미확정
+    구조조정·성능 개선/향상 CAPEX 는 배제. 이미 인식된 복구충당부채 관련 유출을
+    현금흐름과 장부금액 양쪽에 반영하면 중복차감. 예측기간 >5년은 정당화 필요.
+    """
+    out: list[Finding] = []
+    viol = [
+        (includes_financing, "viu_cf_financing",
+         "금융활동(이자·차입) 현금흐름 포함 — 차입원가는 할인율에 기반영, 이중계산(745 Case 2)"),
+        (includes_tax, "viu_cf_tax",
+         "법인세 현금흐름 포함 — IAS 36 은 세전 기준(세후 병행 시 유효세전율 역산으로)"),
+        (includes_uncommitted_restructuring, "viu_cf_restructuring",
+         "IAS 37 요건(구체적·공표·임박) 미충족 구조조정 절감 포함 — 배제 대상"),
+        (includes_enhancement_capex, "viu_cf_enhancement",
+         "성능 개선/향상 CAPEX·효과 포함 — VIU 는 자산의 현재 상태 기준(현상유지만)"),
+        (provision_double_counted, "viu_cf_provision_double",
+         "복구충당부채 유출을 현금흐름·장부금액 양쪽에 반영 — 중복차감(746: 하나로만)"),
+    ]
+    for flag, rule, msg in viol:
+        if flag:
+            out.append(Finding(rule, Severity.WARN, msg, {}))
+    if forecast_years is not None and forecast_years > 5 and not forecast_justified:
+        out.append(Finding(
+            "viu_forecast_horizon", Severity.WARN,
+            f"예측기간 {forecast_years}년 > 5년 — 정당화 근거(장기계약·규제산업 등) 없이 "
+            f"초과 금지(K-IFRS 1036.35)", {"forecast_years": forecast_years}))
+    if not out:
+        out.append(Finding("viu_cashflow_scope", Severity.PASS,
+                           "VIU 현금흐름 스코프 위반 없음", {}))
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out
+
+
+def check_impairment_trigger(
+    market_cap: float,
+    net_book_value: float,
+    *,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """외부 손상징후 게이트 (Issue Paper 747 + IAS 36.12(d) 승격).
+
+    시가총액 < 순자산 장부금액 = 명백한 외부 trigger. 단 전사 일괄감액이 아니라
+    실질 영향을 받는 자산·CGU 를 판단으로 식별해 회수가능액 추정(영업권 배분 CGU 우선,
+    IAS 36.90~96; 손상 시 영업권 먼저 차감, 36.104). ⚠️ 시총은 **자사주 제외
+    유통주식수** 기준([[손상검사_impairment]] §9b — KRX 기본 시총은 자사주 포함 과대).
+    """
+    detail = {"market_cap": market_cap, "net_book_value": net_book_value}
+    if net_book_value > 0 and market_cap < net_book_value:
+        f = Finding("impairment_trigger", Severity.WARN,
+                    f"시가총액({market_cap:,.0f}) < 순자산 장부금액({net_book_value:,.0f}) — "
+                    f"외부 손상징후(IAS 36.12(d)). 전사 일괄감액 금지, 영향 CGU 식별 후 "
+                    f"회수가능액 추정(영업권 CGU 우선)", detail)
+    else:
+        f = Finding("impairment_trigger", Severity.PASS,
+                    "시가총액 ≥ 순자산 장부금액 — 외부 손상징후(12(d)) 없음", detail)
+    if report is not None:
+        report.add(f)
+    return f
