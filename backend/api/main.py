@@ -1531,7 +1531,8 @@ async def relative_value(request: Request) -> dict:
     d = await request.json()
     try:
         peers = [PeerMultiple(name=p.get("name", "?"),
-                              per=p.get("per"), pbr=p.get("pbr"), ev_ebitda=p.get("ev_ebitda"))
+                              per=p.get("per"), pbr=p.get("pbr"),
+                              ev_ebitda=p.get("ev_ebitda"), psr=p.get("psr"))
                  for p in (d.get("peers") or [])]
     except (TypeError, AttributeError) as e:
         raise HTTPException(422, f"peers 형식 오류: {e}") from e
@@ -1539,9 +1540,63 @@ async def relative_value(request: Request) -> dict:
         raise HTTPException(422, "peers 필요")
     r = relative_valuation(
         peers, target_eps=d.get("target_eps"), target_bps=d.get("target_bps"),
-        target_ebitda=d.get("target_ebitda"), net_debt=float(d.get("net_debt", 0.0)),
+        target_ebitda=d.get("target_ebitda"), target_sps=d.get("target_sps"),
+        net_debt=float(d.get("net_debt", 0.0)),
         shares_outstanding=d.get("shares_outstanding"), use=str(d.get("use", "median")))
-    return {"per": r.per, "pbr": r.pbr, "ev_ebitda": r.ev_ebitda, "warnings": r.warnings}
+    return {"per": r.per, "pbr": r.pbr, "ev_ebitda": r.ev_ebitda, "psr": r.psr,
+            "warnings": r.warnings}
+
+
+@app.post("/api/viu")
+async def viu_endpoint(request: Request) -> dict:
+    """IAS 36 사용가치(VIU) 제약모드: {post_tax_cashflows:[...], post_tax_rate, tax_rate,
+    fvlcd?, carrying_amount?, mid_year?, provision_carrying?} → VIU(세전/세후)·유효세전율·
+    회수가능액·손상액. TV 없는 유한현가 + 유효세전율 역산(234)."""
+    from calc_core.viu import ViuInputs, compute_viu
+    d = await request.json()
+    cfs = d.get("post_tax_cashflows") or []
+    if not cfs:
+        raise HTTPException(422, "post_tax_cashflows 필요")
+    try:
+        inp = ViuInputs(
+            post_tax_cashflows=[float(x) for x in cfs],
+            post_tax_rate=float(d["post_tax_rate"]),
+            tax_rate=float(d.get("tax_rate", 0.0)),
+            fvlcd=(float(d["fvlcd"]) if d.get("fvlcd") is not None else None),
+            carrying_amount=(float(d["carrying_amount"])
+                             if d.get("carrying_amount") is not None else None),
+            mid_year=bool(d.get("mid_year", True)),
+            provision_carrying=float(d.get("provision_carrying", 0.0)))
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"입력 형식 오류: {e}") from e
+    r = compute_viu(inp)
+    return {"viu_post_tax": r.viu_post_tax, "viu_pre_tax": r.viu_pre_tax,
+            "effective_pre_tax_rate": r.effective_pre_tax_rate,
+            "recoverable_amount": r.recoverable_amount,
+            "impairment_loss": r.impairment_loss, "warnings": r.warnings}
+
+
+@app.post("/api/rcps")
+async def rcps_endpoint(request: Request) -> dict:
+    """RCPS/CPS 노드변동 격자(411): {enterprise_value, liquidation_preference,
+    conversion_fraction, term_years, volatility, risk_free, dividend_yield?, steps?,
+    american?} → 우선주/보통주 가치 + 전환경계. 각 노드 max(청산,전환) backward induction."""
+    from calc_core.backsolve import OpmParams, PreferredClass, price_rcps
+    d = await request.json()
+    try:
+        params = OpmParams(
+            term_years=float(d["term_years"]), volatility=float(d["volatility"]),
+            risk_free=float(d["risk_free"]), dividend_yield=float(d.get("dividend_yield", 0.0)))
+        pref = PreferredClass(
+            name=str(d.get("name", "Preferred")),
+            liquidation_preference=float(d["liquidation_preference"]),
+            conversion_fraction=float(d["conversion_fraction"]))
+        r = price_rcps(float(d["enterprise_value"]), pref, params,
+                       steps=int(d.get("steps", 300)), american=bool(d.get("american", False)))
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"입력 형식 오류: {e}") from e
+    return {"preferred_value": r.preferred_value, "common_value": r.common_value,
+            "conversion_boundary": r.conversion_boundary}
 
 
 @app.post("/api/price/multiples")

@@ -82,6 +82,38 @@ def build_reproduction(actuals: dict, *, growth: float, tax_rate: float,
     )
 
 
+def build_segment_reproduction(op_total: float, *, tax_rate: float, wacc: float,
+                               pgr: float, years: int, shares: int) -> DcfSpineInput:
+    """부문 트리 정밀 재현: 4부문 영업이익을 차등 CAGR 로 투영(RevenueNode 트리).
+
+    칼럼의 부문별 성장 가정(DS 반도체 고성장·DX 완만·SDC/Harman 저성장)을 반영. 단일
+    성장률 축약(build_reproduction) 대비 부문 이질성을 담는다. 부문 영업이익 배분은 삼성
+    2024 실적 근사(DS≈45%·DX≈42%·SDC≈8%·Harman≈5%).
+    """
+    from calc_core.revenue import RevenueNode
+
+    seg = [
+        ("DS(반도체)", 0.45, 0.15),      # DRAM/HBM 고성장 축약 CAGR
+        ("DX(디바이스)", 0.42, 0.06),
+        ("SDC(디스플레이)", 0.08, 0.03),
+        ("Harman", 0.05, 0.08),
+    ]
+    children = [
+        RevenueNode(name=name, base=op_total * share * (1.0 - tax_rate),
+                    growth=[g] * years, provenance="삼성 2024 부문 영업이익 근사 배분")
+        for name, share, g in seg
+    ]
+    root = RevenueNode(name="세후영업이익(부문합)", children=children)
+    series = root.revenue(years)
+    z = [0.0] * years
+    return DcfSpineInput(
+        wacc=wacc, terminal_growth=pgr,
+        revenue=series, cogs=list(z), sga=list(z),
+        dep_amort=list(z), capex=list(z), delta_nwc_cash_adj=list(z),
+        non_operating_assets=0.0, net_debt=0.0, shares_outstanding=shares,
+        effective_tax_rate=0.0, terminal_from_last_fcff=True)
+
+
 def main() -> None:
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -121,6 +153,17 @@ def main() -> None:
         results[label] = (res, eq_trillion, tv_w, n_warn)
         print(f"    {label:16s} {res.per_share:>10,.0f}원 {eq_trillion:>12,.1f}조 "
               f"{tv_w:>7.1%} {('WARN×' + str(n_warn)) if n_warn else 'clean':>8s}")
+
+    # 부문 트리 정밀 재현(단일 성장률 축약 대비 부문 이질성)
+    seg_inp = build_segment_reproduction(actuals["영업이익"], tax_rate=0.22, wacc=0.11,
+                                         pgr=0.02, years=5, shares=common["shares"])
+    seg_res = dcf_run(seg_inp)
+    seg_trillion = seg_res.equity_value / 1_000_000
+    print(f"\n[3b] 부문 트리 정밀 재현 (DS15%·DX6%·SDC3%·Harman8% 차등 CAGR)")
+    print(f"    부문합 세후영업이익 1년차 {seg_inp.revenue[0]/1e6:.1f}조 → 5년차 "
+          f"{seg_inp.revenue[-1]/1e6:.1f}조")
+    print(f"    부문 트리 지분가치 : {seg_trillion:,.1f}조 (주당 {seg_res.per_share:,.0f}원)")
+    print(f"    → 단일 성장률(12%) 기준 456.9조 대비 부문 이질성 반영분 차이")
 
     # 엑셀 생성(기준 시나리오)
     out_dir = ROOT / "scripts" / "output"

@@ -194,6 +194,51 @@ def test_peer_select_no_reason_422():
     assert C.post("/api/peer/select", json=body).status_code == 422
 
 
+def test_viu_endpoint():
+    from calc_core.viu import ViuInputs, compute_viu
+    body = {"post_tax_cashflows": [120, 130, 140, 150, 160],
+            "post_tax_rate": 0.09, "tax_rate": 0.22,
+            "fvlcd": 400, "carrying_amount": 700}
+    r = C.post("/api/viu", json=body)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    direct = compute_viu(ViuInputs(post_tax_cashflows=[120, 130, 140, 150, 160],
+                                   post_tax_rate=0.09, tax_rate=0.22,
+                                   fvlcd=400, carrying_amount=700))
+    assert abs(d["viu_post_tax"] - direct.viu_post_tax) < 1e-9      # API=엔진 무가공
+    assert abs(d["viu_pre_tax"] - d["viu_post_tax"]) < 1e-6         # 유효세전율 정합
+    assert d["impairment_loss"] is not None
+
+
+def test_viu_bad_input_422():
+    assert C.post("/api/viu", json={"post_tax_rate": 0.1}).status_code == 422
+
+
+def test_rcps_endpoint():
+    from calc_core.backsolve import OpmParams, PreferredClass, price_rcps
+    body = {"enterprise_value": 1000, "liquidation_preference": 300,
+            "conversion_fraction": 0.2, "term_years": 3, "volatility": 0.3,
+            "risk_free": 0.05}
+    r = C.post("/api/rcps", json=body)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    direct = price_rcps(1000.0, PreferredClass("P", 300.0, 0.2),
+                        OpmParams(term_years=3, volatility=0.3, risk_free=0.05))
+    assert abs(d["preferred_value"] - direct.preferred_value) < 1e-9
+    assert abs(d["conversion_boundary"] - 1500.0) < 1e-6            # LP/frac
+    # 잔여 항등식: 우선주 + 보통주 = V0
+    assert abs(d["preferred_value"] + d["common_value"] - 1000.0) < 1e-6
+
+
+def test_relative_psr():
+    body = {"peers": [{"name": "H1", "psr": 6.0}, {"name": "H2", "psr": 8.0}],
+            "target_sps": 1000.0}
+    r = C.post("/api/relative/value", json=body)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert abs(d["psr"]["implied_per_share"] - 7000.0) < 1e-6       # median 7 × 1000
+
+
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
