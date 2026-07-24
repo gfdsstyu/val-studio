@@ -1477,3 +1477,112 @@ def check_impairment_trigger(
     if report is not None:
         report.add(f)
     return f
+
+
+# ── 계속기업·FCFE 게이트 — 근거: [[실전평가_상장사_사례집]](홈플러스)·[[DCF_교육_정본]](FCFE 주의점) ──
+# 홈플러스 실측 임계: Debt/EBITDA 8배(업계 3~4배 대비 과도), ICR<1 지속.
+GOING_CONCERN_DEBT_EBITDA_WARN = 8.0
+
+
+def check_going_concern(
+    *,
+    net_loss_with_positive_ocf: bool = False,
+    current_ratio: float | None = None,
+    icr_below_one_persistent: bool = False,
+    debt_to_ebitda: float | None = None,
+    debt_ebitda_threshold: float = GOING_CONCERN_DEBT_EBITDA_WARN,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """계속기업 가정 게이트 (홈플러스 부실 사례 승격 — 실행 전 게이트 계열).
+
+    계속기업 가정이 흔들리면 계속기업 DCF 자체가 무의미(청산가치 vs 계속기업가치 비교
+    국면). 신호 4축:
+      ① 당기순손실 + 영업현금흐름 큰 양수 = 미지급이자·미지급금 미지급으로 만든
+         "흑자도산" 전형 — 비현금조정·운전자본 내역 확인 필수.
+      ② 유동비율 < 100% — 단기 상환능력 결여.
+      ③ ICR(이자보상배율) < 1 지속 — 이자도 못 갚는 구조.
+      ④ Debt/EBITDA ≥ 임계(기본 8배) — 상환능력 과도 취약.
+    """
+    out: list[Finding] = []
+    if net_loss_with_positive_ocf:
+        out.append(Finding(
+            "going_concern_ocf_paradox", Severity.WARN,
+            "당기순손실인데 영업현금흐름 큰 (+) — 미지급이자·미지급금 내역 확인"
+            "(흑자도산 신호: 지급할 것을 지급하지 않아 만든 현금흐름)", {}))
+    if current_ratio is not None and current_ratio < 1.0:
+        out.append(Finding(
+            "going_concern_current_ratio", Severity.WARN,
+            f"유동비율 {current_ratio:.0%} < 100% — 단기차입 상환능력 결여, "
+            f"계속기업 불확실성 원인", {"current_ratio": current_ratio}))
+    if icr_below_one_persistent:
+        out.append(Finding(
+            "going_concern_icr", Severity.WARN,
+            "이자보상배율(ICR) < 1 지속 — 이자조차 감당 못 하는 구조", {}))
+    if debt_to_ebitda is not None and debt_to_ebitda >= debt_ebitda_threshold:
+        out.append(Finding(
+            "going_concern_leverage", Severity.WARN,
+            f"Debt/EBITDA {debt_to_ebitda:.1f}배 ≥ {debt_ebitda_threshold:.0f}배 — "
+            f"부채상환능력 과도 취약(업계 통상 3~4배)", {"debt_to_ebitda": debt_to_ebitda}))
+    if out:
+        out.append(Finding(
+            "going_concern", Severity.WARN,
+            f"계속기업 신호 {len(out)}건 — 계속기업 DCF 전 청산가치 비교·감사인 "
+            f"계속기업 검토 필요(신호 다수면 계속기업 DCF 자체가 무의미)", {"signals": len(out)}))
+    else:
+        out.append(Finding("going_concern", Severity.PASS, "계속기업 위험 신호 없음", {}))
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out
+
+
+def check_fcfe_usage(
+    *,
+    uses_fcfe: bool,
+    discounted_at_cost_of_equity: bool = False,
+    levered_beta_used: bool = False,
+    net_borrowing_included: bool = False,
+    borrowing_nature_assessed: bool = False,
+    stable_target_leverage: bool = False,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """FCFE 사용 게이트 (FCFF 대신 FCFE 를 쓸 때의 주의점 승격).
+
+    FCFE 는 핵심 변수를 영업성과 → 재무구조·차입정책으로 이동시킨다. 규칙:
+      ① 반드시 자기자본비용(Ke)·레버리지드 베타로 할인(분자·분모 대응).
+      ② 차입금 순증가 기계 포함 = "빚으로 만든 (+) 착시" — 구조적 조달인지
+         일시 브릿지인지 판단 선행.
+      ③ 부채비율 급변에 단일 Ke 적용 금지 — 장기 목표 레버리지 기준.
+      ④ FCFF 음수라는 이유만으로 FCFE 전환 금지(성장기 음수는 '투자 중' 신호 —
+         FCFF 유지 + PSR 등 병행이 정석).
+    """
+    out: list[Finding] = []
+    if not uses_fcfe:
+        out.append(Finding("fcfe_usage", Severity.PASS, "FCFF 사용 — FCFE 게이트 해당 없음", {}))
+    else:
+        if not discounted_at_cost_of_equity:
+            out.append(Finding(
+                "fcfe_discount_rate", Severity.FAIL,
+                "FCFE 를 WACC 로 할인 — 주주귀속 현금흐름은 자기자본비용(Ke)으로"
+                "(분자·분모 불일치 = 구조적 오류)", {}))
+        if not levered_beta_used:
+            out.append(Finding(
+                "fcfe_levered_beta", Severity.WARN,
+                "FCFE 인데 레버리지드 베타 미사용 — Ke 는 목표 자본구조의 levered β 로", {}))
+        if net_borrowing_included and not borrowing_nature_assessed:
+            out.append(Finding(
+                "fcfe_borrowing_illusion", Severity.WARN,
+                "차입금 순증가를 기계적으로 포함 — 구조적 조달 vs 일시 브릿지 판단 없이는 "
+                "'빚으로 만든 양(+) 현금흐름 착시' 위험", {}))
+        if not stable_target_leverage:
+            out.append(Finding(
+                "fcfe_target_leverage", Severity.WARN,
+                "장기 목표 레버리지 미확정 — 부채비율 급변 구간에 단일 Ke 적용은 "
+                "현금흐름-할인율 구조 불일치", {}))
+        if not any(f.severity != Severity.PASS for f in out):
+            out.append(Finding("fcfe_usage", Severity.PASS,
+                               "FCFE 사용 규율 충족(Ke·levered β·차입 판단·목표 레버리지)", {}))
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out

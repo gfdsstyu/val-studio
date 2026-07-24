@@ -1,10 +1,14 @@
-"""상대가치평가 — peer 배수(PER·PBR·EV/EBITDA) → 통계 → 내재가치.
+"""상대가치평가 — peer 배수(PER·PBR·EV/EBITDA·PSR) → 통계 → 내재가치.
 
 자본시장법 종합평가(FV·DCF → 상대가치+NAV) 트랙의 상대가치법. 순수 계산(stdlib):
-  peer 배수 수집 → median/mean → × 대상회사 지표(EPS·BPS·EBITDA) → 내재 주당가치.
+  peer 배수 수집 → median/mean → × 대상회사 지표(EPS·BPS·EBITDA·SPS) → 내재 주당가치.
 
 원칙(anthropic comps 정본·우리 4-step 정합): 5-10 Rule — peer 5개 미만 통계취약,
 10개 초과 유사성희석. median 권장(이상치 강건). 음수/결측 배수는 제외(경고).
+
+PSR(주가매출비율)은 이익·EBITDA 가 음수라 PER/EV-EBITDA 불능인 적자 성장기업의
+정당한 대안([[실전평가_상장사_사례집]] 알테오젠×Halozyme 실측 — 미래 추정매출에 peer
+PSR 적용 후 현재가치 할인). 이익의 질을 안 보므로 흑자기업엔 보조지표로만.
 """
 from __future__ import annotations
 
@@ -18,6 +22,7 @@ class PeerMultiple:
     per: float | None = None
     pbr: float | None = None
     ev_ebitda: float | None = None
+    psr: float | None = None        # 시가총액/매출 — 적자기업 대안 배수
 
 
 def _median(xs: list[float]) -> float:
@@ -41,6 +46,7 @@ class RelativeResult:
     per: dict = field(default_factory=dict)       # {stats, implied_per_share}
     pbr: dict = field(default_factory=dict)
     ev_ebitda: dict = field(default_factory=dict)
+    psr: dict = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -50,6 +56,7 @@ def relative_valuation(
     target_eps: float | None = None,
     target_bps: float | None = None,
     target_ebitda: float | None = None,
+    target_sps: float | None = None,
     net_debt: float = 0.0,
     shares_outstanding: float | None = None,
     use: str = "median",
@@ -59,6 +66,7 @@ def relative_valuation(
     - PER: stat(PER) × target_eps = 내재 주가
     - PBR: stat(PBR) × target_bps = 내재 주가
     - EV/EBITDA: stat × target_ebitda = EV → (−순차입)/주식수 = 내재 주가
+    - PSR: stat(PSR) × target_sps(주당매출) = 내재 주가 — 적자기업 대안(지분 배수)
     use='median'|'mean'. 5-10 Rule 경고 동봉.
     """
     res = RelativeResult()
@@ -79,6 +87,10 @@ def relative_valuation(
         implied_ev_ps = (ev - net_debt) / shares_outstanding
     res.ev_ebitda = {"stats": ev_s, "implied_per_share": implied_ev_ps}
 
+    psr_s = multiple_stats([p.psr for p in peers])
+    res.psr = {"stats": psr_s, "implied_per_share":
+               (psr_s[stat_key] * target_sps if psr_s[stat_key] and target_sps is not None else None)}
+
     n = len(peers)
     if n < 5:
         res.warnings.append(f"peer {n}개 < 5 — 통계 취약(배수 median 불안정, 기준 완화 검토)")
@@ -86,7 +98,7 @@ def relative_valuation(
         res.warnings.append(f"peer {n}개 > 10 — 유사성 희석(기준 강화 검토)")
     # 결측 경고는 실제 사용한 방식(타깃 지표 제공)에만 — 안 쓰는 배수는 노이즈.
     for label, s, target in (("PER", per_s, target_eps), ("PBR", pbr_s, target_bps),
-                             ("EV/EBITDA", ev_s, target_ebitda)):
+                             ("EV/EBITDA", ev_s, target_ebitda), ("PSR", psr_s, target_sps)):
         if target is not None and s["n"] < n:
             res.warnings.append(f"{label}: {n - s['n']}개 결측/음수 제외(유효 {s['n']}개)")
     return res
