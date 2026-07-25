@@ -1,19 +1,20 @@
-# val.studio — 한국형 DCF 기업가치평가 자동화
+# val.studio — 한국형 기업가치평가 자동화 (DCF + 다중 평가기법)
 
-_Claude Skill (Excel) · 순수 결정론 DCF 엔진 · [Anthropic 공식 금융 스킬](https://github.com/anthropics/financial-services) 원문 감사·개선 · 실무모델 셀 단위 재현(rel_tol 1e-9)_
+_Claude Skill (Excel) · 순수 결정론 평가 엔진 · [Anthropic 공식 금융 스킬](https://github.com/anthropics/financial-services) 원문 감사·개선 · 실무모델 셀 단위 재현(rel_tol 1e-9)_
 
 > **판단은 사람, 계산·검증은 결정론 코드.** LLM이 숫자를 지어내지 않도록, 모든 값은 출처(provenance)를 달고 검증 게이트를 통과해야 모델에 들어간다.
 
-실무 DCF 모델(엑셀)을 **셀 단위로 재현**하는 결정론 엔진을 코어로, 앞단(공시 수집·주석 추출·가정 도출)을 자동화하고 뒤단(살아있는 수식 xlsx·평가의견서)까지 잇는 밸류에이션 워크벤치.
+실무 DCF 모델(엑셀)을 **셀 단위로 재현**하는 결정론 엔진을 코어로, 앞단(공시 수집·주석 추출·가정 도출)을 자동화하고 뒤단(살아있는 수식 xlsx·평가의견서)까지 잇는 밸류에이션 워크벤치. DCF에서 시작해 **상대가치·손상(VIU)·공정가치 역산·전환증권·SOTP·합병**까지 자본시장법/K-IFRS 실무가 요구하는 평가기법을 같은 검증 인프라 위에 얹었다.
 
 | 규모 | |
 |---|---|
-| 결정론 엔진 | `calc_core` 20모듈 (순수 stdlib) |
-| 인제스트·검증 | `ingest` 14모듈 (4종 tie-out + provenance) |
-| API | FastAPI 44 엔드포인트 |
-| 웹 UI | React+Vite, 평가 시트 16종 |
-| Claude 스킬 | 실행 도구 17 + 지식문서 31 (자기완결 vendoring) |
-| 테스트 | **600 테스트 함수 / 69 파일** (골든 재현 포함) |
+| 결정론 엔진 | `calc_core` 23모듈 (순수 stdlib) |
+| 평가기법 | DCF · 상대가치(PSR/PER/PBR) · VIU 손상(K-IFRS 1036) · 공정가치 backsolve(OPM 워터폴) · 전환증권(CB/RCPS) · SOTP · 합병 · 3표 완전연결 |
+| 인제스트·검증 | `ingest` 16모듈 (4종 tie-out + provenance) |
+| API | FastAPI 53 엔드포인트 |
+| 웹 UI | React+Vite, 평가 시트 15 + 기법추천 위저드·산업 프로파일 대조 |
+| Claude 스킬 | 실행 도구 17 + 지식문서 50 (자기완결 vendoring) |
+| 테스트 | **702 테스트 함수 / 83 파일** (골든 재현 포함) |
 
 ---
 
@@ -124,11 +125,11 @@ python scripts/build_excel_skill.py           # vendoring + zip 패키징
 
 ```mermaid
 flowchart TB
-  subgraph FE[React + Vite SPA · 평가 시트 16종]
+  subgraph FE[React + Vite SPA · 평가 시트 15 + 기법 위저드·산업 프로파일]
     M[자료수집] --> MAP[계정분류] --> A[가정: 매출·원가·FA·WC·거시]
-    A --> D[할인율 WACC] --> V[밸류에이션: DCF·시나리오·상대가치] --> R[리포트]
+    A --> D[할인율 WACC] --> V[밸류에이션: DCF·상대가치·VIU·전환증권·SOTP] --> R[리포트]
   end
-  FE -->|BYOK 헤더| API[FastAPI 44 endpoints]
+  FE -->|BYOK 헤더| API[FastAPI 53 endpoints]
   API --> ASM[assemble<br/>게이트 fold]
   ASM --> CC[calc_core<br/>순수 결정론]
   ASM --> ING[ingest<br/>4종 tie-out + provenance]
@@ -139,6 +140,26 @@ flowchart TB
 **BYOK(Bring Your Own Key)**: DART·Gemini·ECOS 키는 localStorage에 두고 **호출별 헤더로만** 전달한다. 서버는 저장하지 않는다.
 
 **로컬 우선**: 프로젝트 상태는 로컬 JSON. 클라우드(Supabase/Vercel)는 로드맵이지 전제가 아니다.
+
+---
+
+## 평가기법 — DCF에서 다중기법으로
+
+자본시장법 종합평가와 K-IFRS 실무는 한 가지 방법으로 끝나지 않는다. 같은 결정론·게이트 인프라 위에 평가기법을 넓혔다 — **각 기법은 고유의 검증 게이트를 갖는다.**
+
+| 기법 | 모듈 | 근거 · 게이트 |
+|---|---|---|
+| **DCF** | `dcf`·`wacc`·`fa`·`wc`·`tax` | 페이드 스테이지·터미널 정규화·PGR 앵커링, TV비중·β/MRP·운전자본 게이트 |
+| **상대가치** | `multiples`·`relative` | PSR/PER/PBR, peer 4-step 퍼널(자기제외·중복입력 금지), 교차 브리지 대조 |
+| **VIU 손상** | `viu` | K-IFRS 1036 사용가치 — 제약모드(성장 CAPEX 배제)·CGU 게이트 3종 |
+| **공정가치 역산** | `backsolve` | OPM(옵션가격모형) 워터폴 역산 — 우선주/보통주 가치 배분 |
+| **전환증권** | `convertible` | CB/RCPS — 홀더 선택(전환 vs 상환) 최적화, 노드 변동 격자 |
+| **SOTP · 합병** | `sotp`·`merger` | 부분합·합병비율, DART 세그먼트 자동배분 |
+| **3표 완전연결** | `three_statement` | 손익·재무상태·현금흐름 순환참조 해법(고정점 반복) + 대차 스파인 대사 |
+
+**기법 선택도 결정론이다.** `method_selector`가 사업 성격(현금흐름 예측가능성 × 자산 성격)으로 기법을 추천하고 웹의 **기법추천 위저드**가 이를 소비한다 — 단 추천은 참고일 뿐, 판단은 평가인 몫(법제 트랙과 상보).
+
+**산업 프로파일 대조.** 가정값(OPM·DSO·DIO·CAPEX/매출)을 **산업별 지표 분포**(비공개 레퍼런스 코퍼스에서 집계한 p25/p50/p75/min/max) 대비 이상치로 판정한다. 엔진 게이트(`check_metric_vs_industry`)와 웹 카드가 **하나의 로더·매칭 규칙**을 공유해 두 표면이 어긋나지 않는다.
 
 ---
 
@@ -172,9 +193,13 @@ ingest/          원천 → 값                    "이 숫자는 어디서 왔�
 assemble/        원천값 → 검증된 엔진입력       "쓸 수 있는 가정인가"
   └ 커넥터 리포트를 하나로 fold + 실행순서 게이트
         ↓
-calc_core/       순수 계산 (stdlib only, 네트워크·IO 없음)
-  └ dcf·wacc·ebit·fa·wc·tax·revenue·cost_build·lease·multiples·sotp·
-    merger·convertible·three_statement·checks(가정 타당성 게이트)
+calc_core/       순수 계산 (stdlib only, 네트워크·IO 없음) — 23모듈
+  ├ 코어 DCF     dcf·wacc·ebit·fa·wc·tax·revenue·cost_build·lease
+  ├ 다중기법     multiples·relative(상대가치)·viu(손상)·backsolve(공정가치 OPM)·
+  │              convertible(CB/RCPS)·sotp·merger·backlog(수주산업)
+  ├ 재무제표     three_statement(3표 완전연결·순환참조 해법)·model·models
+  ├ 기법선택     method_selector(사업성격→기법 추천)
+  └ 검증         checks(가정 타당성 게이트)
 ```
 
 ### 왜 이렇게 나눴나
@@ -310,6 +335,16 @@ EV→지분 브리지의 정확도는 **계정을 영업/비영업·이자부부
 - **`lst[-0:]`**: 음수 인덱스 슬라이스가 `0`일 때 **전체 리스트**를 반환 — 최근 N개를 뽑으려던 코드가 전량을 반환.
 - **외부 API 봉쇄**: 일부 데이터 소스가 로그인·유료 전환 → 복붙/CSV 업로드를 **1급 경로**로 승격(자동/수동 무관 동일 검증 게이트 통과).
 
+### 11. 세 표면이 같은 규칙을 세 곳에서 — 산업 프로파일 대조
+
+산업 프로파일 카드를 코드리뷰하다 **"작동하는 것처럼 보이는데 절반이 죽어 있던"** 결함을 잡았다.
+
+- **死지표**: 카드가 DSO·DIO를 `wc_built.dso`/`.dio`에서 읽는데, WC 빌드 출력은 그 키를 만든 적이 없다(회전율 기반이라 회전일을 노출 안 함). 4개 지표 중 2개가 **항상 `—`인데 카드는 멀쩡해 보였다.** 엔진이 이미 내부에서 계산하던 `turnover_days()`를 출력에 노출해 해소.
+- **세 표면 drift**: 같은 벤치마크 판정 규칙이 엔진 게이트·API·웹 카드 **세 곳에 각각 구현**돼 있었다. 부분일치가 dict 순회 첫 겹침이라 **JSON 키 순서에 따라 다른 산업과 대조**되고(비결정적), 캐시는 영구라 벤치마크를 재생성해도 장수 서버가 stale을 서빙했다 → 단일 로더(mtime 무효화) + 결정론 매칭으로 통합.
+- **계약 위반**: 기법추천 엔드포인트가 생략된 플래그를 `None→False`로 뭉개 함수 기본값(`True`)을 덮어썼다 — 직접 호출과 API가 같은 입력에 다른 답을 냈다.
+
+> **교훈**: 리뷰가 지적한 10건 중 실제 버그는 3건, 나머지는 과장·오탐이었다. **공격적 멀티앵글 리뷰는 오탐 ~30%가 정상**이고 — 적용 전 ground truth 대조가 안전장치다. 그리고 여러 지적이 한 뿌리(규칙이 세 곳에 분산)에서 나오면 **뿌리를 고쳐 한꺼번에 은퇴**시킨다.
+
 ---
 
 ## 로드맵
@@ -317,8 +352,8 @@ EV→지분 브리지의 정확도는 **계정을 영업/비영업·이자부부
 | Phase | 상태 | 내용 |
 |---|---|---|
 | **1. 한국형 DCF 스킬** | ✅ | W0~W9 워크플로우 · 결정론 도구 17 · 지식 31문서 · 자기완결 vendoring · 골든 재현 |
-| **2. 로컬 웹 플랫폼** | 🔄 진행 | 평가 시트 16 · API 44 · 커넥터(DART·ECOS·KRX) · 살아있는 xlsx 왕복 · BYOK |
-| **3. 평가방법 확장** | ⬜ | NAV 순자산법(자본시장법 종합평가 완성) · PPA/WARA 배분 · 손상검사(VIU/CGU, K-IFRS 1036) |
+| **2. 로컬 웹 플랫폼** | 🔄 진행 | 평가 시트 15 + 기법 위저드 · API 53 · 커넥터(DART·ECOS·KRX) · 살아있는 xlsx 왕복 · BYOK · 산업 프로파일 대조 |
+| **3. 다중 평가기법** | 🔄 대부분 완료 | ✅ 상대가치(PSR/PER/PBR) · VIU 손상(K-IFRS 1036) · 공정가치 backsolve(OPM) · 전환증권(CB/RCPS) · SOTP · 합병 · 3표 완전연결 &nbsp;/&nbsp; ⬜ NAV 순자산법 · PPA/WARA 배분 |
 | **4. 감사인 트랙 심화** | ⬜ | 외부평가의견서 파싱 → 유의적 가정 자동 대조 · 독립적 점/범위 추정 · ISA 540 대응 |
 | **5. 지식 RAG 고도화** | ⬜ | 온톨로지 기반 검색 + 인용 검증(미지원 인용 제거) → 가정마다 근거 문단 링크 |
 | **6. 클라우드** | ⬜ | Supabase(Postgres+Auth+Storage) · Vercel/Railway 배포 · 멀티유저 |
@@ -349,14 +384,14 @@ python scripts/build_excel_skill.py
 
 ```
 backend/
-  calc_core/    순수 결정론 엔진 (20모듈, stdlib only)
-  ingest/       커넥터 + 4종 검증 + provenance (14모듈)
+  calc_core/    순수 결정론 엔진 (23모듈, stdlib only) — DCF + 다중 평가기법
+  ingest/       커넥터 + 4종 검증 + provenance (16모듈)
   assemble/     커넥터→검증된 엔진입력 (게이트 fold)
   excel/        살아있는 수식 xlsx 생성·import·diff
-  api/          FastAPI (44 엔드포인트, BYOK)
-frontend/       React + Vite SPA (평가 시트 16)
-.claude/skills/ Claude 스킬 (도구 17 + 지식 31 + vendor)
-tests/          600 테스트 함수 / 69 파일 (golden·skill·unit)
+  api/          FastAPI (53 엔드포인트, BYOK)
+frontend/       React + Vite SPA (평가 시트 15 + 기법 위저드·산업 프로파일)
+.claude/skills/ Claude 스킬 (도구 17 + 지식 50 + vendor)
+tests/          702 테스트 함수 / 83 파일 (golden·skill·unit)
 docs/           방법론 지식 코퍼스 · 설계 문서 · 검증 리포트
 scripts/        스킬 빌드·골든 픽스처 추출·재계산 게이트
 ```
