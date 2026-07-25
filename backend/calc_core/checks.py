@@ -1586,3 +1586,125 @@ def check_fcfe_usage(
         for f in out:
             report.add(f)
     return out
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 산업 벤치마크 이상치 게이트 (지식→규칙 승격)
+#
+# 근거: docs/reference/산업_프로파일.md · 벤치마크_{마진,운전자본,CAPEX}.md
+#   내부 레퍼런스 코퍼스 횡단집계 → 산업별 지표 분포(p25/p50/p75).
+#   rigor=참고 prior. 데이터=벤치마크 빌드 스크립트 생성(비공개).
+# 판정: p25~p75 = 정상, [min,max]∩밖 = WARN(주의), min~max 밖 = WARN(이상치, 사업모델 질문).
+#   n<3 = 저신뢰(참고만).
+import json as _json
+from pathlib import Path as _Path
+
+# 산업 벤치마크 JSON 의 단일 정본 경로·로더·매칭 규칙. API·엔진 게이트가 공유해
+# 세 표면(엔진·API·카드)이 조용히 어긋나지 않게 한다(경로/매칭 중복 제거).
+_BENCH_PATH = _Path(__file__).parent / "data" / "industry_benchmarks.json"
+_BENCH_CACHE: dict | None = None
+_BENCH_MTIME: float | None = None
+
+_METRIC_LABEL = {"opm": "영업이익률", "dso": "매출채권회전일",
+                 "dio": "재고회전일", "capex_sales": "CAPEX/매출"}
+_METRIC_UNIT = {"opm": "%", "dso": "일", "dio": "일", "capex_sales": "%"}
+
+
+def load_benchmarks(*, fresh: bool = False) -> dict:
+    """산업 벤치마크 JSON 로드(캐시). 파일 mtime 이 바뀌면 자동 무효화 —
+
+    pre-commit 이 JSON 을 재생성해도 장수 프로세스(uvicorn)가 stale 캐시를 계속
+    서빙하던 결함을 막는다. 로드 실패 시 {"industries": {}} 로 degrade(예외 없음).
+    fresh=True 면 캐시를 무시하고 강제 재로드.
+    """
+    global _BENCH_CACHE, _BENCH_MTIME
+    try:
+        mtime = _BENCH_PATH.stat().st_mtime
+    except OSError:
+        return {"industries": {}}
+    if fresh or _BENCH_CACHE is None or mtime != _BENCH_MTIME:
+        try:
+            _BENCH_CACHE = _json.loads(_BENCH_PATH.read_text(encoding="utf-8"))
+            _BENCH_MTIME = mtime
+        except Exception:
+            return {"industries": {}}
+    return _BENCH_CACHE
+
+
+def match_industry(industries: dict, name: str) -> tuple[str, dict | None]:
+    """산업명 → (매칭 산업명, 분포dict). 정확일치 우선, 없으면 부분일치.
+
+    부분일치는 **결정적**으로 고른다 — 이름 길이가 입력에 가장 가까운(가장 구체적인)
+    후보, 동률이면 사전순. 이전엔 dict 순회 첫 겹침을 채택해 JSON 키 순서에 따라
+    같은 입력이 다른 코호트로 매칭되던 결함(감사 게이트가 엉뚱한 동종과 대조).
+    매칭 없으면 (name, None).
+    """
+    if not name:
+        return name, None
+    if name in industries:
+        return name, industries[name]
+    cands = [ind for ind in industries if name in ind or ind in name]
+    if not cands:
+        return name, None
+    best = min(cands, key=lambda ind: (abs(len(ind) - len(name)), ind))
+    return best, industries[best]
+
+
+def check_metric_vs_industry(
+    industry: str,
+    metric: str,
+    value: float,
+    *,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """사용자 가정(OPM·DSO·DIO·CAPEX/매출)을 동종 산업 분포 대비 이상치 판정.
+
+    metric ∈ {'opm','dso','dio','capex_sales'} (opm·capex_sales 는 %, dso·dio 는 일).
+    - p25~p75 안        : PASS
+    - min~max 안(밴드 밖): WARN  (동종 대비 이례 — 근거 확인)
+    - min~max 밖         : WARN  (이상치 — 사업모델 재검토, 감사 red flag)
+    - 데이터 없음/n<3    : PASS(정보)  참고 prior 부족
+
+    산업명은 산업_프로파일.md 라벨과 일치해야 매칭(부분일치 fallback).
+    """
+    bench = load_benchmarks().get("industries", {})
+    matched, d = match_industry(bench, industry)
+    dist = d.get(metric) if d else None
+    if dist:
+        industry = matched
+    lbl = _METRIC_LABEL.get(metric, metric)
+    unit = _METRIC_UNIT.get(metric, "")
+    fid = f"{metric}_vs_industry"
+
+    if not dist:
+        f = Finding(fid, Severity.PASS,
+                    f"{lbl}: 산업 '{industry}' 벤치마크 없음 — 대조 생략", {"metric": metric})
+        out = [f]
+    elif dist["n"] < 3:
+        f = Finding(fid, Severity.PASS,
+                    f"{lbl} {value}{unit}: 산업 '{industry}' n={dist['n']}(저신뢰) "
+                    f"참고 p50={dist['p50']}{unit}", {"metric": metric, "dist": dist, "value": value})
+        out = [f]
+    elif dist["p25"] <= value <= dist["p75"]:
+        f = Finding(fid, Severity.PASS,
+                    f"{lbl} {value}{unit} ∈ 정상대역 [{dist['p25']}~{dist['p75']}]{unit} "
+                    f"(산업 '{industry}')", {"metric": metric, "dist": dist, "value": value})
+        out = [f]
+    elif dist["min"] <= value <= dist["max"]:
+        f = Finding(fid, Severity.WARN,
+                    f"{lbl} {value}{unit}: 동종 정상대역 [{dist['p25']}~{dist['p75']}]{unit} 밖 "
+                    f"(min~max 안) — 근거 확인 (산업 '{industry}')",
+                    {"metric": metric, "dist": dist, "value": value})
+        out = [f]
+    else:
+        side = "상회" if value > dist["max"] else "하회"
+        f = Finding(fid, Severity.WARN,
+                    f"⚠️ {lbl} {value}{unit}: 동종 [{dist['min']}~{dist['max']}]{unit} {side} "
+                    f"= 이상치 — 사업모델 재검토(감사 red flag) (산업 '{industry}')",
+                    {"metric": metric, "dist": dist, "value": value})
+        out = [f]
+
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out

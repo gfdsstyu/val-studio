@@ -41,6 +41,7 @@ def project_balance(item: WcItem, projected_driver: float) -> float:
 class WcResult:
     net_working_capital: list[float]   # 각 투영연도 순운전자본
     delta_nwc_cash_adj: list[float]    # FCFF 현금조정(−ΔNWC), DCF row24 부호
+    turnover_days_by_item: dict[str, float]  # 항목명 → 회전기간(일). 산업 프로파일 대조(DSO·DIO)용.
 
 
 def project_working_capital(
@@ -71,7 +72,35 @@ def project_working_capital(
     for t in range(n):
         delta.append(-(nwc[t] - prev))  # 증가 → 현금유출(−)
         prev = nwc[t]
-    return WcResult(net_working_capital=nwc, delta_nwc_cash_adj=delta)
+    return WcResult(
+        net_working_capital=nwc,
+        delta_nwc_cash_adj=delta,
+        turnover_days_by_item={it.name: it.turnover_days() for it in items},
+    )
+
+
+# 산업 프로파일 대조는 매출채권 회전일(DSO)·재고 회전일(DIO) 두 스칼라를 요구한다.
+# WC 모델은 항목을 이름·is_asset 로만 구분하므로, 관용 라벨 부분일치로 해당 항목을
+# 식별해 회전기간을 뽑는다. 매칭 실패 시 None(대조 불가를 정직하게 노출). 토큰은
+# 오탐 방지를 위해 좁게 유지한다(예: 'ar'·'inv' 같은 짧은 토큰 배제).
+_DSO_KEYS = ("매출채권", "채권", "receivable")
+_DIO_KEYS = ("재고", "inventory")
+
+
+def dso_dio(turnover_days_by_item: dict[str, float]) -> tuple[float | None, float | None]:
+    """항목별 회전기간 → (DSO, DIO) 스칼라. 관용 라벨 부분일치, 첫 매칭 채택.
+
+    DSO = 매출채권 회전기간(driver=매출), DIO = 재고 회전기간(driver=매출원가).
+    두 항목 모두 운전자산이며 turnover_days() 가 이미 해당 지표와 동일하다.
+    매칭되는 항목이 없으면 None.
+    """
+    def pick(keys: tuple[str, ...]) -> float | None:
+        for name, days in turnover_days_by_item.items():
+            low = name.lower()
+            if any(k in low for k in keys):
+                return days
+        return None
+    return pick(_DSO_KEYS), pick(_DIO_KEYS)
 
 
 def normalized_wc_ratio(net_working_capital_last: float, sales_last: float) -> float | None:

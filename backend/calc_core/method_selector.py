@@ -150,3 +150,58 @@ def recommend_method(
         ["dcf"], uncertain=True,
         legal_basis="해당 조합의 확립된 규칙 없음",
         notes=["목적·거래유형 조합을 확인해 주세요 — 임의 추천하지 않습니다"])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 사업성격 기반 기법 추천 (equity research 트랙 — 법제 트랙과 상보)
+#
+# 근거: docs/reference/밸류에이션_기법선택_로직.md (레퍼런스 코퍼스 귀납).
+#   기법 = 현금흐름 예측가능성 × 자산 성격의 함수.
+# 위 recommend()가 '무엇을 평가하나'(목적·법제)라면, 아래는 '이 사업을 어떻게 볼까'(성격).
+BUSINESS_METHOD_RULES = [
+    # (조건 판정자, 추천기법, 근거)
+    ("pipeline_bio",   "rnpv",  "파이프라인 바이오(이익 부재·성공확률) → rNPV"),
+    ("heterogeneous",  "sotp",  "부문 이질·지주(성장·마진·시황 상이) → 부문별 SOTP"),
+    ("capital_cyclical", "pbr", "자본집약·사이클(이익 변동성↑, 순자산 중요) → PBR"),
+    ("predictable_growth", "dcf", "현금흐름 예측가능+고성장(멀티플이 성장 미반영) → DCF"),
+    ("stable_earnings", "comps", "안정 이익·peer 풍부 → 상대가치(PER)"),
+]
+
+
+def recommend_by_business_nature(
+    *,
+    is_pipeline_bio: bool = False,
+    is_holding_or_heterogeneous: bool = False,
+    is_capital_intensive_or_cyclical: bool = False,
+    is_predictable_high_growth: bool = False,
+    has_stable_earnings_and_peers: bool = True,
+) -> dict:
+    """사업 성격 → 밸류에이션 기법 추천(참고). 법제 recommend()와 병행 사용.
+
+    반환: {method, label, rationale, alternatives}. 순서=우선순위(위→아래 첫 매치).
+    근거: 밸류에이션_기법선택_로직.md 결정 트리.
+    """
+    flags = {
+        "pipeline_bio": is_pipeline_bio,
+        "heterogeneous": is_holding_or_heterogeneous,
+        "capital_cyclical": is_capital_intensive_or_cyclical,
+        "predictable_growth": is_predictable_high_growth,
+        "stable_earnings": has_stable_earnings_and_peers,
+    }
+    picked = None
+    for cond, method, why in BUSINESS_METHOD_RULES:
+        if flags.get(cond):
+            picked = (method, why)
+            break
+    if picked is None:
+        picked = ("comps", "기본값: 안정 이익 가정 → 상대가치(PER)")
+    method, why = picked
+    label_map = {"rnpv": "rNPV", "sotp": "SOTP", "pbr": "PBR(상대가치)",
+                 "dcf": "DCF", "comps": "상대가치(PER)"}
+    return {
+        "method": method,
+        "label": label_map.get(method, method),
+        "rationale": why,
+        "alternatives": [m for _, m, _ in BUSINESS_METHOD_RULES if m != method],
+        "provenance": "docs/reference/밸류에이션_기법선택_로직.md",
+    }

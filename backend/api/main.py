@@ -42,8 +42,10 @@ from ingest.validators import ValidationReport  # noqa: E402
 from report import lint_report  # noqa: E402
 from excel.workbook_diff import diff_workbooks  # noqa: E402
 from calc_core import fa as _fa, wc as _wc  # noqa: E402
-from calc_core.checks import audit_dcf, diagnose_dcf_gap  # noqa: E402
-from calc_core.method_selector import DEAL_TYPES, PURPOSES, recommend_method  # noqa: E402
+from calc_core.checks import (  # noqa: E402
+    audit_dcf, diagnose_dcf_gap, load_benchmarks, match_industry)
+from calc_core.method_selector import (  # noqa: E402
+    DEAL_TYPES, PURPOSES, recommend_by_business_nature, recommend_method)
 from calc_core.scenario import run_scenarios  # noqa: E402
 from ingest.manual_paste import (  # noqa: E402
     PasteParser, paste_mrp, paste_risk_free,
@@ -108,6 +110,48 @@ def _result_payload(inp: DcfSpineInput, claimed: float | None = None,
 @app.get("/api/health")
 def health() -> dict:
     return {"ok": True, "engine": "calc_core", "mode": "local-byok"}
+
+
+import json as _json
+
+
+@app.post("/api/method/recommend")
+async def method_recommend(request: Request) -> dict:
+    """사업 성격 플래그 → 밸류에이션 기법 추천(참고). 근거: 밸류에이션_기법선택_로직.md.
+
+    body: {is_pipeline_bio, is_holding_or_heterogeneous, is_capital_intensive_or_cyclical,
+           is_predictable_high_growth, has_stable_earnings_and_peers} (모두 bool, 생략가능).
+    """
+    data = await request.json()
+    keys = ("is_pipeline_bio", "is_holding_or_heterogeneous",
+            "is_capital_intensive_or_cyclical", "is_predictable_high_growth",
+            "has_stable_earnings_and_peers")
+    # 생략·명시적 null 키는 전달하지 않는다 — 함수 자체의 기본값을 존중하기 위함.
+    # (has_stable_earnings_and_peers 만 기본 True 라, 일괄 bool(data.get(k)) 는
+    #  생략된 키를 None→False 로 덮어써 함수 계약과 어긋난다.) 명시적 false 는 유지.
+    flags = {k: bool(data[k]) for k in keys if data.get(k) is not None}
+    return recommend_by_business_nature(**flags)
+
+
+@app.get("/api/benchmarks/industry")
+def benchmark_industry(name: str = "") -> dict:
+    """산업 지표 분포(OPM·DSO·DIO·CAPEX/매출, p25/p50/p75/min/max/n) 반환.
+
+    프론트 IndustryProfileCard·감사 스킬이 소비. 근거: 산업_프로파일.md.
+    부분일치 fallback(정확 산업명 없으면 포함관계로 매칭).
+    """
+    data = load_benchmarks()
+    inds = data.get("industries", {})
+    if not inds:
+        raise HTTPException(503, "benchmarks.json 없음/비어있음 — scripts/export_benchmarks_json.py 실행")
+    matched, metrics = match_industry(inds, name)
+    if metrics is None:
+        # 매칭 실패 진단용 힌트. 목록은 50개로 절단하되 total 을 함께 줘 절단을
+        # 소비자가 인지할 수 있게 한다(이전엔 조용히 잘려 50번째 이후가 사라짐).
+        names = sorted(inds)
+        return {"industry": name, "metrics": {},
+                "available_industries": names[:50], "available_total": len(names)}
+    return {"industry": matched, "metrics": metrics, "meta": data.get("_meta", {})}
 
 
 @app.post("/api/dcf")
@@ -732,8 +776,11 @@ async def assumptions_build(request: Request) -> dict:
                 {k: [float(x) for x in v]
                  for k, v in (d.get("wc_driver_by_item") or {}).items()},
                 float(d.get("base_net_working_capital", 0.0)))
+            _dso, _dio = _wc.dso_dio(wc_res.turnover_days_by_item)
             out["wc"] = {"net_working_capital": wc_res.net_working_capital,
-                         "delta_nwc_cash_adj": wc_res.delta_nwc_cash_adj}
+                         "delta_nwc_cash_adj": wc_res.delta_nwc_cash_adj,
+                         "turnover_days_by_item": wc_res.turnover_days_by_item,
+                         "dso": _dso, "dio": _dio}
     except (KeyError, TypeError, ValueError, ZeroDivisionError) as e:
         raise HTTPException(422, f"가정 계산 오류: {e}") from e
     return out

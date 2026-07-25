@@ -37,6 +37,10 @@ export const api = {
   revenueBuild: (body) => j("POST", "/api/revenue/build", body),
   peerSelect: (body) => j("POST", "/api/peer/select", body),
   ksicSearch: (q) => j("GET", `/api/ksic/search?q=${encodeURIComponent(q)}`),
+  // 산업 벤치마크 분포(OPM·DSO·DIO·CAPEX, p25/p50/p75) — IndustryProfileCard·감사 스킬용.
+  benchmarksIndustry: (name) => j("GET", `/api/benchmarks/industry?name=${encodeURIComponent(name)}`),
+  // 사업 성격 플래그 → 기법 추천(밸류에이션_기법선택_로직.md). MethodWizard용.
+  methodRecommend: (flags) => j("POST", "/api/method/recommend", flags),
   assumptionsBuild: (body) => j("POST", "/api/assumptions/build", body),
   assumptionsBuildCosts: (body) => j("POST", "/api/assumptions/costs-build", body),
   assumptionsLease: (body) => j("POST", "/api/assumptions/lease", body),
