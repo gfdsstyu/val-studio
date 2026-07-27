@@ -45,6 +45,11 @@
 | [MnA_사례집_유형별_시사점](MnA_사례집_유형별_시사점.md) | 10사례(SPAC·회생·PEF·U-turn 등) 구조·교훈 — 가격조정 75억 실측·SI/FI 가격차 | M&A CASEBOOK(2021) |
 | [앤트로픽_금융스킬_벤치마크](앤트로픽_금융스킬_벤치마크.md) | 공식 dcf/lbo/comps·audit-xls 원문 감사 — 채택 규약·DCF 버그 5종·서사 규격 | anthropics/financial-services |
 | [모델러스_통합모델_5.4](모델러스_통합모델_5.4.md) | ⭐ **3번째 교차검증 레퍼런스(IB 트레이닝 표준)**: 3표 완전연결·순환스위치·**페이드 스테이지**(명시5+페이드5+Gordon, TV비중 57.8%)·**PGR 인플레 앵커링**·Trading comps(EV브리지·NM/NA·EV vs 지분배수 비대칭)·CHOOSE 시나리오 + **반면교사 6종**(데이터테이블 stale·peer 자기포함·배수 평균·정확일치 CHECK·브리지 불일치) + 반영점 R1~R16 | The Modellers 5.4(COMPLETED).xlsx (Hugel) |
+| [매출추정_논리_타이폴로지](매출추정_논리_타이폴로지.md) | ⭐ **산업별 매출 동인 7대 아키타입**(전방Capex연동·전방생산량PxQ·직접PxQ·ARPU×유저·점유율침투·수주잔고시차·Top-down TAM) + 실증사례 + "모든 매출은 PxQ로 환원, Q를 무엇으로 두느냐" | SMIC 코퍼스 귀납 |
+| [SMIC_기업리포트_코퍼스](SMIC_기업리포트_코퍼스.md) | 가치투자 학회 기업 리포트 182편(2015~26) → 산업·기업별 매출추정·SOTP 실증. **rigor=학회리포트(벤치마크용, 규칙 미승격)** · 인제스트 `scripts/smic_ingest.py`(텍스트우선, peer표만 vision보강) · 케이스문서 33편 `smic/` · 제품군지도 `smic/_제품군지도` | D:\Valuation\SMIC + C:\smic_reports |
+| [산업_아웃룩_코퍼스](산업_아웃룩_코퍼스.md) | PwC/삼일/삼정 **산업 아웃룩 44편** → 산업 구조·밸류체인·TAM·CAGR·제품 taxonomy(SMIC 기업의 상위 컨텍스트). 4계층(산업→기업→제품군→아키타입) · 인제스트 `scripts/industry_ingest.py` · 개별 `industry/`(13편, 밸류체인 우선) | D:\칼럼 (기존 corpus와 목적 분리) |
+| [가정원장_방법론](가정원장_방법론.md) | ⭐ **내러티브↔숫자 다리**: 가정=주장·formula·값·근거·리포트숫자·span·provenance. 자기정합성 검산(`assumption_check.py`)이 산문↔표 gap 포착. 케이씨 파일럿=서술0.436% vs 적용0.30% claimed↔applied gap. 표추출 `parse_financial_tables.py`(top-line 105/182) | SMIC 원장 `smic/_ledger/` |
+| [벤치마크_분포](벤치마크_분포.md) | 산업/아키타입별 배수·성장률·기법 prior(SMIC 39편 횡단, `build_benchmarks.py`). EV/EBITDA 중앙값 12.1x·PER 17.8x·PBR 2.36x, 아키타입 C最多. 이상치 탐지용 | SMIC 케이스 집계 |
 
 ## 온톨로지 + RAG 인덱스
 `ontology/` — 북을 자동 컴파일한 개념 그래프·RAG 검색 인덱스(SSOT→컴파일). 재생성:

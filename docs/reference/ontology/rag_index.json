@@ -1,6 +1,46 @@
 {
   "chapters": [
     {
+      "id": "CAPEX_드라이버_타이폴로지",
+      "path": "docs/reference/CAPEX_드라이버_타이폴로지.md",
+      "title": "CAPEX 드라이버 타이폴로지",
+      "topic": "CAPEX 드라이버 타이폴로지 — 자본적지출 추정 방식과 유지·신규 분리",
+      "track": "기타",
+      "layer": "practice",
+      "parent": "매출추정_논리_타이폴로지",
+      "doc_type": "knowledge",
+      "keywords": [
+        "CAPEX",
+        "자본적지출",
+        "재투자",
+        "reinvestment",
+        "유지 capex",
+        "신규 capex",
+        "성장 capex",
+        "% of sales",
+        "D&A",
+        "감가상각",
+        "PPE 롤포워드",
+        "증설"
+      ],
+      "canonical_questions": [
+        "CAPEX(자본적지출)는 어떤 방식으로 추정하나?",
+        "유지 CAPEX와 신규(성장) CAPEX를 어떻게 나누나?",
+        "유지 CAPEX와 감가상각(D&A)의 관계는?",
+        "PPE 롤포워드로 CAPEX를 어떻게 연결하나?"
+      ],
+      "links": [
+        "DCF_교육_정본",
+        "가정원장_방법론",
+        "리포트예시_클래시스",
+        "매출추정_논리_타이폴로지",
+        "모델러스_통합모델_5.4",
+        "벤치마크_분포",
+        "운전자본_드라이버_타이폴로지"
+      ],
+      "has_frontmatter": true
+    },
+    {
       "id": "DCF_교육_정본",
       "path": "docs/reference/DCF_교육_정본.md",
       "title": "참고 모델 DCF 교육 정본 — 도식 중심 정리",
@@ -345,6 +385,55 @@
       "has_frontmatter": true
     },
     {
+      "id": "SMIC_기업리포트_코퍼스",
+      "path": "docs/reference/SMIC_기업리포트_코퍼스.md",
+      "title": "SMIC 기업 밸류에이션 리포트 코퍼스",
+      "topic": "SMIC 기업 밸류에이션 리포트 코퍼스 — 산업·기업별 매출추정·SOTP 실증 사례집",
+      "track": "거래평가·DCF",
+      "layer": "practice",
+      "parent": "참고보고서_활용",
+      "doc_type": "knowledge",
+      "keywords": [
+        "SMIC",
+        "기업리포트",
+        "밸류에이션 사례",
+        "매출추정",
+        "SOTP",
+        "peer 배수",
+        "산업분석",
+        "학회리포트",
+        "사례 코퍼스"
+      ],
+      "canonical_questions": [
+        "특정 산업/기업의 밸류에이션 사례를 볼 수 있나?",
+        "SMIC 리포트 코퍼스에는 무엇이 있고 어떻게 쓰나?",
+        "학회 리포트를 지식 자산으로 쓸 때 주의점은?"
+      ],
+      "links": [
+        "smic/Cellebrite-DI_20251",
+        "smic/CoreWeave_Inc_20252",
+        "smic/Sportradar_20251",
+        "smic/Tempus-AI_20251",
+        "smic/_산업지도",
+        "smic/알테오젠_20241",
+        "smic/에이피알_20241",
+        "smic/오리온_20241",
+        "smic/케이씨_20241",
+        "smic/크래프톤_20242",
+        "smic/하이브_20252",
+        "smic/한화솔루션_20251",
+        "smic/한화에어로스페이스_20251",
+        "smic/한화오션_20241",
+        "smic/현대모비스_20242",
+        "기업리서치_양식",
+        "매출추정_논리_타이폴로지",
+        "모델러스_통합모델_5.4",
+        "모델링_실무_2강4강",
+        "참고보고서_활용"
+      ],
+      "has_frontmatter": true
+    },
+    {
       "id": "wacc_할인율서식",
       "path": "docs/reference/wacc_할인율서식.md",
       "title": "할인율(WACC) 서식·강의자료 — 시트 논리 정본 명세",
@@ -372,6 +461,73 @@
         "규모별 유효세율은 어떻게 적용하나?"
       ],
       "links": [],
+      "has_frontmatter": true
+    },
+    {
+      "id": "가정원장_방법론",
+      "path": "docs/reference/가정원장_방법론.md",
+      "title": "가정 원장 (Assumption Ledger) — narrative ↔ number 다리",
+      "topic": "가정 원장(Assumption Ledger) — 내러티브를 숫자로 잇는 지식관리 방법",
+      "track": "파서·인제스트",
+      "layer": "practice",
+      "parent": "SMIC_기업리포트_코퍼스",
+      "doc_type": "knowledge",
+      "keywords": [
+        "가정원장",
+        "assumption ledger",
+        "내러티브",
+        "넘버즈",
+        "narrative to number",
+        "자기정합성",
+        "provenance",
+        "벤치마크",
+        "민감도",
+        "checks.py"
+      ],
+      "canonical_questions": [
+        "리포트 내러티브를 숫자로 연결하는 지식관리 방법은?",
+        "매출추정 가정을 어떻게 검산·벤치마크하나?",
+        "가정의 산문 논리가 리포트 숫자를 재현하는지 어떻게 검증하나?"
+      ],
+      "links": [
+        "SMIC_기업리포트_코퍼스",
+        "structured_meta_pipeline",
+        "감사인검토_WACC방법론",
+        "검증_클래시스_DCF",
+        "매출추정_논리_타이폴로지"
+      ],
+      "has_frontmatter": true
+    },
+    {
+      "id": "감사스캔_리포트",
+      "path": "docs/reference/감사스캔_리포트.md",
+      "title": "감사 스캔 리포트",
+      "topic": "감사 스캔 리포트 — 내러티브↔숫자 gap·provenance 결측·내부 산술 이상치",
+      "track": "파서·인제스트",
+      "layer": "practice",
+      "parent": "가정원장_방법론",
+      "doc_type": "knowledge",
+      "keywords": [
+        "감사",
+        "audit",
+        "내러티브 숫자 gap",
+        "provenance",
+        "산술 정합성",
+        "이상치",
+        "검토필요",
+        "claimed applied"
+      ],
+      "canonical_questions": [
+        "리포트에서 서술과 숫자가 어긋나는 가정은?",
+        "출처(provenance) 없는 가정은?",
+        "내부 산술이 이상한(검토 필요) 리포트는?"
+      ],
+      "links": [
+        "SMIC_기업리포트_코퍼스",
+        "가정원장_방법론",
+        "감사인검토_WACC방법론",
+        "벤치마크_분포"
+      ],
       "has_frontmatter": true
     },
     {
@@ -610,6 +766,141 @@
       "has_frontmatter": true
     },
     {
+      "id": "마진_원가_드라이버_타이폴로지",
+      "path": "docs/reference/마진_원가_드라이버_타이폴로지.md",
+      "title": "마진·원가 드라이버 타이폴로지",
+      "topic": "마진·원가 드라이버 타이폴로지 — 매출→이익(NOPAT) 전환 추정 방식",
+      "track": "복합금융상품",
+      "layer": "practice",
+      "parent": "매출추정_논리_타이폴로지",
+      "doc_type": "knowledge",
+      "keywords": [
+        "마진",
+        "원가",
+        "매출원가",
+        "판관비",
+        "판매관리비",
+        "영업이익률",
+        "OPM",
+        "성격별",
+        "변동비",
+        "고정비",
+        "인건비",
+        "정상화",
+        "normalized",
+        "operating leverage",
+        "EBIT"
+      ],
+      "canonical_questions": [
+        "매출원가·판관비는 어떤 방식으로 추정하나?",
+        "비용을 성격별(변동/고정/인건/상각)로 어떻게 나누나?",
+        "영업이익률(OPM)은 목표·peer·과거 중 무엇으로 잡나?",
+        "정상화(normalized) 마진이란?"
+      ],
+      "links": [
+        "CAPEX_드라이버_타이폴로지",
+        "FDD_재무실사_정상화",
+        "가정원장_방법론",
+        "계정분류_모델아키텍처",
+        "리포트예시_클래시스",
+        "매출추정_논리_타이폴로지",
+        "모델러스_통합모델_5.4",
+        "벤치마크_마진",
+        "운전자본_드라이버_타이폴로지"
+      ],
+      "has_frontmatter": true
+    },
+    {
+      "id": "매출추정_논리_타이폴로지",
+      "path": "docs/reference/매출추정_논리_타이폴로지.md",
+      "title": "매출추정 논리 타이폴로지 (Revenue Driver Archetypes)",
+      "topic": "매출추정 논리 타이폴로지 — 산업별 매출 동인(driver) 아키타입과 실증 사례",
+      "track": "거래평가·DCF",
+      "layer": "practice",
+      "parent": "모델링_실무_2강4강",
+      "doc_type": "knowledge",
+      "keywords": [
+        "매출추정",
+        "revenue driver",
+        "매출동인",
+        "PxQ",
+        "ASP",
+        "ARPU",
+        "점유율",
+        "Capex연동",
+        "수주잔고",
+        "backlog",
+        "TAM",
+        "SAM",
+        "top-down",
+        "전방연동",
+        "산업별 매출",
+        "ARR",
+        "NRR",
+        "구독",
+        "SaaS",
+        "가동률",
+        "utilization",
+        "캐파",
+        "take rate",
+        "거래액",
+        "GMV",
+        "TPV",
+        "규제요금",
+        "총괄원가",
+        "급전순위",
+        "원단위",
+        "intensity",
+        "GWh",
+        "2차전지",
+        "ESS",
+        "SMIC"
+      ],
+      "canonical_questions": [
+        "산업별로 매출은 어떤 동인으로 추정하나?",
+        "반도체 장비 회사 매출은 무엇에 연동해 추정하나?",
+        "게임/엔터/화장품 같은 소비형 매출은 어떻게 잡나?",
+        "조선·방산처럼 수주 기반 산업의 매출 인식 시차는 어떻게 모델링하나?",
+        "P×Q 추정에서 P(ASP)와 Q(물량)는 각각 어디서 얻나?",
+        "SaaS 구독매출은 ARR·NRR로 어떻게 추정하나?",
+        "데이터센터/GPU 캐파를 가동률로 어떻게 매출화하나?",
+        "결제·마켓플레이스는 거래액×take rate로 어떻게 추정하나?",
+        "전력 등 규제산업은 요금과 수요를 어떻게 추정하나?"
+      ],
+      "links": [
+        "SMIC_기업리포트_코퍼스",
+        "smic/AlibabaGroup_20191116\\|Alibaba",
+        "smic/Cellebrite-DI_20251\\|Cellebrite",
+        "smic/CoreWeave_Inc_20252\\|CoreWeave",
+        "smic/Equinix_20191116\\|Equinix",
+        "smic/HD현대마린솔루션_20261\\|HD현대마린솔루션",
+        "smic/Intuitive_Surgical_20241\\|Intuitive",
+        "smic/Palantir_Technologies_Inc_20241\\|Palantir",
+        "smic/S_Oil_20252\\|S-Oil",
+        "smic/Sportradar_20251\\|Sportradar",
+        "smic/TSMC_20221\\|TSMC",
+        "smic/Tempus-AI_20251\\|Tempus",
+        "smic/VISAInc_20191116\\|VISA",
+        "smic/세아제강_20261\\|세아제강",
+        "smic/알테오젠_20241\\|알테오젠",
+        "smic/오리온_20241\\|오리온",
+        "smic/케이씨_20241\\|케이씨",
+        "smic/크래프톤_20242\\|크래프톤",
+        "smic/풍산_20252\\|풍산",
+        "smic/하이브_20252\\|하이브",
+        "smic/한국전력_20242\\|한국전력",
+        "smic/한화솔루션_20251\\|한화솔루션",
+        "smic/한화에어로스페이스_20251\\|한화에어로",
+        "smic/한화오션_20241\\|한화오션",
+        "smic/현대모비스_20242\\|현대모비스",
+        "기업리서치_양식",
+        "모델러스_통합모델_5.4",
+        "모델링_실무_2강4강",
+        "참고보고서_활용"
+      ],
+      "has_frontmatter": true
+    },
+    {
       "id": "모델러스_통합모델_5.4",
       "path": "docs/reference/모델러스_통합모델_5.4.md",
       "title": "모델러스 통합모델 5.4 — 3표 연결 + DCF + Trading Comps 정본",
@@ -715,6 +1006,96 @@
       "has_frontmatter": true
     },
     {
+      "id": "밸류에이션_기법선택_로직",
+      "path": "docs/reference/밸류에이션_기법선택_로직.md",
+      "title": "밸류에이션 기법 선택 로직",
+      "topic": "밸류에이션 기법 선택 로직 — 사업 성격에 따른 DCF·SOTP·Multiple·PBR·rNPV 선택",
+      "track": "거래평가·DCF",
+      "layer": "practice",
+      "parent": "SMIC_기업리포트_코퍼스",
+      "doc_type": "knowledge",
+      "keywords": [
+        "밸류에이션 기법",
+        "기법 선택",
+        "DCF",
+        "SOTP",
+        "PER",
+        "PBR",
+        "rNPV",
+        "상대가치",
+        "자산가치",
+        "방법론 선택",
+        "valuation method"
+      ],
+      "canonical_questions": [
+        "어떤 기업에 어떤 밸류에이션 기법을 쓰나?",
+        "DCF vs 상대가치(PER/PBR) vs SOTP는 언제 선택하나?",
+        "바이오·조선·지주는 왜 다른 기법을 쓰나?"
+      ],
+      "links": [
+        "SMIC_기업리포트_코퍼스",
+        "smic/AlibabaGroup_20191116\\|Alibaba",
+        "smic/Fluence_Energy_Inc_20241\\|Fluence",
+        "smic/HD현대마린솔루션_20261\\|HD현대마린",
+        "smic/SK하이닉스_20232\\|SK하이닉스",
+        "smic/TSMC_20221\\|TSMC",
+        "smic/Tempus-AI_20251\\|Tempus",
+        "smic/알테오젠_20241\\|알테오젠",
+        "smic/에이피알_20241\\|에이피알",
+        "smic/오리온_20241\\|오리온",
+        "smic/케이씨_20241\\|케이씨",
+        "smic/하이브_20252\\|하이브",
+        "smic/한화솔루션_20251\\|한화솔루션",
+        "smic/한화오션_20241\\|한화오션",
+        "감사인검토_WACC방법론",
+        "리포트예시_클래시스",
+        "매출추정_논리_타이폴로지",
+        "모델러스_통합모델_5.4",
+        "밸류에이션_스코프_로드맵",
+        "벤치마크_분포"
+      ],
+      "has_frontmatter": true
+    },
+    {
+      "id": "밸류에이션_브리지_타이폴로지",
+      "path": "docs/reference/밸류에이션_브리지_타이폴로지.md",
+      "title": "밸류에이션 브리지 (EV → 목표주가)",
+      "topic": "밸류에이션 브리지 — 영업가치(EV)에서 목표주가로 가는 조정 단계",
+      "track": "기타",
+      "layer": "practice",
+      "parent": "SMIC_기업리포트_코퍼스",
+      "doc_type": "knowledge",
+      "keywords": [
+        "밸류에이션 브리지",
+        "EV",
+        "지분가치",
+        "equity value",
+        "순차입금",
+        "net debt",
+        "비지배지분",
+        "소수주주",
+        "지주 할인",
+        "NAV 할인",
+        "주식수",
+        "자기주식",
+        "SOTP",
+        "비영업가치"
+      ],
+      "canonical_questions": [
+        "영업가치(EV)에서 목표주가까지 어떤 조정을 거치나?",
+        "순차입금·비지배지분·지주할인은 어떻게 반영하나?",
+        "지분가치를 주식수로 나눌 때 자기주식은?"
+      ],
+      "links": [
+        "가정원장_방법론",
+        "리포트예시_클래시스",
+        "매출추정_논리_타이폴로지",
+        "밸류에이션_기법선택_로직",
+        "외부평가의견서_고정양식_구조"
+      ],
+      "has_frontmatter": true
+    },
+    {
       "id": "밸류에이션_스코프_로드맵",
       "path": "docs/reference/밸류에이션_스코프_로드맵.md",
       "title": "밸류에이션 스코프 로드맵",
@@ -792,6 +1173,143 @@
       "has_frontmatter": true
     },
     {
+      "id": "벤치마크_CAPEX",
+      "path": "docs/reference/벤치마크_CAPEX.md",
+      "title": "CAPEX 벤치마크 (자본집약도·성장신호)",
+      "topic": "CAPEX 벤치마크 — 산업별 CAPEX/Sales·CAPEX/D&A 분포",
+      "track": "기타",
+      "layer": "practice",
+      "parent": "CAPEX_드라이버_타이폴로지",
+      "doc_type": "knowledge",
+      "keywords": [
+        "CAPEX",
+        "자본적지출",
+        "자본집약도",
+        "CAPEX/Sales",
+        "CAPEX/D&A",
+        "재투자",
+        "성장투자",
+        "벤치마크",
+        "산업별"
+      ],
+      "canonical_questions": [
+        "산업별 CAPEX/매출 비율(자본집약도) 벤치마크는?",
+        "CAPEX/D&A로 성장·유지 국면을 어떻게 판단하나?",
+        "내 CAPEX 가정이 동종 대비 이상치인가?"
+      ],
+      "links": [
+        "CAPEX_드라이버_타이폴로지",
+        "가정원장_방법론",
+        "감사스캔_리포트",
+        "벤치마크_분포",
+        "운전자본_드라이버_타이폴로지"
+      ],
+      "has_frontmatter": true
+    },
+    {
+      "id": "벤치마크_마진",
+      "path": "docs/reference/벤치마크_마진.md",
+      "title": "마진 벤치마크 (수익성)",
+      "topic": "마진 벤치마크 — 산업별 영업이익률(OPM)·매출원가율 분포",
+      "track": "복합금융상품",
+      "layer": "practice",
+      "parent": "마진_원가_드라이버_타이폴로지",
+      "doc_type": "knowledge",
+      "keywords": [
+        "마진",
+        "영업이익률",
+        "OPM",
+        "매출원가율",
+        "원가율",
+        "판관비율",
+        "수익성",
+        "벤치마크",
+        "산업별"
+      ],
+      "canonical_questions": [
+        "산업별 영업이익률(OPM) 벤치마크는?",
+        "산업별 매출원가율 분포는?",
+        "내 마진 가정이 동종 대비 이상치인가?"
+      ],
+      "links": [
+        "가정원장_방법론",
+        "마진_원가_드라이버_타이폴로지",
+        "벤치마크_CAPEX",
+        "벤치마크_분포",
+        "벤치마크_운전자본"
+      ],
+      "has_frontmatter": true
+    },
+    {
+      "id": "벤치마크_분포",
+      "path": "docs/reference/벤치마크_분포.md",
+      "title": "벤치마크 분포 (SMIC 횡단 집계)",
+      "topic": "벤치마크 분포 — 산업/아키타입별 배수·성장률·기법 prior (SMIC 횡단 집계)",
+      "track": "기타",
+      "layer": "practice",
+      "parent": "SMIC_기업리포트_코퍼스",
+      "doc_type": "knowledge",
+      "keywords": [
+        "벤치마크",
+        "분포",
+        "prior",
+        "EV/EBITDA",
+        "PER",
+        "PBR",
+        "배수",
+        "매출성장률",
+        "CAGR",
+        "아키타입",
+        "이상치탐지"
+      ],
+      "canonical_questions": [
+        "산업별 밸류에이션 배수(EV/EBITDA·PER·PBR) 벤치마크는?",
+        "산업별 매출 성장률(CAGR) 분포는?",
+        "내 가정이 동종 대비 이상치인가?"
+      ],
+      "links": [
+        "SMIC_기업리포트_코퍼스",
+        "가정원장_방법론",
+        "매출추정_논리_타이폴로지"
+      ],
+      "has_frontmatter": true
+    },
+    {
+      "id": "벤치마크_운전자본",
+      "path": "docs/reference/벤치마크_운전자본.md",
+      "title": "운전자본 벤치마크 (회전기일 분포)",
+      "topic": "운전자본 벤치마크 — 산업별 회전기일(DSO/DIO/DPO) 분포",
+      "track": "기타",
+      "layer": "practice",
+      "parent": "운전자본_드라이버_타이폴로지",
+      "doc_type": "knowledge",
+      "keywords": [
+        "운전자본",
+        "WC",
+        "회전기일",
+        "DSO",
+        "DIO",
+        "DPO",
+        "매출채권",
+        "재고자산",
+        "매입채무",
+        "벤치마크",
+        "산업별"
+      ],
+      "canonical_questions": [
+        "산업별 매출채권 회전일(DSO) 벤치마크는?",
+        "재고·매입채무 회전일 분포는?",
+        "내 회전기일 가정이 동종 대비 이상치인가?"
+      ],
+      "links": [
+        "가정원장_방법론",
+        "감사스캔_리포트",
+        "벤치마크_분포",
+        "운전자본_드라이버_타이폴로지"
+      ],
+      "has_frontmatter": true
+    },
+    {
       "id": "복합금융상품_평가",
       "path": "docs/reference/복합금융상품_평가.md",
       "title": "복합금융상품 평가 (CB·RCPS·BW) — 🔨 코어 검증 완료",
@@ -844,6 +1362,94 @@
       ],
       "links": [
         "밸류에이션_스코프_로드맵"
+      ],
+      "has_frontmatter": true
+    },
+    {
+      "id": "산업_아웃룩_코퍼스",
+      "path": "docs/reference/산업_아웃룩_코퍼스.md",
+      "title": "산업 아웃룩 코퍼스 (産業 Outlook)",
+      "topic": "산업 아웃룩 코퍼스 — 산업 구조·밸류체인·TAM·CAGR (SMIC 기업의 상위 컨텍스트)",
+      "track": "기타",
+      "layer": "practice",
+      "parent": "SMIC_기업리포트_코퍼스",
+      "doc_type": "knowledge",
+      "keywords": [
+        "산업분석",
+        "산업 아웃룩",
+        "밸류체인",
+        "value chain",
+        "TAM",
+        "CAGR",
+        "시장규모",
+        "제품 taxonomy",
+        "PwC",
+        "삼일",
+        "삼정KPMG",
+        "산업지도"
+      ],
+      "canonical_questions": [
+        "특정 산업의 밸류체인 구조와 제품군은?",
+        "산업의 시장 규모(TAM)·성장률(CAGR)은 어디서 얻나?",
+        "산업 리포트와 기업 리포트를 어떻게 연결해 매출을 추정하나?"
+      ],
+      "links": [
+        "SMIC_기업\n리포트_코퍼스",
+        "SMIC_기업리포트_코퍼스",
+        "industry/K-beauty화장품",
+        "industry/K-pop",
+        "industry/K-pop\\|K-pop",
+        "industry/바이오헬스케어",
+        "industry/반도체AI",
+        "industry/방산항공",
+        "industry/산업전망종합2025",
+        "industry/식품",
+        "industry/에너지유틸리티",
+        "industry/인프라",
+        "industry/자동차",
+        "industry/조선",
+        "industry/조선\\|조선",
+        "industry/철강비철",
+        "industry/철강비철\\|철강·비철",
+        "industry/통신",
+        "smic/_산업지도",
+        "smic/_제품군지도",
+        "매출추정_논리_타이폴로지",
+        "참고보고서_활용"
+      ],
+      "has_frontmatter": true
+    },
+    {
+      "id": "산업_프로파일",
+      "path": "docs/reference/산업_프로파일.md",
+      "title": "산업 프로파일 (비즈니스 모델 지문)",
+      "topic": "산업 프로파일 — 산업별 비즈니스 모델 지문(마진·회전·자본집약·아키타입·기법)",
+      "track": "복합금융상품",
+      "layer": "practice",
+      "parent": "벤치마크_분포",
+      "doc_type": "knowledge",
+      "keywords": [
+        "산업 프로파일",
+        "비즈니스 모델",
+        "OPM",
+        "DSO",
+        "CAPEX",
+        "아키타입",
+        "밸류에이션 기법",
+        "이상치",
+        "벤치마크 통합"
+      ],
+      "canonical_questions": [
+        "특정 산업의 마진·회전·자본집약·매출동인·기법 프로파일은?",
+        "신규 기업이 동종 산업 프로파일과 맞는가?"
+      ],
+      "links": [
+        "매출추정_논리_타이폴로지",
+        "밸류에이션_기법선택_로직",
+        "벤치마크_CAPEX",
+        "벤치마크_마진",
+        "벤치마크_분포",
+        "벤치마크_운전자본"
       ],
       "has_frontmatter": true
     },
@@ -938,6 +1544,50 @@
         "감사인검토_WACC방법론",
         "공정가치_측정_FV",
         "밸류에이션_스코프_로드맵"
+      ],
+      "has_frontmatter": true
+    },
+    {
+      "id": "시나리오_구축_타이폴로지",
+      "path": "docs/reference/시나리오_구축_타이폴로지.md",
+      "title": "시나리오 구축 타이폴로지 (Bull/Base/Bear)",
+      "topic": "시나리오 구축 타이폴로지 — Bull/Base/Bear를 무엇으로 가르나",
+      "track": "기타",
+      "layer": "practice",
+      "parent": "SMIC_기업리포트_코퍼스",
+      "doc_type": "knowledge",
+      "keywords": [
+        "시나리오",
+        "Bull",
+        "Base",
+        "Bear",
+        "낙관",
+        "보수",
+        "비관",
+        "민감도",
+        "Target Multiple",
+        "마진밴드",
+        "물량",
+        "침투율",
+        "사이클",
+        "이중계상"
+      ],
+      "canonical_questions": [
+        "Bull/Base/Bear 시나리오는 어떤 변수로 가르나?",
+        "시나리오별로 목표배수(Target Multiple)를 달리 적용해도 되나?",
+        "시나리오 range를 과장하는 함정은?"
+      ],
+      "links": [
+        "smic/크래프톤_20242\\|크래프톤",
+        "smic/한화솔루션_20251\\|한화솔루션",
+        "smic/한화에어로스페이스_20251\\|한화에어로",
+        "smic/한화오션_20241\\|한화오션",
+        "가정원장_방법론",
+        "마진_원가_드라이버_타이폴로지",
+        "매출추정_논리_타이폴로지",
+        "모델러스_통합모델_5.4",
+        "밸류에이션_기법선택_로직",
+        "벤치마크_분포"
       ],
       "has_frontmatter": true
     },
@@ -1114,6 +1764,50 @@
         "비상장회사 평가에 주로 쓰는 방법은?"
       ],
       "links": [],
+      "has_frontmatter": true
+    },
+    {
+      "id": "운전자본_드라이버_타이폴로지",
+      "path": "docs/reference/운전자본_드라이버_타이폴로지.md",
+      "title": "운전자본(WC) 드라이버 타이폴로지",
+      "topic": "운전자본(WC) 드라이버 타이폴로지 — NWC 추정 방식과 회전기일 고정 방법",
+      "track": "실사·정상화",
+      "layer": "practice",
+      "parent": "매출추정_논리_타이폴로지",
+      "doc_type": "knowledge",
+      "keywords": [
+        "운전자본",
+        "working capital",
+        "NWC",
+        "순운전자본",
+        "회전기일",
+        "DSO",
+        "DIO",
+        "DPO",
+        "매출채권",
+        "재고자산",
+        "매입채무",
+        "% of sales",
+        "peg",
+        "정상화",
+        "Change in NWC"
+      ],
+      "canonical_questions": [
+        "운전자본(NWC)은 어떤 방식으로 추정하나?",
+        "회전기일(DSO/DIO/DPO)을 어떻게 고정하나?",
+        "매출채권·재고·매입채무를 매출에 어떻게 연동하나?",
+        "M&A 실사에서 Target NWC(peg)는 어떻게 잡나?"
+      ],
+      "links": [
+        "DCF_교육_정본",
+        "FDD_재무실사_정상화",
+        "peer_dcf_클래시스_솔루엠",
+        "가정원장_방법론",
+        "리포트예시_클래시스",
+        "매출추정_논리_타이폴로지",
+        "모델러스_통합모델_5.4",
+        "벤치마크_분포"
+      ],
       "has_frontmatter": true
     },
     {
