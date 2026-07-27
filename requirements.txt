@@ -1,0 +1,19 @@
+# 런타임 의존성 SSOT (컨테이너 배포용).
+# 개발/테스트 전용 의존성은 pyproject.toml [project.optional-dependencies] dev 참조.
+#
+# 계층 주의 — backend 의 서드파티 import 는 전부 **함수 내부 lazy import** 다.
+# 따라서 fastapi/uvicorn 만 있어도 프로세스는 뜨고, 아래 선택 계층이 빠지면
+# 해당 엔드포인트만 "미설치" RuntimeError 로 실패한다(전체 장애 아님).
+# 데모/포폴 배포에서 이미지를 줄이려면 [선택] 블록을 주석 처리하면 된다.
+
+# --- [필수] 프로세스 기동 ---
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.32,<1.0
+
+# --- [핵심 기능] 엑셀 왕복(export/import/diff) ---
+openpyxl>=3.1,<4.0
+msoffcrypto-tool>=5.4,<6.0          # 암호화 xlsx 해제(ingest/parsers/xlsx.py)
+
+# --- [선택] 시세·배수 커넥터 — pandas/numpy 를 함께 끌어온다(이미지 ~250MB 증가) ---
+finance-datareader>=0.9.90,<1.0     # 주가 시계열 → β·시총 (ingest/price_client.py)
+pykrx>=1.0.45,<2.0                  # PER/PBR/EPS/BPS/DIV 배수 (상대가치)

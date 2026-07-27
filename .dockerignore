@@ -1,0 +1,50 @@
+# 빌드 컨텍스트 축소 + 비밀/원본자료 유입 차단.
+# 주의: backend/calc_core/data/industry_benchmarks.json 과 backend/data/*.json 은
+# 런타임 필수다(벤치마크·KSIC·DART 택소노미). backend/ 는 통째로 COPY 하므로
+# 여기에 data 관련 제외 규칙을 추가하지 말 것.
+
+# 비밀
+.env
+.env.*
+*.key
+
+# VCS / 에디터
+.git
+.gitignore
+.github
+.githooks
+.vscode
+.idea
+.claude
+
+# Python 캐시 · 가상환경
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 프론트 — stage 1 에서 npm ci 로 재설치/재빌드하므로 호스트 산출물은 제외
+frontend/node_modules/
+frontend/dist/
+
+# 런타임 생성물 · 로컬 상태 (컨테이너에선 새로 만든다)
+var/
+out/
+scratch/
+
+# 이미지에 불필요
+tests/
+fixtures/
+docs/
+add-in/
+README.md
+*.png
+*.xlsx
+*.pdf
