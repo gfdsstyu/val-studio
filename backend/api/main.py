@@ -1698,11 +1698,18 @@ def method_options() -> dict:
     return {"purposes": PURPOSES, "deal_types": DEAL_TYPES}
 
 
-@app.post("/api/method/recommend")
-async def method_recommend(request: Request) -> dict:
+@app.post("/api/method/recommend-legal")
+async def method_recommend_legal(request: Request) -> dict:
     """{purpose, deal_type?, target_listed?, counterparty_listed?} → 방법론 추천.
 
     결정론 법제 매핑(북 정본) — 추천이지 강제 아님. 규칙 없는 조합은 uncertain.
+    반환: {primary, secondary, legal_basis, notes, uncertain} — Home.jsx 온보딩이 소비.
+
+    경로 주의: 이전엔 /api/method/recommend 였는데 line 118 의 사업성격 추천과
+    **같은 경로에 중복 등록**돼 있었다. Starlette 은 먼저 등록된 라우트를 매칭하므로
+    이 핸들러는 도달 불가능한 죽은 코드였고, Home 은 형태가 다른 응답(primary·notes
+    없음)을 받아 렌더 중 TypeError 로 흰 화면이 됐다. 두 추천은 입력축이 다르므로
+    (사업성격 vs 법제목적) 경로를 분리해 유지한다.
     """
     d = await request.json()
     if d.get("purpose") not in PURPOSES:

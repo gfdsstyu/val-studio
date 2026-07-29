@@ -57,7 +57,7 @@ function NewProjectWizard({ onCreated, onCancel }) {
   const askRecommend = async () => {
     setBusy(true); setErr(null); setRec(null); setChosen(null);
     try {
-      const r = await fetch("/api/method/recommend", {
+      const r = await fetch("/api/method/recommend-legal", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           purpose, deal_type: dealType,
@@ -67,6 +67,13 @@ function NewProjectWizard({ onCreated, onCancel }) {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
+      // 형태 검증은 반드시 setRec **앞**에 온다. 뒤에 두면 형태가 어긋난 응답이 이미
+      // 상태에 들어간 뒤라, 렌더에서 rec.notes.length 가 터진다 — 그건 핸들러의
+      // catch 가 못 잡고 트리 전체가 언마운트되어 흰 화면이 된다. 여기서 걸러야
+      // err 배너로 보인다.
+      if (!Array.isArray(d.primary) || !Array.isArray(d.notes)) {
+        throw new Error("추천 응답 형태가 예상과 다릅니다 — primary·notes 누락.");
+      }
       setRec(d);
       if (!d.uncertain && d.primary.length === 1) setChosen(d.primary[0].id);
     } catch (e) {
