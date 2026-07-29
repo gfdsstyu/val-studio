@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+# ↑ 지우지 말 것. pip 은 BOM 도 coding 주석도 없으면 이 파일을 **시스템 로케일**
+#   인코딩으로 디코드한다(pip/_internal/utils/encoding.py auto_decode). 아래 한국어
+#   주석이 있어서, 로케일이 UTF-8 이 아닌 환경(예: 한국어 Windows=cp949)에서는
+#   UnicodeDecodeError 로 설치가 통째로 실패한다. 이 줄이 인코딩을 고정한다.
+#
 # 런타임 의존성 SSOT (컨테이너 배포용).
 # 개발/테스트 전용 의존성은 pyproject.toml [project.optional-dependencies] dev 참조.
 #
