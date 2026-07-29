@@ -47,6 +47,11 @@ RUN pip install -r requirements.txt
 COPY backend/ ./backend/
 COPY --from=web /web/dist ./frontend/dist
 
+# 골든 픽스처 — /api/demo/cases 가 런타임에 읽는다(키 없는 방문자용 데모 진입점).
+# .dockerignore 에서 제외를 푸는 것만으로는 부족하다. 그건 "복사 가능 대상"을 정할
+# 뿐이고, 실제로 이미지에 넣으려면 이 COPY 가 있어야 한다(실측으로 확인한 함정).
+COPY fixtures/ ./fixtures/
+
 # 런타임 쓰기 경로(프로젝트 저장 · DART corpCode 캐시).
 # Cloud Run 의 컨테이너 파일시스템은 인메모리이고 인스턴스마다 독립이다 →
 # 여기 쓰인 내용은 재시작/스케일아웃 시 사라지고 메모리를 점유한다.
