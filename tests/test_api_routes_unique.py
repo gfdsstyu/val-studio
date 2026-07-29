@@ -26,10 +26,15 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "backend"))
 
 try:
-    from backend.api.main import app
+    import fastapi                                    # noqa: F401
 except ImportError:                                   # 3.14 등 미설치 환경
+    if "pytest" in sys.modules:                       # 수집 중 — 모듈 단위 skip
+        import pytest
+        pytest.skip("fastapi 미설치 — py -3.12 로 실행", allow_module_level=True)
     print("fastapi 미설치 — skip (py -3.12 로 실행)")
     sys.exit(0)
+
+from backend.api.main import app                      # noqa: E402
 
 
 def _route_table() -> dict[tuple[str, str], list[str]]:
