@@ -154,6 +154,57 @@ def benchmark_industry(name: str = "") -> dict:
     return {"industry": matched, "metrics": metrics, "meta": data.get("_meta", {})}
 
 
+# 골든 케이스 — 원본 엑셀 모델을 1:1 재현하는 회귀 픽스처. 데모 진입점으로도 쓴다.
+# DART·거시 키가 없는 방문자는 대부분의 시트가 비어 보이는데, 이 케이스는 외부
+# 의존이 0이라 키 없이도 엔진의 결정론을 그대로 보여줄 수 있다.
+#
+# tolerance 는 케이스마다 다르고, 그 차이가 곧 주장의 강도다 —
+#   viol   = 원본의 **라이브 수식값**을 받아둔 것이라 부동소수점 수준까지 일치.
+#   classys= 원본 **시트 표기값**(4~5 유효숫자 반올림)이라 ±5원 이내 일치가 상한.
+# UI 가 둘을 똑같이 "일치"로 표시하면 후자를 과대주장하게 되므로 분리해 내려보낸다.
+# (근거: fixtures/*/expected.json 의 _note, tests/golden/test_classys_spine.py)
+_DEMO_CASES = {
+    "viol": {
+        "label": "비올 (VIOL)",
+        "note": "원본 DCF 모델 최종본 재현. 중간연도 할인(mid-year) 적용.",
+        "tolerance": {"abs": 1e-6, "label": "원본 라이브 수식값과 완전 일치"},
+    },
+    "classys": {
+        "label": "클래시스 (CLASSYS)",
+        "note": "2차 검증 케이스. tax_override·terminal_fcff_override 경로.",
+        "tolerance": {"abs": 5.0, "label": "±5원 이내(원본 시트 표기가 반올림값)"},
+    },
+}
+
+
+@app.get("/api/demo/cases")
+def demo_cases() -> dict:
+    """골든 케이스 목록 + 입력 + 기대 출력.
+
+    프론트가 이 입력을 DCF 시트에 그대로 채워 넣고 /api/dcf 를 호출하면
+    expected.per_share 와 일치해야 한다(재현 검증). 그래서 inputs 는 가공하지 않고
+    픽스처 원본 그대로 반환한다 — 여기서 손대면 '재현'이라는 주장이 성립하지 않는다.
+
+    픽스처가 이미지에 없으면(=.dockerignore 로 빠졌으면) 해당 케이스는 조용히
+    빠지지 않고 available=false 로 드러난다.
+    """
+    out = []
+    for cid, meta in _DEMO_CASES.items():
+        d = _ROOT / "fixtures" / cid
+        try:
+            inputs = _json.loads((d / "inputs.json").read_text(encoding="utf-8"))
+            expected = _json.loads((d / "expected.json").read_text(encoding="utf-8"))
+        except (OSError, _json.JSONDecodeError) as e:
+            out.append({"id": cid, **meta, "available": False, "reason": str(e)})
+            continue
+        out.append({
+            "id": cid, **meta, "available": True,
+            "inputs": {k: v for k, v in inputs.items() if not k.startswith("_")},
+            "expected_per_share": expected.get("per_share"),
+        })
+    return {"cases": out}
+
+
 @app.post("/api/dcf")
 async def dcf_endpoint(request: Request) -> dict:
     """DcfSpineInput JSON → 주당가치·EV·TV비중·audit findings·민감도.
