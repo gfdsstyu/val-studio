@@ -1857,6 +1857,10 @@ import uuid  # noqa: E402
 from datetime import datetime, timezone  # noqa: E402
 
 _PROJECTS_DIR = _ROOT / "var" / "projects"
+# 영속화: PROJECTS_GCS_BUCKET 설정 시 GCS 원본 + 로컬 캐시(Cloud Run 재시작 생존),
+# 미설정이면 순수 로컬(기존 동작·테스트 무영향). 상세: project_store.py 도입부.
+from .project_store import ProjectStore, StoreError  # noqa: E402
+_STORE = ProjectStore(_PROJECTS_DIR, os.environ.get("PROJECTS_GCS_BUCKET"))
 _MODES = {"appraiser", "auditor"}
 _ID_RE = _re.compile(r"^[0-9a-f]{12}$")
 
@@ -1865,10 +1869,10 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _proj_path(pid: str) -> Path:
+def _check_pid(pid: str) -> str:
     if not _ID_RE.fullmatch(pid):                       # 경로 탈출 방지
         raise HTTPException(400, f"잘못된 프로젝트 id: {pid}")
-    return _PROJECTS_DIR / f"{pid}.json"
+    return pid
 
 
 # 구용어 마이그레이션: ERP(주식위험프리미엄) → MRP(시장위험프리미엄) 개명 이전에
@@ -1894,30 +1898,41 @@ def _migrate(obj):
 
 
 def _load_project(pid: str) -> dict:
-    p = _proj_path(pid)
-    if not p.exists():
+    try:
+        text = _STORE.load(_check_pid(pid))
+    except StoreError as e:
+        raise HTTPException(502, str(e)) from e
+    if text is None:
         raise HTTPException(404, f"프로젝트 없음: {pid}")
-    return _migrate(_json.loads(p.read_text(encoding="utf-8")))
+    return _migrate(_json.loads(text))
 
 
 def _save_project(proj: dict) -> None:
-    _PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
-    _proj_path(proj["id"]).write_text(
-        _json.dumps(proj, ensure_ascii=False, indent=1), encoding="utf-8")
+    try:
+        _STORE.save(_check_pid(proj["id"]),
+                    _json.dumps(proj, ensure_ascii=False, indent=1))
+    except StoreError as e:
+        raise HTTPException(502, str(e)) from e
 
 
 @app.get("/api/projects")
 def list_projects() -> list[dict]:
-    """목록(메타만) — 홈 화면. 수정시각 내림차순."""
+    """목록(메타만) — 홈 화면. 수정시각 내림차순. 재시작 직후에도 GCS 목록이 살아있다."""
     out = []
-    if _PROJECTS_DIR.is_dir():
-        for f in _PROJECTS_DIR.glob("*.json"):
-            try:
-                p = _json.loads(f.read_text(encoding="utf-8"))
-                out.append({k: p.get(k) for k in
-                            ("id", "name", "mode", "company", "created_at", "updated_at")})
-            except (_json.JSONDecodeError, OSError):
+    try:
+        ids = _STORE.list_ids()
+    except StoreError as e:
+        raise HTTPException(502, str(e)) from e
+    for pid in ids:
+        try:
+            text = _STORE.load(pid)
+            if text is None:
                 continue
+            p = _json.loads(text)
+            out.append({k: p.get(k) for k in
+                        ("id", "name", "mode", "company", "created_at", "updated_at")})
+        except (_json.JSONDecodeError, OSError, StoreError):
+            continue
     return sorted(out, key=lambda p: p.get("updated_at") or "", reverse=True)
 
 
@@ -1967,10 +1982,11 @@ async def update_project(pid: str, request: Request) -> dict:
 
 @app.delete("/api/projects/{pid}", status_code=204)
 def delete_project(pid: str) -> None:
-    p = _proj_path(pid)
-    if not p.exists():
-        raise HTTPException(404, f"프로젝트 없음: {pid}")
-    p.unlink()
+    try:
+        if not _STORE.delete(_check_pid(pid)):
+            raise HTTPException(404, f"프로젝트 없음: {pid}")
+    except StoreError as e:
+        raise HTTPException(502, str(e)) from e
 
 
 # ── L3 분석적 절차 리뷰 (탑다운 모델 리뷰 워크플로우) ─────────────────────────
