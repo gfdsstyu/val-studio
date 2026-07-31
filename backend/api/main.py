@@ -32,6 +32,7 @@ from calc_core import DcfSpineInput, run  # noqa: E402
 from excel import build_dcf_sheet, import_dcf_model, read_workbook  # noqa: E402
 from excel.apply_policy import build_apply_plan  # noqa: E402
 from excel.dcf_import import DcfModelImportError  # noqa: E402
+from excel.model_audit import audit_workbook, check_sensitivity_center  # noqa: E402
 from excel.vs_state import parse_vs_state  # noqa: E402
 from ingest.macro_client import (  # noqa: E402
     CPI_INFLATION, EcosProvider, check_macro_vintage, parse_paste_table, usable_as_of,
@@ -44,6 +45,10 @@ from excel.workbook_diff import diff_workbooks  # noqa: E402
 from calc_core import fa as _fa, wc as _wc  # noqa: E402
 from calc_core.checks import (  # noqa: E402
     audit_dcf, diagnose_dcf_gap, load_benchmarks, match_industry)
+from calc_core.analytical import (  # noqa: E402
+    FinancialHistory, SegmentSeries, analytical_review, check_consensus_anchor,
+    mix_decomposition, opm_bridge)
+from assemble.history_inputs import history_from_dart  # noqa: E402
 from calc_core.method_selector import (  # noqa: E402
     DEAL_TYPES, PURPOSES, recommend_by_business_nature, recommend_method)
 from calc_core.scenario import run_scenarios  # noqa: E402
@@ -319,6 +324,42 @@ async def xlsx_import(request: Request) -> dict:
         os.unlink(path)
     return {"input": {f: getattr(inp, f) for f in _FIELDS},
             "result": _result_payload(inp), "skill_state": state}
+
+
+@app.post("/api/xlsx/audit")
+async def xlsx_audit(request: Request) -> dict:
+    """{"xlsx_b64"} → 수식 정적 감사(패턴 린트·하드코딩 스캔·중심셀 검산).
+
+    재계산 없는(COM 불요) 정적 분석 — 외부 편집본·임의 모델에도 작동. 표준
+    Val-Studio 레이아웃이면 import→엔진 재계산으로 Sens 그리드 중심셀(F7)까지
+    검산한다(축 순환·stale 4유형). 비표준 레이아웃은 린트 2종만 수행.
+    """
+    data = await request.json()
+    if "xlsx_b64" not in data:
+        raise HTTPException(422, "xlsx_b64 필요")
+    path = _write_temp_xlsx(_decode_xlsx(data["xlsx_b64"]))
+    try:
+        wb = read_workbook(path)
+        rep = audit_workbook(wb)
+        center_checked = False
+        try:
+            inp = import_dcf_model(path)
+            center = wb.get("Sens", {}).get("F7")
+            if center is not None and center.number is not None:
+                check_sensitivity_center(center.number, run(inp).per_share, report=rep)
+                center_checked = True
+        except DcfModelImportError:
+            pass                                    # 비표준 레이아웃 — 린트만
+    finally:
+        os.unlink(path)
+    return {
+        "findings": [{"rule": f.rule, "severity": f.severity.value,
+                      "message": f.message, "detail": f.detail}
+                     for f in rep.findings],
+        "warn_count": len(rep.warns),
+        "sheets": list(wb),
+        "center_checked": center_checked,
+    }
 
 
 @app.post("/api/xlsx/diff")
@@ -1914,6 +1955,92 @@ def delete_project(pid: str) -> None:
     if not p.exists():
         raise HTTPException(404, f"프로젝트 없음: {pid}")
     p.unlink()
+
+
+# ── L3 분석적 절차 리뷰 (탑다운 모델 리뷰 워크플로우) ─────────────────────────
+def _seg_list(raw) -> list[SegmentSeries] | None:
+    if not raw:
+        return None
+    try:
+        return [SegmentSeries(name=str(s["name"]),
+                              revenue=[float(x) for x in s["revenue"]],
+                              cogs=[float(x) for x in s["cogs"]],
+                              provenance=s.get("provenance"))
+                for s in raw]
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"segments 입력 오류: {e}") from e
+
+
+def _flist(v) -> list[float] | None:
+    return [float(x) for x in v] if v else None
+
+
+def _history_from_body(d: dict) -> tuple[FinancialHistory, list[str]]:
+    """history(직접 입력) 또는 dart_years(커넥터 응답) → FinancialHistory."""
+    try:
+        if d.get("dart_years"):
+            return history_from_dart(d["dart_years"], d.get("employee_years"))
+        h = d.get("history")
+        if not isinstance(h, dict) or not h.get("years"):
+            raise ValueError("history.years 또는 dart_years 필요")
+        return FinancialHistory(
+            years=[int(y) for y in h["years"]],
+            revenue=_flist(h.get("revenue")), cogs=_flist(h.get("cogs")),
+            sga=_flist(h.get("sga")), headcount=_flist(h.get("headcount")),
+            labor_cost=_flist(h.get("labor_cost")), nwc=_flist(h.get("nwc")),
+            segments=_seg_list(h.get("segments"))), []
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"history 입력 오류: {e}") from e
+
+
+@app.post("/api/review/analytical")
+async def review_analytical_endpoint(request: Request) -> dict:
+    """L3 분석적 절차 — 실적×추정 탑다운 리뷰(접합부·V자·믹스·단위경제·컨센서스).
+
+    body:
+      history: FinancialHistory 필드 직접 입력(segments 포함) — dart_years 와 택1
+      dart_years: /api/dart/financials 연도별 응답 배열 → 서버가 어셈블(notes 동봉)
+      employee_years: [{year, headcount, total_salary}] (/api/dart/employee 발췌)
+      spine: DcfSpineInput 필드(추정) — 있으면 접합부·성장-운전자본 검사 가동
+      forecast_segments: [{name, revenue, cogs}] 부문 추정
+      consensus: [{metric, own, consensus, source}] 회사별 앵커 대조
+
+    findings 는 detail 포함(시계열 스파크라인·layer 태그 — 리뷰 패널 소재).
+    브리지 표(opm_bridge·mix_decomposition)는 검사가 아니라 설명 소재로 동봉.
+    """
+    d = await request.json()
+    history, notes = _history_from_body(d)
+    inp = _parse_input(dict(d["spine"])) if d.get("spine") else None
+    rep = analytical_review(history, inp,
+                            forecast_segments=_seg_list(d.get("forecast_segments")))
+    for c in d.get("consensus") or []:
+        try:
+            check_consensus_anchor(str(c.get("metric", "")), float(c["own"]),
+                                   float(c["consensus"]),
+                                   source=str(c.get("source", "")), report=rep)
+        except (KeyError, TypeError, ValueError) as e:
+            raise HTTPException(422, f"consensus 입력 오류: {e}") from e
+
+    bridges: dict = {}
+    if (history.revenue and history.cogs and history.sga
+            and len(history.years) >= 2 and all(r > 0 for r in history.revenue)):
+        gpm = [1.0 - c / r for c, r in zip(history.cogs, history.revenue)]
+        sga_ratio = [s / r for s, r in zip(history.sga, history.revenue)]
+        bridges["opm_bridge"] = opm_bridge(gpm, sga_ratio)
+    if history.segments and len(history.segments[0].revenue) >= 2:
+        try:
+            bridges["mix_decomposition"] = mix_decomposition(history.segments)
+        except ValueError as e:
+            notes = list(notes) + [f"mix_decomposition 생략: {e}"]
+    return {
+        "findings": [{"rule": f.rule, "severity": f.severity.value,
+                      "message": f.message, "detail": f.detail}
+                     for f in rep.findings],
+        "warn_count": len(rep.warns),
+        "years": history.years,
+        "assembly_notes": notes,
+        "bridges": bridges,
+    }
 
 
 # 프론트 빌드가 있으면 정적 서빙 (없으면 API 전용 — dev 는 Vite 5173 + 프록시)

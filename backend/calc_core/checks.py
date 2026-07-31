@@ -942,6 +942,8 @@ def audit_dcf(
     long_term_gdp: float = DEFAULT_LONG_TERM_GDP,
     pgr_source: str | None = None,
     pgr_basis: str | None = None,
+    history=None,
+    forecast_segments=None,
 ) -> ValidationReport:
     """DCF 입력·산출·(선택)WACC 입력에 대한 가정 타당성 종합 검사.
 
@@ -949,6 +951,9 @@ def audit_dcf(
     감사인에게 노출, fail(PGR≥WACC 등)은 결과 무효로 취급한다.
 
     pgr_source/pgr_basis 를 주면 PGR 출처 게이트(R2)도 함께 돈다.
+    history(analytical.FinancialHistory)를 주면 L3 분석적 절차(접합부 연속성·
+    V자 시그니처·성장-운전자본 정합 등)가 같은 리포트로 합류한다 — 실적 prior
+    없이는 돌 수 없는 검사들이라 optional(기존 호출부 무영향).
     """
     report = ValidationReport()
     # 터미널에서 재투자가 실제로 반영되는 경로들.
@@ -990,6 +995,10 @@ def audit_dcf(
     if wacc_inputs is not None:
         check_beta_provenance(wacc_inputs, report=report)
         check_beta_mrp_consistency(wacc_inputs, report=report)
+    if history is not None:
+        from .analytical import analytical_review
+        analytical_review(history, inp, forecast_segments=forecast_segments,
+                          report=report)
     return report
 
 
