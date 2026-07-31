@@ -31,20 +31,33 @@ DEAL_TYPES = {
     "inheritance_gift": "상속·증여",
 }
 
-# 방법론 카탈로그 — available: 엔진 가동 여부(정직 표기)
+# 방법론 카탈로그 — 두 축으로 정직하게 표기한다.
+#   available: **엔진** 가동 여부(계산 코어 + API 로 즉시 실행 가능한가)
+#   ui:        평가인 워크스페이스에 **전용 시트**가 있는가(없으면 API/스킬 경로만)
+# 한 축으로 뭉뚱그리면 둘 중 하나가 반드시 거짓말이 된다 — 엔진이 있는데 '미구현'이라
+# 하거나, 화면이 없는데 '가동'이라 해서 유저를 빈 화면으로 보내거나.
 METHODS = {
-    "dcf": {"label": "DCF(수익가치)", "available": True,
+    "dcf": {"label": "DCF(수익가치)", "available": True, "ui": True,
             "engine": "calc_core.dcf"},
     "base_price": {"label": "기준시가(1M·1W·최근일 산술평균)", "available": True,
+                   "ui": False,
                    "engine": "calc_core.merger.base_share_price"},
     "intrinsic": {"label": "본질가치(자산 0.4 : 수익 0.6)", "available": True,
+                  "ui": False,
                   "engine": "calc_core.merger.intrinsic_value (수익가치=DCF 투입)"},
-    "comps": {"label": "상대가치(유사회사 배수)", "available": False,
-              "engine": "⏳ 트랙 예정 — LTM·계절성 유틸만 가동"},
-    "nav": {"label": "조정순자산", "available": False, "engine": "⏳ 미구현"},
-    "viu": {"label": "사용가치(VIU)", "available": False, "engine": "⏳ 손상 트랙 예정"},
-    "fv_ppa": {"label": "공정가치(MEEM·RFRM 등)", "available": False, "engine": "⏳ PPA 트랙 예정"},
-    "tax_supplementary": {"label": "상증세법 보충적 평가", "available": False, "engine": "⏳ 미구현"},
+    # ⚠️ 정직 표기는 **양방향**이다 — 미구현을 가동이라 하는 것만큼이나, 가동 중인
+    # 엔진을 '준비중'으로 두는 것도 부정직하다(있는 기능을 못 쓰게 만든다).
+    # comps·viu 는 엔진·API·테스트가 모두 실재하는데 표기만 낡아 있었다(2026-08-01 정정).
+    "comps": {"label": "상대가치(유사회사 배수)", "available": True, "ui": True,
+              "engine": "calc_core.multiples.relative_valuation "
+                        "(PER·PBR·EV/EBITDA·PSR + 5-10 Rule)"},
+    "nav": {"label": "조정순자산", "available": False, "ui": False, "engine": "⏳ 미구현"},
+    "viu": {"label": "사용가치(VIU)", "available": True, "ui": False,
+            "engine": "calc_core.viu.compute_viu (IAS 36 제약모드·유효세전율 역산)"},
+    "fv_ppa": {"label": "공정가치(MEEM·RFRM 등)", "available": False, "ui": False,
+               "engine": "⏳ PPA 트랙 예정"},
+    "tax_supplementary": {"label": "상증세법 보충적 평가", "available": False, "ui": False,
+                          "engine": "⏳ 미구현"},
 }
 
 

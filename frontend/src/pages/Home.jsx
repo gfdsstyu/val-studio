@@ -24,8 +24,11 @@ function MethodCard({ m, picked, onPick }) {
   return (
     <button className={`method-card ${picked ? "picked" : ""}`} onClick={() => onPick(m.id)}>
       <b>{m.label}</b>
+      {/* 엔진·화면 2축 표기 — 엔진만 있는 방법(VIU 등)을 "가동"이라고만 하면
+          유저를 없는 화면으로 보낸다. 카탈로그의 available/ui 를 그대로 반영. */}
       <span className={m.available ? "avail" : "unavail"}>
-        {m.available ? "엔진 가동" : "미구현(정직 표기)"}
+        {!m.available ? "미구현(정직 표기)"
+          : m.ui ? "엔진 가동 · 전용 화면" : "엔진 가동 · 화면 준비중(API)"}
       </span>
       <span className="muted">{m.engine}</span>
     </button>
