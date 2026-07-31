@@ -165,6 +165,36 @@ def test_history_from_dart_employee_join():
     assert hist2.headcount is None and any("직원현황" in n for n in notes2)
 
 
+# ── /api/review/ledger (오류 영향 분리 원장) ─────────────────────────────────
+def test_review_ledger():
+    r = C.post("/api/review/ledger", json={
+        "spine": SPINE,
+        "patches": [
+            {"label": "ΔNWC 복원", "fields": {
+                "delta_nwc_cash_adj": [-3759.0, -3000.0, -3500.0, -3800.0, -4000.0]}},
+        ]})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ledger"][0]["label"] == "기준선"
+    assert body["ledger"][1]["delta"] < 0            # 운전자본 유출 반영 → 하락
+    assert body["net_delta"] == pytest.approx(body["ledger"][1]["cum_delta"])
+
+
+def test_review_ledger_bad_field_422():
+    r = C.post("/api/review/ledger", json={
+        "spine": SPINE, "patches": [{"label": "x", "fields": {"nope": 1}}]})
+    assert r.status_code == 422
+
+
+# ── BadZipFile 하드닝 (xlsx 3종 공통) ────────────────────────────────────────
+def test_xlsx_audit_not_a_zip_422():
+    import base64
+    r = C.post("/api/xlsx/audit",
+               json={"xlsx_b64": base64.b64encode(b"not a zip at all").decode()})
+    assert r.status_code == 422
+    assert "zip" in r.json()["detail"]
+
+
 # ── /api/xlsx/audit (정적 감사) ──────────────────────────────────────────────
 def test_xlsx_audit_end_to_end(tmp_path):
     import base64

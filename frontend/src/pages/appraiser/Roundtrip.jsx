@@ -363,6 +363,82 @@ function DiffSheet({ project, onSave }) {
   );
 }
 
+/** 모델 정적 감사 — 재계산 없는 수식 분석(패턴 린트·하드코딩·민감도 중심셀).
+    외부 편집본·임의 워크북에도 작동(표준 레이아웃이면 중심셀 검산까지). 표시 전용. */
+function AuditSheet() {
+  const [file, setFile] = useState(null);
+  const [out, setOut] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const run = async () => {
+    if (!file) { setErr("xlsx 파일을 선택하세요."); return; }
+    setBusy(true); setErr(null); setOut(null);
+    try {
+      setOut(await api.xlsx.audit(await fileToBase64(file)));
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const nonPass = out ? out.findings.filter((f) => f.severity !== "pass") : [];
+  const center = out?.findings.find((f) => f.rule === "sensitivity_center");
+
+  return (
+    <>
+      <div className="card">
+        <h2>모델 정적 감사 <span className="muted">— 수식 패턴 린트·하드코딩·중심셀 검산</span></h2>
+        <div className="pad">
+          <div className="muted" style={{ marginBottom: 10, fontSize: "0.82rem" }}>
+            재계산 없이 수식 문자열만 분석합니다: <b>이웃 패턴을 깨는 수식</b>(참조 밀림
+            시그니처 — R1C1 정규화 대조), <b>수식 내 숫자 리터럴</b>(숨은 가정),
+            표준 레이아웃이면 <b>민감도 중심셀 ≟ 재계산</b>(축 순환·stale 동시 적발)까지.
+            ⚠️ 행 전체가 균일하게 밀린 오류는 이웃 대조로 안 잡힙니다 — 분석적 리뷰
+            (4.밸류에이션)와 병행하세요.
+          </div>
+          <div className="row" style={{ gap: 16 }}>
+            <label>감사 대상 xlsx <input type="file" accept=".xlsx"
+              onChange={(e) => setFile(e.target.files[0])} /></label>
+            <button className="primary" disabled={busy} onClick={run}>
+              {busy ? "분석 중…" : "정적 감사 실행"}
+            </button>
+          </div>
+          {err && <div className="err" style={{ marginTop: 10 }}>{err}</div>}
+        </div>
+      </div>
+
+      {out && (
+        <div className="card">
+          <h2>감사 결과</h2>
+          <div className="pad">
+            <div className="kpis">
+              <div className="kpi"><div className="v">{out.sheets.length}</div><div className="k">시트</div></div>
+              <div className="kpi"><div className="v" style={out.warn_count ? { color: "var(--warn)" } : {}}>{out.warn_count}</div><div className="k">WARN</div></div>
+              <div className="kpi"><div className="v">{out.center_checked ? (center?.severity === "pass" ? "정합 ✓" : "불일치 ⚠") : "생략"}</div><div className="k">민감도 중심셀</div></div>
+            </div>
+            {!out.center_checked && (
+              <div className="muted" style={{ fontSize: "0.82rem", margin: "6px 0" }}>
+                비표준 레이아웃 — 중심셀 검산은 Val-Studio export 템플릿에서만 수행됩니다.
+              </div>
+            )}
+            {nonPass.length === 0 && (
+              <div className="finding pass">경고 없음 — 패턴·리터럴·중심셀 전 검사 통과</div>
+            )}
+            {nonPass.map((f, i) => (
+              <div key={i} className={`finding ${f.severity}`}>
+                <b>[{f.severity.toUpperCase()}] {f.rule}</b> — {f.message}
+                {f.rule === "formula_pattern" && f.detail?.mode_sample && (
+                  <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                    이웃 다수 패턴: <code>{f.detail.mode_sample}</code>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function Roundtrip({ project, sheet, onSave }) {
   if (sheet === "export")
     return (
@@ -371,5 +447,6 @@ export default function Roundtrip({ project, sheet, onSave }) {
         <ImportPanel project={project} onSave={onSave} />
       </>
     );
+  if (sheet === "audit") return <AuditSheet />;
   return <DiffSheet project={project} onSave={onSave} />;
 }

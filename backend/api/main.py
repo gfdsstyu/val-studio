@@ -16,6 +16,7 @@ import sys
 import tempfile
 import urllib.error
 import urllib.request
+import zipfile
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -23,7 +24,7 @@ sys.path.insert(0, str(_ROOT / "backend"))
 
 from fastapi import FastAPI, Header, HTTPException, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.responses import Response  # noqa: E402
+from fastapi.responses import JSONResponse, Response  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 from assemble.dcf_inputs import assemble_dcf_inputs  # noqa: E402
@@ -47,7 +48,7 @@ from calc_core.checks import (  # noqa: E402
     audit_dcf, diagnose_dcf_gap, load_benchmarks, match_industry)
 from calc_core.analytical import (  # noqa: E402
     FinancialHistory, SegmentSeries, analytical_review, check_consensus_anchor,
-    mix_decomposition, opm_bridge)
+    impact_ledger, mix_decomposition, opm_bridge)
 from assemble.history_inputs import history_from_dart  # noqa: E402
 from calc_core.method_selector import (  # noqa: E402
     DEAL_TYPES, PURPOSES, recommend_by_business_nature, recommend_method)
@@ -62,6 +63,16 @@ app.add_middleware(
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  # Vite dev
     allow_methods=["*"], allow_headers=["*"],
 )
+
+@app.exception_handler(zipfile.BadZipFile)
+async def _bad_zip_handler(request: Request, exc: zipfile.BadZipFile) -> JSONResponse:
+    """유효 base64 이지만 zip 이 아닌 업로드 → 500 대신 422 (xlsx 3종 공통 하드닝).
+
+    xlsx/import·diff·audit 모두 read_workbook(zipfile) 을 타므로 한 곳에서 접는다.
+    임시파일 정리는 각 엔드포인트의 finally 가 이미 보장."""
+    return JSONResponse(status_code=422,
+                        content={"detail": f"xlsx 파일 아님(zip 파싱 실패): {exc}"})
+
 
 _FIELDS = {f.name for f in dataclasses.fields(DcfSpineInput)}
 
@@ -1991,6 +2002,25 @@ def _history_from_body(d: dict) -> tuple[FinancialHistory, list[str]]:
             segments=_seg_list(h.get("segments"))), []
     except (KeyError, TypeError, ValueError) as e:
         raise HTTPException(422, f"history 입력 오류: {e}") from e
+
+
+@app.post("/api/review/ledger")
+async def review_ledger_endpoint(request: Request) -> dict:
+    """{spine, patches:[{label, fields}]} → 오류 영향 분리 원장(결함별 Δ주당가치).
+
+    수정을 한 건씩 누적 적용·재계산 — 반대 방향 오류의 상쇄 은폐를 분리 측정으로
+    해소한다(리뷰 수정 실무의 표준 산출물 표). 적용 순서 = 원장 순서(상류→하류 권장).
+    """
+    d = await request.json()
+    if "spine" not in d:
+        raise HTTPException(422, "spine 필요")
+    inp = _parse_input(dict(d["spine"]))
+    try:
+        rows = impact_ledger(inp, d.get("patches") or [])
+    except (TypeError, ValueError) as e:
+        raise HTTPException(422, f"patches 입력 오류: {e}") from e
+    return {"ledger": rows,
+            "net_delta": rows[-1]["cum_delta"] if rows else 0.0}
 
 
 @app.post("/api/review/analytical")

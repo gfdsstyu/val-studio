@@ -24,6 +24,7 @@ Finding.detail["layer"] 태그: 리뷰 리포트의 4층 판정(방법론/구조
 """
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 
 from ingest.validators import Finding, Severity, ValidationReport
@@ -423,6 +424,39 @@ def check_nwc_growth_consistency(
     if report is not None:
         report.add(f)
     return f
+
+
+# ── 오류 영향 분리 원장 ──────────────────────────────────────────────────────
+def impact_ledger(base: DcfSpineInput, patches: list[dict]) -> list[dict]:
+    """결함 수정을 한 건씩 누적 적용→재계산해 주당가치 영향을 분리 기록.
+
+    반대 방향 오류들은 순 효과에서 서로를 가린다 — 실측: 개별 −111원/+26원이
+    순 −3.0%에 은폐되어, 분리 측정 없이는 "결함이 사소했다"로 오독된다. 수정
+    리뷰의 표준 산출물 형식(결함별 Δ 표)이며, 각 행이 직전 행 대비 Δ 라서
+    적용 순서가 곧 원장의 서사가 된다(상류→하류 순 권장).
+
+    patches: [{"label": 결함 설명, "fields": {DcfSpineInput 필드: 새 값}}]
+    반환: [{"label", "per_share", "delta"(직전 대비), "cum_delta"(기준선 대비)}]
+          — 첫 행은 기준선(base).
+    """
+    from .dcf import run                      # 순환 임포트 회피(런타임 지연 로드)
+
+    valid = {f.name for f in dataclasses.fields(DcfSpineInput)}
+    current = base
+    baseline = run(current).per_share
+    rows = [{"label": "기준선", "per_share": baseline, "delta": 0.0, "cum_delta": 0.0}]
+    prev = baseline
+    for p in patches:
+        fields = p.get("fields") or {}
+        unknown = set(fields) - valid
+        if unknown:
+            raise ValueError(f"알 수 없는 필드: {sorted(unknown)}")
+        current = dataclasses.replace(current, **fields)
+        ps = run(current).per_share
+        rows.append({"label": str(p.get("label", "")), "per_share": ps,
+                     "delta": ps - prev, "cum_delta": ps - baseline})
+        prev = ps
+    return rows
 
 
 # ── 종합 실행 ────────────────────────────────────────────────────────────────

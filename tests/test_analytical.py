@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 from calc_core.analytical import (  # noqa: E402
     FinancialHistory, SegmentSeries, analytical_review, check_consensus_anchor,
     check_derived_continuity, check_mix_reconciliation, check_nwc_growth_consistency,
-    check_ratio_seam, check_spike_revert, mix_decomposition, opm_bridge,
+    check_ratio_seam, check_spike_revert, impact_ledger, mix_decomposition, opm_bridge,
 )
 from calc_core.checks import audit_dcf  # noqa: E402
 from calc_core.dcf import run  # noqa: E402
@@ -263,3 +263,27 @@ def test_audit_dcf_history_wiring_and_backcompat():
 def test_history_length_validation():
     with pytest.raises(ValueError):
         FinancialHistory(years=[2022, 2023], revenue=[1.0])
+
+
+# ── 오류 영향 분리 원장 (§6.5(a)) ────────────────────────────────────────────
+def test_impact_ledger_isolates_offsetting_fixes():
+    base = _viol_like_input()
+    rows = impact_ledger(base, [
+        # 수정 1: ΔNWC 복원(현금 유출 반영) → 밸류 하락 방향
+        {"label": "ΔNWC 복원", "fields": {
+            "delta_nwc_cash_adj": [-3759.0, -3000.0, -3500.0, -3800.0, -4000.0]}},
+        # 수정 2: 원가율 과대 해소(E-6 계열) → 밸류 상승 방향 — 상쇄 구도
+        {"label": "원가율 정정", "fields": {
+            "cogs": [r * x for r, x in zip([0.209, 0.245, 0.238, 0.235, 0.234],
+                                           REV_FC)]}},
+    ])
+    assert rows[0]["label"] == "기준선" and rows[0]["delta"] == 0.0
+    assert rows[1]["delta"] < 0 < rows[2]["delta"]        # 반대 방향 분리 측정
+    # 누적 Δ = 개별 Δ 합 (원장 항등식)
+    assert rows[2]["cum_delta"] == pytest.approx(
+        rows[1]["delta"] + rows[2]["delta"], abs=1e-9)
+
+
+def test_impact_ledger_rejects_unknown_field():
+    with pytest.raises(ValueError):
+        impact_ledger(_viol_like_input(), [{"label": "x", "fields": {"nope": 1}}])

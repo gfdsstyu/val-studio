@@ -139,7 +139,7 @@ const STAGES = [
   { id: "mapping", label: "1. 계정분류", keys: ["mapping_pl", "mapping_bs"] },
   { id: "assumptions", label: "2. 가정", keys: ["revenue_built", "costs_built", "fa_built", "wc_built"] },
   { id: "discount", label: "3. 할인율", keys: ["wacc_result", "peer_selected"] },
-  { id: "valuation", label: "4. 밸류에이션", keys: ["dcf_result_summary", "three_statement_summary", "scenario_summary", "relative_summary"] },
+  { id: "valuation", label: "4. 밸류에이션", keys: ["dcf_result_summary", "three_statement_summary", "review_summary", "scenario_summary", "relative_summary"] },
   { id: "output", label: "5. 산출물", keys: [] },
 ];
 
@@ -185,7 +185,7 @@ export default function Dashboard({ project, onNavigate }) {
   const values = collectValues(d);
   const bridge = useBridgeCheck(d);
   const findings = [...(d.wacc_findings || []), ...(d.dcf_findings || []),
-    ...(d.three_statement_findings || [])];
+    ...(d.three_statement_findings || []), ...(d.review_findings || [])];
   const fails = findings.filter((f) => f.severity === "fail").length;
   const warns = findings.filter((f) => f.severity === "warn").length;
 

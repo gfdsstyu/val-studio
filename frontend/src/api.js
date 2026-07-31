@@ -93,6 +93,11 @@ export const api = {
     j("POST", "/api/macro/series", body, ecosKey ? { "X-Ecos-Key": ecosKey } : {}),
   // 서사 표현 가드: 단정·순환설명·무설명·뭉뚱그리기 + 필수 슬롯 공란(전부 WARN).
   reportLint: (body) => j("POST", "/api/report/lint", body),
+  // L3 분석적 절차(ISA 520 동형): 실적(DART)×추정 탑다운 검사 + 결함 영향 분리 원장.
+  review: {
+    analytical: (body) => j("POST", "/api/review/analytical", body),
+    ledger: (body) => j("POST", "/api/review/ledger", body),
+  },
   projects: {
     list: () => j("GET", "/api/projects"),
     create: (body) => j("POST", "/api/projects", body),
@@ -115,6 +120,8 @@ export const api = {
       return r.blob();
     },
     import: (xlsx_b64) => j("POST", "/api/xlsx/import", { xlsx_b64 }),
+    // 정적 감사(재계산 없는 수식 분석): 패턴 린트·하드코딩 스캔·민감도 중심셀 검산.
+    audit: (xlsx_b64) => j("POST", "/api/xlsx/audit", { xlsx_b64 }),
     // 기준선 2방식: 저장된 프로젝트에서 재생성(권장 — 왕복 루프가 닫힘) 또는 원본 업로드.
     diffVsProject: (project_id, after_b64) =>
       j("POST", "/api/xlsx/diff", { project_id, after_b64 }),

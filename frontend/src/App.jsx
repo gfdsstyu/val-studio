@@ -19,6 +19,7 @@ import MaterialsSheet from "./pages/appraiser/MaterialsSheet.jsx";
 import MappingSheet from "./pages/appraiser/MappingSheet.jsx";
 import Dashboard from "./pages/appraiser/Dashboard.jsx";
 import Roundtrip from "./pages/appraiser/Roundtrip.jsx";
+import ReviewPanel from "./pages/appraiser/ReviewPanel.jsx";
 import OpinionIngest from "./pages/auditor/OpinionIngest.jsx";
 import IndependentRecalc from "./pages/auditor/IndependentRecalc.jsx";
 import GapDiagnosis from "./pages/auditor/GapDiagnosis.jsx";
@@ -101,7 +102,7 @@ function ContextPanel({ project }) {
   const prov = d.wacc_provenance || {};
   const provKeys = Object.keys(prov);
   const findings = [...(d.wacc_findings || []), ...(d.dcf_findings || []),
-    ...(d.three_statement_findings || [])];
+    ...(d.three_statement_findings || []), ...(d.review_findings || [])];
   const empty = !provKeys.length && !findings.length;
   return (
     <aside className="context-panel">
@@ -201,11 +202,14 @@ function Workspace({ projectId, onHome }) {
       return <DcfSheet project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "model")
       return <ModelSheet project={project} onSave={saveData} />;
+    if (stage.id === "valuation" && sheet.id === "review")
+      return <ReviewPanel project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "scenario")
       return <ScenarioSheet project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "relative")
       return <RelativeSheet project={project} onSave={saveData} />;
-    if (stage.id === "output" && (sheet.id === "export" || sheet.id === "diff"))
+    if (stage.id === "output"
+        && (sheet.id === "export" || sheet.id === "diff" || sheet.id === "audit"))
       return <Roundtrip project={project} sheet={sheet.id} onSave={saveData} />;
     // 감사인 트랙 — 평가인 트랙과 데이터·화면 모두 격리(모드는 생성 시 1회 확정).
     if (stage.id === "ingest")
