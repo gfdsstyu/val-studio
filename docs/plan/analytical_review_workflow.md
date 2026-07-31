@@ -3,7 +3,7 @@
 **작성 2026-07-31** | 근거: `D:\Valuation\DCF_비올\portfolio_final\리뷰노트_모델검토.md` (비올 DCF 결함 8건 전수 검토 조서)
 **상태: P1~P4 구현 완료(2026-07-31), 747 그린 + vite 빌드 클린** — 전 단계 종료
 - P4: ReviewPanel(4.밸류에이션 › 분석적 리뷰 — DART 다개년 자동 수급→층위별 판정·수제 SVG 스파크라인(접합부 점선)·마진 브리지 표·영향 원장 JSON 실행기) + AuditSheet(5.산출물 › 모델 정적 감사 — 업로드→패턴 린트·하드코딩·중심셀) + impact_ledger 엔진·`/api/review/ledger` + BadZipFile→422 전역 핸들러. review_findings→ContextPanel·Dashboard 합류(배선 테스트 4/4).
-- ⏭ 별도 사이클로 이월: `/api/dcf/assemble` 프론트 소비 — 가정 시트 4종(revenue/costs/fa/wc built 산출물)→ops 계약 매핑이 필요한 독립 파이프라인(어설픈 매핑 리스크로 이번 범위서 제외)
+- ✅ 이월분 완료(가정 조립 사이클): AssembleSheet(4.밸류에이션 › 가정 조립) — 2.가정·3.할인율 저장 산출물→ops 계약 매핑(`cogs_pct`=costs_built÷revenue_built 파생 / 자산·WC 정의는 입력 키 fa_input·wc_input에서 재구성 / WACC 서브바디는 wacc_input 폼 스냅샷 재조립+CRP 재조회 / 연도 수 프리플라이트) + `/api/dcf/assemble` 응답 spine 동봉 → "DCF 입력으로 반영"으로 왕복 루프 폐합. 747 그린+빌드 클린
 - P1: calc_core/analytical.py(체크 6종+브리지 2종) + tests/test_analytical.py(비올 골든 22건) + audit_dcf `history=` 배선
 - P2: `/api/review/analytical` + assemble/history_inputs.py(DART financials/employee→FinancialHistory, fs_mapper 분류 재사용) + tests/test_api_review.py 10건
 - P3: excel/model_audit.py(R1C1 패턴 린트 행/열·하드코딩 스캔·중심셀 검산) + `/api/xlsx/audit`(표준 레이아웃이면 import→재계산→Sens!F7 대조) + tests/test_model_audit.py 12건. ⚠️ §4.1 초안 정정: **균일 밀림(E-3형)은 패턴 린트 사각지대**(이웃도 같이 틀림) — L3 성장-운전자본 정합이 담당, 테스트로 계층 분담 문서화

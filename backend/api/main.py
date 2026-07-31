@@ -720,6 +720,11 @@ async def dcf_assemble_endpoint(request: Request) -> dict:
         "tv_weight": (r.terminal_value_pv / r.enterprise_value
                       if r and r.enterprise_value else None),
         "wacc": s.wacc if s else None,
+        # 조립된 스파인 시계열 — 프론트가 DCF 시트 입력(dcf_input)으로 반영해
+        # export·리뷰·시나리오가 같은 숫자를 쓰는 왕복 루프를 닫는 재료.
+        "spine": ({f: getattr(s, f) for f in
+                   ("revenue", "cogs", "sga", "dep_amort", "capex",
+                    "delta_nwc_cash_adj")} if s else None),
         "provenance": a.provenance,
         "findings": _findings(a.report),
     }

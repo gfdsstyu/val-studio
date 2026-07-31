@@ -20,6 +20,7 @@ import MappingSheet from "./pages/appraiser/MappingSheet.jsx";
 import Dashboard from "./pages/appraiser/Dashboard.jsx";
 import Roundtrip from "./pages/appraiser/Roundtrip.jsx";
 import ReviewPanel from "./pages/appraiser/ReviewPanel.jsx";
+import AssembleSheet from "./pages/appraiser/AssembleSheet.jsx";
 import OpinionIngest from "./pages/auditor/OpinionIngest.jsx";
 import IndependentRecalc from "./pages/auditor/IndependentRecalc.jsx";
 import GapDiagnosis from "./pages/auditor/GapDiagnosis.jsx";
@@ -204,6 +205,8 @@ function Workspace({ projectId, onHome }) {
       return <ModelSheet project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "review")
       return <ReviewPanel project={project} onSave={saveData} />;
+    if (stage.id === "valuation" && sheet.id === "assemble")
+      return <AssembleSheet project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "scenario")
       return <ScenarioSheet project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "relative")

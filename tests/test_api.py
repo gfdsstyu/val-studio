@@ -169,6 +169,11 @@ def test_dcf_assemble_end_to_end():
     assert not d["blocked"]
     assert d["per_share"] > 0 and d["enterprise_value"] > 0
     assert any(f["rule"] == "tv_weight" for f in d["findings"])
+    # 조립 스파인 동봉 — 프론트가 dcf_input 으로 반영하는 왕복 루프 재료
+    s = d["spine"]
+    for k in ("revenue", "cogs", "sga", "dep_amort", "capex", "delta_nwc_cash_adj"):
+        assert len(s[k]) == len(_OPS_BODY["revenue"])
+    assert s["cogs"][0] == 600.0                    # 1000 × cogs_pct 0.6
 
 
 def test_dcf_assemble_pgr_ge_wacc_blocks():
