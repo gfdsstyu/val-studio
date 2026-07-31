@@ -162,7 +162,7 @@ LLM 호출은 Gemini뿐. Bloomberg β·한공회 MRP·KOFIABOND Kd는 **복붙 1
 - 방향②되읽기: dcf_import(tax_override 복원·NCI 호환) + vs_state.parse_vs_state(`_VS_STATE` 가정 대장 5열·미승인 게이트).
 - 방향③diff·반영: workbook_diff 4버킷(입력/수식/구조/상태) → apply_policy.build_apply_plan(auto_apply/review_queue/blocked/state).
 - 방향④정적감사: model_audit(formula_pattern_lint·hardcode_scan·sensitivity_center·audit_workbook) — 비올 리뷰 결함 귀납.
-- **fade는 엔진 전용**: xlsx에 페이드 연도 열이 찍히지 않고 캐시된 terminal_fcff·결과 블록에만 반영. 3표 Excel 표현은 스킬 stage_sheets.build_model_3s(Circuit Switch 셀 C5). 셀 DAG는 자료구조가 아니라 규약(SKILL.md)+diff/audit이 집행.
+- **fade 왕복(2026-08-01 수정)**: export가 엔진의 입력확장(`expand_fade_input`)을 재사용해 **페이드 열을 실체화**(YEAR_COLS 12열, 모델러스 원본 관행)하고 META C40/C41(fade_years·해석 fade_growth)을 기록 → import가 뒤쪽 k열을 잘라 3단 파라메트릭 복원. 수정 전엔 왕복 시 주당 −23.1% 조용한 소실 + recalc 시 값 바뀌는 워크북이었음(test_fade_model_roundtrip). 3표 Excel 표현은 스킬 stage_sheets.build_model_3s(Circuit Switch 셀 C5). 셀 DAG는 자료구조가 아니라 규약(SKILL.md)+diff/audit이 집행.
 - add-in/: manifest 3종(prod/dev/staging)만, 본체=웹앱 embed. Permissions ReadDocument(MVP L1).
 
 ## 10. 스킬 3종 — 결합 방식이 전부 다름
