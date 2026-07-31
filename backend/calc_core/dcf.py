@@ -146,6 +146,17 @@ def _expand_fade(inp: DcfSpineInput, g: float) -> DcfSpineInput:
     )
 
 
+def expand_fade_input(inp: DcfSpineInput) -> DcfSpineInput:
+    """페이드를 명시 시계열로 실체화한 **등가 입력**을 반환한다(공개 API).
+
+    표현 계층(excel export 등)용 — 워크북은 페이드를 별도 분기로 표현할 수 없으므로
+    확장된 열을 그대로 실체화해야 "수식 == 캐시값" 불변식이 성립한다(모델러스 원본도
+    명시 5 + 페이드 5 를 10개 열로 표현). base g 기준 확장이며, 반환 입력은
+    fade_years=None(재확장 방지). fade 미사용 입력은 그대로 반환.
+    """
+    return _expand_fade(inp, inp.terminal_growth)
+
+
 def _compute(inp: DcfSpineInput, wacc: float, g: float) -> DcfResult:
     inp = _expand_fade(inp, g)      # R1: 페이드 구간을 명시 시계열로 편입
     n = inp.n_years()

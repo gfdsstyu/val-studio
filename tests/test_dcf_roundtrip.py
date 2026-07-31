@@ -97,13 +97,14 @@ def test_roundtrip_overrides_preserved():
 
 
 def test_standard_model_no_false_override():
-    # 비올(오버라이드 없음): 세금이 수식이라 tax_override 미검출
+    # 비올(오버라이드·페이드 없음): 세금이 수식이라 tax_override 미검출, fade 도 미검출
     inp = _viol()
     p = _path()
     export_dcf(inp, run(inp), p)
     back = import_dcf_model(p)
     assert back.tax_override is None
     assert back.terminal_fcff_override is None
+    assert back.fade_years is None and back.fade_growth is None
 
 
 def test_nci_roundtrip_and_bridge():
@@ -132,6 +133,60 @@ def test_old_workbook_without_nci_defaults_zero():
     export_dcf(inp, run(inp), p)
     back = import_dcf_model(p)
     assert back.non_controlling_interest == 0.0
+
+
+def test_fade_model_roundtrip():
+    """fade 모델(R1) 왕복 — 페이드 열 실체화 + META C40/C41 파라메트릭 복원.
+
+    갭 실측(2026-08-01, 수정 전): fade_years=3 이 왕복에서 소실돼 주당가치 −23.1%
+    (10,946.89→8,413.38) 조용한 회귀 + C27 캐시(203,834)≠수식 SUM(127,002)으로
+    recalc 순간 값이 바뀌는 워크북이었다. 수정: export 가 엔진의 입력확장을 재사용해
+    페이드 열을 **실체화**(수식==캐시 복원, 모델러스 원본 관행과 동일)하고 META 에
+    파라미터를 기록, import 가 뒤쪽 k열을 잘라 3단 파라메트릭 형태로 되돌린다.
+    """
+    import dataclasses
+    from calc_core.dcf import resolve_fade_growth
+    base = _viol()
+    # 기준 케이스: 확장 시계 기준 자동 할인(terminal_discount_period 미선언).
+    fade = dataclasses.replace(base, fade_years=3, terminal_discount_period=None)
+    res_fade = run(fade)
+    assert not _close(res_fade.per_share, run(base).per_share)   # sanity: fade 효과 존재
+    n_total = base.n_years() + 3
+
+    p = _path()
+    export_dcf(fade, res_fade, p)
+    cells = read_workbook(p)["DCF"]
+
+    # 실체화: Year 행에 명시+페이드 전체 열, 명시 PV합 캐시 == 수식 SUM 범위(recalc 안정)
+    year_cols = [c for c in ("C", "D", "E", "F", "G", "H", "I", "J")
+                 if cells.get(f"{c}10") and cells[f"{c}10"].number is not None]
+    assert len(year_cols) == n_total
+    pv_sum = sum(cells[f"{c}24"].number for c in year_cols)
+    assert _close(cells["C27"].number, pv_sum, tol=1e-9)
+    # META 파라미터 기록(해석된 fade_growth)
+    gf = resolve_fade_growth(fade, fade.terminal_growth)
+    assert cells["C40"].number == 3
+    assert _close(cells["C41"].number, gf)
+
+    # 파라메트릭 복원: 명시 5년 + fade_years=3 + 재계산 등가
+    back = import_dcf_model(p)
+    assert back.fade_years == 3
+    assert _close(back.fade_growth, gf)
+    assert back.n_years() == base.n_years()
+    for a, b in zip(back.revenue, base.revenue):
+        assert _close(a, b)                                      # 명시 구간 원형 보존
+    assert _close(run(back).per_share, res_fade.per_share)       # 왕복 등가(10,946.89)
+
+
+def test_fade_export_exceeding_columns_raises():
+    """열 한도 초과는 조용한 절단이 아니라 명시 에러(YEAR_COLS 12열, 5+8=13 > 12)."""
+    import dataclasses
+    fade = dataclasses.replace(_viol(), fade_years=8, terminal_discount_period=None)
+    try:
+        export_dcf(fade, run(fade), _path())
+        assert False, "열 한도 초과가 조용히 통과"
+    except ValueError as e:
+        assert "YEAR_COLS" in str(e)
 
 
 def test_reader_reads_formulas_and_values():
