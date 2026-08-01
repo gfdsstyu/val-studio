@@ -197,14 +197,22 @@ tr.err code { color: var(--err); }
 .shell.embed .lnb { display: none; }                 /* 세로 LNB 숨김 → 헤더 드롭다운으로 */
 .shell.embed .panel-toggle,
 .shell.embed .context-panel { display: none; }
-.shell.embed .header { padding: 6px 10px; }
+/* ⚠️ LNB 를 숨겨도 .body 그리드의 176px 첫 트랙은 남는다 — 트랙을 제거하지 않으면
+   본문이 176px 열에 구겨 들어가 우측이 통째로 빈다(Task Pane 실측 결함). */
+.shell.embed .body,
+.shell.embed .body.with-panel { grid-template-columns: 1fr; }
+.shell.embed { grid-template-rows: auto 1fr 34px; }  /* 헤더 줄바꿈 허용(고정 44px 해제) */
+.shell.embed .header { padding: 6px 10px; flex-wrap: wrap; row-gap: 2px; min-height: 36px; }
+.shell.embed .header .screen { border-left: 0; padding-left: 0; }
 .shell.embed .logo-img { height: 20px; }
-.shell.embed .main-inner { padding: 8px; max-width: 100%; }
+.shell.embed .main { padding: 10px 10px 24px; }
+.shell.embed .main-inner { padding: 0; max-width: 100%; }
 .shell.embed .card { margin: 8px 0; }
+.shell.embed .pad { overflow-x: auto; }              /* 넓은 표(민감도·그리드)는 카드 안 가로 스크롤 */
 .embed-stage { font-size: 12px; padding: 2px 4px; margin-right: 8px;
   max-width: 120px; }
 @media (max-width: 400px) {
   .shell.embed .kpis { grid-template-columns: 1fr 1fr; }
-  .shell.embed .main-inner { padding: 6px; }
+  .shell.embed .grid2 { grid-template-columns: 1fr; } /* 폼 2열 → 1열(입력폭 확보) */
   .shell.embed table { font-size: 12px; }
 }

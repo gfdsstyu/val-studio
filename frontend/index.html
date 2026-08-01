@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <title>Val.Studio — 로컬 밸류에이션</title>
+    <script>
+      /* Excel Task Pane(?embed=1)에서만 office.js 로드 — Office 호스트는 이 핸드셰이크가
+         없으면 몇 초 뒤 패널을 "추가 기능 오류"로 교체한다(페이지 자체는 정상이라
+         "다시 시작"을 누르면 동작하는 증상). 일반 웹 방문자는 로드하지 않는다. */
+      if (new URLSearchParams(location.search).has("embed")) {
+        var s = document.createElement("script");
+        s.src = "https://appsforoffice.microsoft.com/lib/1/hosted/office.js";
+        s.onload = function () {
+          if (window.Office && Office.onReady) Office.onReady();
+        };
+        document.head.appendChild(s);
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
