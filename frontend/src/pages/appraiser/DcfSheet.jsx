@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { api } from "../../api.js";
 import { DCF_FORM_DEFAULTS } from "../../demoCase.js";
+import TableTransfer from "../../TableTransfer.jsx";
 
 /* 4.밸류에이션 > DCF 시트 — 결정론 엔진 호출. 결과는 항상 KPI+게이트 동반.
    ⚠️ 과도기: 입력이 아직 이 시트에 있다 — IA 확정안(hard number 는 2.가정에만)대로
@@ -300,7 +301,23 @@ export default function DcfSheet({ project, onSave }) {
 
       {res && (
         <div className="card">
-          <h2>결과</h2>
+          <h2>결과{" "}
+            {/* 결과 → 워크북(다리 3). 스파인 시계열 + 결론 KPI 를 한 표로 — 워크북에서
+                재입력하다 생기는 전기 오류를 없앤다. 값은 number(엑셀 숫자 셀). */}
+            <TableTransfer label="DCF 결과"
+              hint="선택 셀을 좌상단으로 기입"
+              rows={[
+                ["항목", ...Array.from({ length: years }, (_, i) => `Y${i + 1}`)],
+                ...FIELD_LABELS.map(([k, lab]) => [lab, ...grid[k].map(Number)]),
+                [],
+                ["주당가치(원)", Math.round(res.per_share)],
+                ["EV(백만원)", Math.round(res.enterprise_value)],
+                ["지분가치(백만원)", Math.round(res.equity_value)],
+                ["TV 비중", res.tv_weight == null ? "" : Number((res.tv_weight * 100).toFixed(1))],
+                ["WACC", Number(form.wacc)],
+                ["영구성장률(g)", Number(form.terminal_growth)],
+              ]} />
+          </h2>
           <div className="pad">
             <div className="kpis">
               <div className="kpi hero"><div className="v">{fmt(res.per_share)} 원</div><div className="k">주당가치</div></div>

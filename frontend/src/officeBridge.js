@@ -14,6 +14,56 @@ export function officeAvailable() {
   return typeof window !== "undefined" && !!window.Office?.context?.document;
 }
 
+/** 셀 쓰기(Excel JS API)까지 가능한가 — Word/PowerPoint 호스트에는 `Excel` 이 없다. */
+export function excelWriteAvailable() {
+  return officeAvailable() && typeof window.Excel?.run === "function";
+}
+
+/** 2차원 배열 → 현재 선택 셀을 좌상단으로 기입한다(다리 1·3).
+ *
+ * 선택 영역의 **크기는 무시하고 시작 위치만** 쓴다 — 사용자가 한 셀만 찍어도 표 전체가
+ * 들어가야 실용적이다. 덮어쓰기 위험이 있으므로 호출부가 확인 문구를 띄운다.
+ * 값 타입은 그대로 전달한다(number 는 숫자 셀, string 은 텍스트) — 여기서 문자열로
+ * 뭉개면 엑셀에서 계산이 안 되므로 숫자를 숫자로 유지하는 것이 계약이다.
+ */
+export function writeToSelection(rows) {
+  return new Promise((resolve, reject) => {
+    if (!excelWriteAvailable()) {
+      reject(new Error("Excel Task Pane 에서만 사용할 수 있습니다."));
+      return;
+    }
+    if (!rows?.length || !rows[0]?.length) {
+      reject(new Error("보낼 데이터가 없습니다."));
+      return;
+    }
+    const nRow = rows.length;
+    const nCol = Math.max(...rows.map((r) => r.length));
+    // 행마다 길이가 다르면 Excel 이 거부하므로 빈칸으로 패딩(오류 대신 정렬).
+    const padded = rows.map((r) => (r.length === nCol ? r : [...r, ...Array(nCol - r.length).fill("")]));
+
+    window.Excel.run(async (ctx) => {
+      const sel = ctx.workbook.getSelectedRange();
+      sel.load(["rowIndex", "columnIndex", "worksheet/name"]);
+      await ctx.sync();
+      const sheet = ctx.workbook.worksheets.getActiveWorksheet();
+      const target = sheet.getRangeByIndexes(sel.rowIndex, sel.columnIndex, nRow, nCol);
+      target.values = padded;
+      target.format.autofitColumns();
+      await ctx.sync();
+      return { sheet: sel.worksheet.name, rows: nRow, cols: nCol };
+    })
+      .then(resolve)
+      .catch((e) => {
+        // 병합 셀·보호된 시트·표(ListObject) 경계가 대표적 실패 원인 — 원문을 함께 보인다.
+        const m = e?.message || String(e);
+        reject(new Error(
+          m.includes("InvalidOperation") || m.includes("merge")
+            ? `기입 실패 — 병합된 셀이나 보호된 영역일 수 있습니다: ${m}`
+            : `기입 실패: ${m}`));
+      });
+  });
+}
+
 /** 슬라이스 바이트(number[])들을 base64 로. btoa 인자 한계 때문에 청크로 이어붙인다. */
 function slicesToBase64(slices) {
   let bin = "";
