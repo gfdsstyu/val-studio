@@ -13,6 +13,10 @@ venv/
 .env.*
 *.key
 
+# 채용·대외 제안 성격 문서(개인 자산) — 기술 레포의 맥락과 분리한다.
+# 이 분석의 결론(문제 정의·검출 결함 카탈로그)은 README 에 녹여 공개한다.
+docs/plan/ax_consulting_model_quality.md
+
 # 대용량/재생성 가능 산출물 (원본 엑셀에서 재추출 가능, 원본은 레포 미포함)
 fixtures/**/raw_dump.json
 
