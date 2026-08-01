@@ -38,6 +38,12 @@ Add-in 본체는 **웹 페이지**다(우리 HTTPS 앱 `?embed=1`). manifest 는
 
 ### B. Excel Desktop (Microsoft 365)
 
+같은 manifest·같은 GUID 가 그대로 동작한다(이식 불요 — Add-in 본체는 호스팅된 웹 페이지).
+⚠️ 요건: **M365 구독 데스크톱**(Task Pane = Edge WebView2/Chromium). 영구 라이선스
+2016/2019 는 구형 IE 엔진이라 React 빌드(ES2020)가 미지원. 데스크톱 장점: Task Pane
+여러 개 병렬 도킹(Claude for Excel 과 동시 표시), 등록이 영구적(웹은 localStorage 휘발).
+BYOK 키는 WebView2 저장소가 브라우저와 별개라 데스크톱 패널에서 1회 재입력.
+
 - 방법 1(공유 폴더): 임의 폴더를 네트워크 공유 → Excel 옵션 → 보안 센터 → 보안 센터 설정
   → **신뢰할 수 있는 추가 기능 카탈로그**에 공유 경로 등록·"메뉴에 표시" 체크 → Excel 재시작
   → 삽입 → 내 추가 기능 → **공유 폴더** 탭 → Val-Studio DCF
