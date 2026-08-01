@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "./api.js";
-import { NAV, MODE_LABEL, firstAvailable } from "./nav.js";
+import { MODE_LABEL, firstAvailable, hiddenSheetCount, navFor } from "./nav.js";
 import Home from "./pages/Home.jsx";
 import ByokPanel from "./pages/Byok.jsx";
 import DcfSheet from "./pages/appraiser/DcfSheet.jsx";
@@ -152,14 +152,15 @@ function Workspace({ projectId, onHome }) {
 
   useEffect(() => {
     api.projects.get(projectId)
-      .then((p) => { setProject(p); setPos(firstAvailable(p.mode)); })
+      .then((p) => { setProject(p); setPos(firstAvailable(p.mode, EMBED)); })
       .catch((e) => setErr(e.message));
   }, [projectId]);
 
   if (err) return <div className="err" style={{ padding: 20 }}>{err}</div>;
   if (!project || !pos) return <div className="placeholder">불러오는 중…</div>;
 
-  const stages = NAV[project.mode];
+  // Task Pane 은 브리지 축만(nav.js EMBED_ALLOW) — 넓은 스튜디오 시트는 탭에서.
+  const stages = navFor(project.mode, EMBED);
   const stage = stages.find((s) => s.id === pos.stage) ?? stages[0];
   const sheet = stage.sheets.find((s) => s.id === pos.sheet) ?? stage.sheets[0];
 
@@ -286,13 +287,25 @@ function Workspace({ projectId, onHome }) {
             {sh.label}
           </button>
         ))}
+        {/* 축약이 '기능 없음'으로 오해되지 않도록 — 어디로 가면 되는지 명시(같은 프로젝트 공유). */}
+        {EMBED && !showByok && (
+          <a className="embed-more" target="_blank" rel="noreferrer"
+             href={`${window.location.pathname}?project=${project.id}`}
+             title="같은 프로젝트를 브라우저 탭에서 전체 화면으로 엽니다">
+            +{hiddenSheetCount(project.mode)} 시트 ↗
+          </a>
+        )}
       </div>
     </div>
   );
 }
 
 export default function App() {
-  const [view, setView] = useState({ page: "home" });
+  // 딥링크 `?project=<id>` — Task Pane 에서 "탭에서 이어서" 이동, 북마크 진입에 쓴다.
+  // (라우터를 도입하지 않고 초기 진입만 URL 에서 읽는다 — 이후 이동은 종전대로 상태.)
+  const initial = new URLSearchParams(window.location.search).get("project");
+  const [view, setView] = useState(
+    initial ? { page: "project", id: initial } : { page: "home" });
   if (view.page === "home")
     return <Home onOpen={(id) => setView({ page: "project", id })} />;
   return <Workspace projectId={view.id} onHome={() => setView({ page: "home" })} />;

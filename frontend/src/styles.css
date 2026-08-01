@@ -211,6 +211,10 @@ tr.err code { color: var(--err); }
 .shell.embed .pad { overflow-x: auto; }              /* 넓은 표(민감도·그리드)는 카드 안 가로 스크롤 */
 .embed-stage { font-size: 12px; padding: 2px 4px; margin-right: 8px;
   max-width: 120px; }
+/* 축약된 시트로 가는 출구 — 시트탭 우측 끝에 붙는다(같은 프로젝트를 탭에서 연다). */
+.embed-more { margin-left: auto; align-self: center; padding: 0 10px;
+  font-size: 11px; color: var(--sub); text-decoration: none; white-space: nowrap; }
+.embed-more:hover { color: var(--brand); }
 @media (max-width: 400px) {
   .shell.embed .kpis { grid-template-columns: 1fr 1fr; }
   .shell.embed .grid2 { grid-template-columns: 1fr; } /* 폼 2열 → 1열(입력폭 확보) */

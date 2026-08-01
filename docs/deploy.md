@@ -60,12 +60,66 @@ gcloud run deploy val-studio \
 | `--max-instances 3` | 포폴 데모 기준 비용 상한. BYOK라 폭주 위험은 낮다. |
 | `--allow-unauthenticated` | 공개 데모 전제. 비공개로 두려면 이 플래그를 빼고 IAM 초대. |
 
+## 저장 영속화 (GCS) — 실사용 전 필수
+
+기본 상태(버킷 미설정)에서 `var/projects/*.json` 은 **인스턴스 인메모리**라 재시작·스케일
+아웃에 사라진다. 데모는 무해하지만 **엑셀 왕복 diff 는 "저장본"을 기준선으로 재생성**하므로
+(Task Pane 의 "현재 워크북으로 비교" 포함), 기준선이 날아가면 그 기능 자체가 못 쓰게 된다.
+
+코드는 이미 준비되어 있다(`backend/api/project_store.py` — stdlib urllib + 메타데이터 서버
+토큰, google-cloud-storage 의존 0). `PROJECTS_GCS_BUCKET` 만 주입하면 GCS 가 SSOT 가 되고
+로컬 디렉터리는 읽기 캐시가 된다. **미설정 시 동작은 종전과 완전히 동일**(로컬 전용).
+
+```bash
+PROJECT=<gcp-project-id>
+REGION=asia-northeast3
+BUCKET=<프로젝트-고유-버킷명>          # GCS 버킷명은 전역 유일. 예: val-studio-projects-8f2a
+
+# 1) 버킷 생성 — Cloud Run 과 같은 리전(레이턴시), 균일 액세스 권장
+gcloud storage buckets create gs://$BUCKET \
+  --project $PROJECT --location $REGION --uniform-bucket-level-access
+
+# 2) 서비스 런타임 SA 확인 (비어 있으면 기본 컴퓨트 SA)
+SA=$(gcloud run services describe val-studio --region $REGION --project $PROJECT \
+      --format='value(spec.template.spec.serviceAccountName)')
+[ -z "$SA" ] && SA=$(gcloud projects describe $PROJECT \
+      --format='value(projectNumber)')-compute@developer.gserviceaccount.com
+echo $SA
+
+# 3) 권한 — 프로젝트 전역이 아니라 **이 버킷에만** objectAdmin(최소권한)
+gcloud storage buckets add-iam-policy-binding gs://$BUCKET \
+  --member=serviceAccount:$SA --role=roles/storage.objectAdmin
+
+# 4) 환경변수 주입 — 재빌드 없이 새 리비전만 생성된다
+gcloud run services update val-studio --region $REGION --project $PROJECT \
+  --update-env-vars PROJECTS_GCS_BUCKET=$BUCKET
+```
+
+**검증** (둘 다 통과해야 실제로 영속된 것):
+
+```bash
+# ① 웹에서 프로젝트 하나 만든 뒤 — 오브젝트가 실제로 올라갔는지
+gcloud storage ls gs://$BUCKET/projects/
+
+# ② 강제로 새 인스턴스를 띄워도 목록이 살아있는지(진짜 시험)
+gcloud run services update val-studio --region $REGION --project $PROJECT \
+  --update-env-vars _RESTART=$(date +%s)   # 리비전 교체 → 콜드 스타트
+# 그 후 웹 새로고침 → 프로젝트 목록에 그대로 있으면 성공
+```
+
+> **실패는 조용하지 않다.** 버킷을 설정했는데 권한·통신이 실패하면 `StoreError` → API 5xx 로
+> 표면화된다(로컬에만 쓰고 "영속된 줄 아는" 최악의 형태를 의도적으로 배제). 저장 시 502 가
+> 뜨면 3)의 권한 부여를 먼저 확인할 것.
+
+**콘솔로 하려면**: Cloud Storage → 버킷 만들기(리전 일치) → 권한 탭에서 Cloud Run 런타임
+SA 에 `Storage 객체 관리자` 부여 → Cloud Run 서비스 → 새 버전 수정·배포 → 변수 및 보안
+비밀에 `PROJECTS_GCS_BUCKET` 추가.
+
 ## 알려진 제약
 
-- **상태 비영속.** `var/projects/*.json`(프로젝트 저장)과 `var/dart_corpcode.json`
-  (캐시)은 인스턴스별 인메모리다. 재시작·스케일아웃 시 사라지고 인스턴스 간 공유도
-  안 된다. 데모용으로는 무해하나, 실사용 전환 시 GCS/Firestore 로 옮겨야 한다.
-  `--max-instances 1` 로 두면 세션 내 일관성은 유지된다.
+- **DART corpCode 캐시 비영속.** `var/dart_corpcode.json`(~10만 사)은 여전히 인스턴스별
+  인메모리다. 재시작하면 첫 조회 때 키를 가진 방문자가 한 번 다시 받아온다(그 뒤로는 공유).
+  프로젝트 저장과 달리 유실 비용이 낮아 GCS 로 옮기지 않았다.
 - **키 없는 방문자.** DART/거시 키가 없으면 해당 커넥터만 실패한다. 키 없이도 보여줄
   경로로 `fixtures/viol`·`fixtures/classys` 골든 케이스를 Home 에 노출하는 것을 권장.
 - **선택 의존성.** `finance-datareader`·`pykrx` 는 pandas/numpy 를 끌어와 이미지를
