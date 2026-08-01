@@ -36,6 +36,7 @@
     <SourceLocation DefaultValue="https://val-studio-789315789234.asia-northeast3.run.app/?embed=1"/>
   </DefaultSettings>
 
-  <!-- Level 1(Task Pane only)은 ReadDocument 로 시작. Office.js 쓰기(Level 2)부터 ReadWriteDocument. -->
-  <Permissions>ReadDocument</Permissions>
+  <!-- v1.2: getFileAsync(현재 워크북→검증 API)·향후 Range 쓰기용 ReadWriteDocument.
+       권한 변경은 manifest 재업로드가 필요하다(sideload 는 브라우저 localStorage 저장). -->
+  <Permissions>ReadWriteDocument</Permissions>
 </OfficeApp>

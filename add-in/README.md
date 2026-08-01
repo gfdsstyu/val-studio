@@ -81,7 +81,20 @@ Task Pane fetch 의 Origin 은 `SourceLocation` 도메인(우리 앱)이지 `exc
 아니다. 현재는 앱·API 가 **동일 오리진**이라 CORS 이슈 자체가 없다. 커스텀 도메인 분리
 시에만 FastAPI `allow_origins` 재검토. 상세: PRD §10.3.
 
-## 남은 것 (v1.2+)
+## v1.2 — 현재 워크북 직접 검증 (2026-08-01)
 
-- Office.js Range 읽기/쓰기 (`ReadDocument` → `ReadWriteDocument` 상향) — PRD FR-M4
+Task Pane 안(5.산출물 export·diff·audit)에 **"현재 워크북 …" 버튼**이 추가됐다:
+`Document.getFileAsync` 로 열려 있는 워크북 바이트를 그대로 `/api/xlsx/audit·import·diff`
+에 태운다 — **다운로드→업로드 셔틀 불요**. 일반 웹(비 embed)에서는 버튼이 안 보인다.
+설계 근거: [../docs/plan/addin_two_panel_ux.md](../docs/plan/addin_two_panel_ux.md).
+
+⚠️ **권한이 ReadDocument → ReadWriteDocument 로 상향**됐다 — 기존 sideload 사용자는
+manifest 를 **다시 업로드**해야 한다(A경로 재수행; 사이드로드는 브라우저 localStorage
+저장이라 이전 등록이 새 권한을 모른다).
+
+## 남은 것 (v1.2 잔여+)
+
+- Office.js Range 쓰기: DART 숫자→`r_DART` 시트 주입·KPI 결과 기록 (PRD FR-M4.2/M4.3)
+- 패널 DART 결과 "TSV 복사" 버튼 (Office.js 불요 경로)
+- 웹 엑셀 Task Pane 2개 동시 표시 여부 실측 (addin_two_panel_ux.md §4-④)
 - Cloud Run URL 이 바뀌는 경우(커스텀 도메인): manifest 3곳(SourceLocation·AppDomain·아이콘) 동시 교체, GUID 는 유지

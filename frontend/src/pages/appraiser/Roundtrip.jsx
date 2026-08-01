@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { api, fileToBase64 } from "../../api.js";
+import { officeAvailable, currentWorkbookB64 } from "../../officeBridge.js";
 
 /* 엑셀 ⇄ 웹 왕복 루프 — 5. 산출물 단계.
 
@@ -108,6 +109,14 @@ function ImportPanel({ project, onSave }) {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
+  /** Task Pane 전용: 열려 있는 워크북을 다운로드 없이 바로 되읽기(다리 2 해소). */
+  const loadFromPane = async () => {
+    setBusy(true); setErr(null); setOut(null); setApplied(false);
+    try {
+      setOut(await api.xlsx.import(await currentWorkbookB64()));
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
   const apply = () => {
     if (!out) return;
     onSave?.({
@@ -137,6 +146,11 @@ function ImportPanel({ project, onSave }) {
             <button className="primary" disabled={busy} onClick={load}>
               {busy ? "읽는 중…" : "되읽기"}
             </button>
+            {officeAvailable() && (
+              <button className="ghost" disabled={busy} onClick={loadFromPane}>
+                {busy ? "읽는 중…" : "현재 워크북 되읽기"}
+              </button>
+            )}
           </div>
           {err && <div className="err" style={{ marginTop: 10 }}>{err}</div>}
           {out && (
@@ -243,6 +257,15 @@ function DiffSheet({ project, onSave }) {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
+  /** Task Pane 전용: 열려 있는 워크북을 편집본으로, 저장본을 기준선으로 즉시 비교. */
+  const compareCurrent = async () => {
+    if (!hasSaved) { setErr("저장된 DCF 입력이 없어 기준선을 만들 수 없습니다."); return; }
+    setBusy(true); setErr(null); setPlan(null); setApplied(null);
+    try {
+      setPlan(await api.xlsx.diffVsProject(project.id, await currentWorkbookB64()));
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
   /** 입력 변경 반영(전체 safe 면 전량, 아니면 입력분만 — 수식은 리뷰에 남는다). */
   const applyInputs = () => {
     if (!plan?.new_input) return;
@@ -300,6 +323,11 @@ function DiffSheet({ project, onSave }) {
             <button className="primary" disabled={busy} onClick={compare}>
               {busy ? "비교 중…" : "비교"}
             </button>
+            {officeAvailable() && (
+              <button className="ghost" disabled={busy || !hasSaved} onClick={compareCurrent}>
+                {busy ? "비교 중…" : "현재 워크북으로 비교"}
+              </button>
+            )}
           </div>
           {err && <div className="err" style={{ marginTop: 10 }}>{err}</div>}
         </div>
@@ -379,6 +407,14 @@ function AuditSheet() {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
+  /** Task Pane 전용: 열려 있는 워크북을 다운로드 없이 즉시 정적 감사(다리 2 해소). */
+  const runCurrent = async () => {
+    setBusy(true); setErr(null); setOut(null);
+    try {
+      setOut(await api.xlsx.audit(await currentWorkbookB64()));
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
   const nonPass = out ? out.findings.filter((f) => f.severity !== "pass") : [];
   const center = out?.findings.find((f) => f.rule === "sensitivity_center");
 
@@ -400,6 +436,11 @@ function AuditSheet() {
             <button className="primary" disabled={busy} onClick={run}>
               {busy ? "분석 중…" : "정적 감사 실행"}
             </button>
+            {officeAvailable() && (
+              <button className="ghost" disabled={busy} onClick={runCurrent}>
+                {busy ? "분석 중…" : "현재 워크북 감사"}
+              </button>
+            )}
           </div>
           {err && <div className="err" style={{ marginTop: 10 }}>{err}</div>}
         </div>
