@@ -24,12 +24,17 @@ Add-in 본체는 **웹 페이지**다(우리 HTTPS 앱 `?embed=1`). manifest 는
 
 ### A. Excel Online 개인 업로드 (관리자 불요 — 최속, 여기부터)
 
-1. https://excel.office.com → 새 통합 문서
-2. **삽입 → 추가 기능(Office Add-ins) → 내 추가 기능 → 내 추가 기능 업로드**
-3. `add-in/manifest.xml` 선택 → 업로드
+⚠️ 경로가 **삽입 탭이 아니라 홈 탭**이다(구 UI 는 삽입 → Office 추가 기능이었으나 개편됨
+— 공식 sideload 문서 2025-12 기준).
+
+1. https://office.com → Excel → **새 통합 문서 생성**(시작 화면이 아니라 편집 화면이어야 리본에 버튼이 있다)
+2. **홈(Home) 탭 → 오른쪽 끝 "추가 기능(Add-ins)"**(퍼즐 아이콘) → 패널 하단 **"더 많은 설정(More Settings)"**
+3. "Office 추가 기능" 대화상자에서 **"내 추가 기능 업로드(Upload My Add-in)"** → `add-in/manifest.xml` 업로드
 4. 리본/작업창에 "Val-Studio DCF" Task Pane 로드 확인
    - 빈 화면이면: F12 콘솔 확인 → 대개 SourceLocation 오타·mixed content(https 필수)
-   - manifest 캐시가 남으면: 다른 새 통합 문서에서 재시도(Office 캐시 수 분 지연 있음)
+   - 사이드로드는 **브라우저 localStorage 저장** — 캐시 삭제·브라우저 변경 시 재업로드 필요
+   - "추가 기능" 버튼 자체가 없으면: ①문서 편집 모드인지 ②조직 계정이면 관리자의 스토어
+     차단 여부(개인 Microsoft 계정으로 우회 테스트 가능) ③삽입 탭(구 UI) 순으로 확인
 
 ### B. Excel Desktop (Microsoft 365)
 
