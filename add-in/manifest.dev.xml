@@ -31,5 +31,7 @@
     <SourceLocation DefaultValue="http://localhost:8000/?embed=1"/>
   </DefaultSettings>
 
-  <Permissions>ReadDocument</Permissions>
+  <!-- prod 와 동일하게 상향(v1.2) — getFileAsync(현재 워크북 검증)·선택 셀 쓰기에 필요.
+       여기가 ReadDocument 로 남아 있으면 dev 등록에서만 그 기능이 조용히 막힌다. -->
+  <Permissions>ReadWriteDocument</Permissions>
 </OfficeApp>

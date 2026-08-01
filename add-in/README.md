@@ -71,6 +71,32 @@ py -3.12 -m uvicorn backend.api.main:app --port 8000
 # Vite HMR 로 UI 작업 시: vite.config.js server.https 켠 뒤 manifest.staging.xml
 ```
 
+## ⭐ 데스크톱 엑셀 + 로컬 서버 조합 (혼자 쓰는 실무 구성)
+
+클라우드 없이 완결된다 — **프로젝트 저장이 로컬 파일**(`var/projects/*.json`)이라
+Cloud Run 의 휘발성 문제·GCS 설정이 애초에 없다. 코드·manifest 자산은 그대로 쓰고,
+**어느 manifest 를 등록하느냐**로 서버가 갈릴 뿐이다(`manifest.xml`=Cloud Run /
+`manifest.dev.xml`=localhost).
+
+**최초 1회**
+1. 프론트 빌드: `cd frontend && npm run build`
+2. 공유 폴더 카탈로그 등록(위 B경로 방법 1) — `add-in/manifest.dev.xml` 을 공유 폴더에 두고
+   Excel 보안 센터에 경로 추가 → Excel 재시작
+3. 삽입 → 내 추가 기능 → **공유 폴더** 탭 → "Val-Studio DCF (dev)"
+
+**매번(작업 시작 시)**
+```bash
+py -3.12 -m uvicorn backend.api.main:app --port 8000    # 이 창을 켜둔 채로 엑셀 사용
+```
+
+**주의 3가지**
+- **서버를 켜둬야 한다** — Cloud Run 과 달리 항상 떠 있지 않다. 패널이 빈 화면이면 서버부터 확인.
+- **M365 구독 데스크톱**이어야 한다(Task Pane = Edge WebView2). 영구 라이선스 2016/2019 는 구형
+  렌더러라 React 빌드가 안 뜬다.
+- **BYOK 키는 한 번 다시 입력**한다 — WebView2 저장소가 브라우저와 별개다.
+
+**프론트를 수정했다면** `npm run build` 를 다시 하고 패널을 새로고침한다(dist 를 서빙하므로).
+
 ## 검증 (Definition of Done — PRD §13.1)
 
 - [ ] **A 경로**: Excel Online 에서 Task Pane 로드
