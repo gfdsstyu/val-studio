@@ -43,9 +43,11 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 
 | 모드 | 감지 | 동작 |
 |------|------|------|
-| **A. 자기 템플릿** | `_VS_STATE` 시트 존재 | 상태 읽고 중단 지점부터 재개 |
+| **A. 자기 템플릿** | `_VS_STATE` 시트 존재 | 상태 읽고 중단 지점부터 재개. `layout` 키로 레이아웃 분기: `valstudio-full-v1`(풀모델 정본 템플릿) → 되읽기·tie-out 은 `fullmodel_layout` 셀맵, 없거나 스파인이면 `template_schema` |
 | **B. 백지** | 빈 시트/Sheet1만 | 입력 수집 → `scaffold.py`로 수식 live DCF 스파인 생성 |
 | **C. 타 템플릿** | 기존 임의 모델 | 구조 파악·셀맵 작성·확인 후 진행. **원본 수식 변경 금지**, `_A/_F` 조정 레이어 |
+
+**풀모델 정본 템플릿**: 레포 루트 `ValStudio_DCF_Template.xlsx`(26시트, `layout=valstudio-full-v1`)가 사용자 배포용 정본이다. 상향 배선(EBIT/FA/WC→DCF, WACC 빌드업→DCF!H37) 완비 — 사용자는 r* 원자료 → Research → EBIT 드라이버 → WACC 입력 순으로 채우면 주당가치가 산출된다. `roundtrip.py`가 레이아웃을 자동 판별해 워크북 H49 vs 엔진 재계산 tie-out 을 수행한다(Excel 재계산·저장본 필요).
 
 **B모드 스캐폴딩**: `scaffold.py`로 시작(가정 블록+5개년 스파인+계단식 법인세+결과, 전부 살아있는 수식). Claude Code면 `--xlsx out.xlsx`, Claude for Excel이면 `--emit-cells`로 셀 JSON을 받아 워크북에 기입. `_VS_STATE` 시트가 함께 생성된다.
 
@@ -66,7 +68,7 @@ description: Excel 워크북 위에서 DCF 기업가치평가 워크플로우를
 | W5 | `Peer`(유사회사 4-step 퍼널 + Hamada 무부채화)·`WACC`(빌드업) |
 | W6~W8 | `DCF` 가정 상류참조 승격, **`Model`(3표 정합성, W6b)**, `Scenario`·`Sens` |
 
-**정체성 원칙(중요)**: 시트명·레이아웃은 위 **자체 정의**를 따른다. **참고 모델(H_FS/EBIT/BackData 등) 시트명·레이아웃을 복제하지 않는다.** 참고 모델·타사 지식은 "무엇을 계산·검증할지"로만 쓴다. 규약은 `references/template_conventions.md`.
+**레이아웃 2원 체제(2026-08 개정)**: ① 위 자체 시트 아키텍처(스파인 점진 성장, `template_schema` SSOT)는 백지(B모드) 스캐폴딩 경로로 유지한다. ② **사용자 배포 정본은 실무 파생 풀모델 템플릿**(`ValStudio_DCF_Template.xlsx`, `valstudio-full-v1`) — 실무 검증된 시트 구성(Assumption·DCF·EBIT·FA·WC·WACC + Comps·Peer·Research·r*)을 채택하되 디자인·명칭은 독자화했다. 되읽기 좌표는 `excel/fullmodel_layout.py` 가 SSOT. 타사 지식은 여전히 "무엇을 계산·검증할지"로만 쓴다.
 
 **단계 시트 뼈대 생성**: 각 단계에서 `scaffold.py --stage W1..W5`(및 `W2.5`)로 그 단계 시트의 뼈대(제목·범례·라벨·입력 placeholder·타시트 참조 스텁)를 결정론으로 찍고, 그 위에 값·수식·근거를 채운다. 뼈대가 색상·참조 규약을 강제하므로 손으로 시트를 그리는 것보다 일관되다. W1=Research·Assumption, W2=FS_Hist, W2.5=FS_Disagg, W3=Reclass, W4=Fcst_Rev·Fcst_Cost·Capex_Dep·WC, W5=Peer·WACC.
 

@@ -134,9 +134,11 @@ Anthropic 금융스킬의 Office.js↔openpyxl 이중환경 패턴 채택.
 | W5 | `Peer`(유사회사 4-step 퍼널 + Hamada 무부채화)·`WACC`(CAPM 빌드업) | Claude + `peer.py`(웹 미러) |
 | W6~W8 | `DCF` 가정 블록을 상류 시트 참조로 전환, `Scenario`·`Sens` | Claude + 결정론 검증 |
 
-#### 정체성 원칙 (참고 모델 비복제)
+#### 정체성 원칙 (참고 모델 비복제) — ⚠ 2026-08 부분 개정
 
 시트명·레이아웃·색상 규약은 **위 자체 정의**를 따른다. 참고 모델 시트명(H_FS/EBIT/BackData 등)·레이아웃을 복제하지 않는다. 참고 모델·타사 문서는 **방법론 지식**(무엇을 계산·검증할지)으로만 쓰고, viol/클래시스 픽스처는 **수치 검증 골든**으로만 쓴다.
+
+> **개정(사용자 결정, 2026-08-02)**: 위 원칙은 **백지 스캐폴딩(B모드) 경로에 한정**한다. 사용자 배포 정본은 실무 파생 풀모델 템플릿 `ValStudio_DCF_Template.xlsx`(`layout=valstudio-full-v1`)로 채택 — 실무 검증 시트 구성을 살리되 브랜딩 제거·디자인 독자화·상향 배선·Comps/Research/r* 증설을 거쳤다. 되읽기·tie-out 좌표 SSOT 는 `backend/excel/fullmodel_layout.py`(기존 `template_schema` 와 별개 레이아웃, 상호 대체 아님). W0 판별은 `_VS_STATE.layout` 키가 1순위.
 
 - 참조 방향은 **단방향**(`뒤 시트 → 앞 시트`, 순환 금지).
 - 색상 3색: Blue(직접 입력 hard) / Black(해당 시트 계산) / Green(타시트 참조) + 핵심가정 yellow fill.

@@ -17,6 +17,7 @@ import tempfile
 import urllib.error
 import urllib.request
 import zipfile
+from math import isclose
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -33,6 +34,9 @@ from calc_core import DcfSpineInput, run  # noqa: E402
 from excel import build_dcf_sheet, import_dcf_model, read_workbook  # noqa: E402
 from excel.apply_policy import build_apply_plan  # noqa: E402
 from excel.dcf_import import DcfModelImportError  # noqa: E402
+from excel.fullmodel_layout import (  # noqa: E402
+    FullModelImportError, detect_fullmodel, import_fullmodel,
+)
 from excel.model_audit import audit_workbook, check_sensitivity_center  # noqa: E402
 from excel.vs_state import parse_vs_state  # noqa: E402
 from ingest.macro_client import (  # noqa: E402
@@ -400,24 +404,41 @@ async def xlsx_export(request: Request) -> Response:
 
 @app.post("/api/xlsx/import")
 async def xlsx_import(request: Request) -> dict:
-    """{"xlsx_b64": "..."} → import_dcf_model → 복원 입력 + 재계산 결과.
+    """{"xlsx_b64": "..."} → 레이아웃 판별 후 되읽기 → 복원 입력 + 재계산 결과.
 
-    표준 Val-Studio DCF 레이아웃 가정(scaffold/export 산출). 타 템플릿은 422.
+    풀모델 정본 템플릿(`valstudio-full-v1`, _VS_STATE layout 키 또는 라벨 지문)이면
+    fullmodel 셀맵으로, 아니면 기존 스파인(template_schema) 레이아웃으로 읽는다.
+    풀모델은 워크북 주장값(DCF!H49) vs 엔진 재계산 tie-out 까지 동봉 — 애드인이
+    getFileAsync 바이트를 그대로 보내는 경로의 정합성 게이트. 타 템플릿은 422.
     """
     data = await request.json()
     if "xlsx_b64" not in data:
         raise HTTPException(422, "xlsx_b64 필요")
     path = _write_temp_xlsx(_decode_xlsx(data["xlsx_b64"]))
+    fm = None
     try:
         state = _skill_state_payload(path)          # 스킬 증적은 import 실패해도 살린다
         try:
-            inp = import_dcf_model(path)
-        except DcfModelImportError as e:
+            if detect_fullmodel(read_workbook(path)):
+                inp, fm = import_fullmodel(path)
+            else:
+                inp = import_dcf_model(path)
+        except (DcfModelImportError, FullModelImportError) as e:
             raise HTTPException(422, f"DCF 모델 import 실패(표준 레이아웃 아님?): {e}") from e
     finally:
         os.unlink(path)
-    return {"input": {f: getattr(inp, f) for f in _FIELDS},
-            "result": _result_payload(inp), "skill_state": state}
+    out = {"input": {f: getattr(inp, f) for f in _FIELDS},
+           "result": _result_payload(inp), "skill_state": state,
+           "layout": fm.layout if fm else "valstudio-spine"}
+    if fm is not None:
+        if fm.warnings:
+            out["warnings"] = fm.warnings
+        if fm.claimed_per_share is not None:
+            per_share = run(inp).per_share
+            out["workbook_per_share"] = round(fm.claimed_per_share, 4)
+            out["tie_out_workbook"] = isclose(
+                per_share, fm.claimed_per_share, rel_tol=1e-6)
+    return out
 
 
 @app.post("/api/xlsx/audit")
