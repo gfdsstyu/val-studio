@@ -59,6 +59,18 @@ function CoverSheet({ project }) {
             {auditor && (
               <div className="kpi"><div className="v">{claimed != null ? Math.round(claimed).toLocaleString("ko-KR") + " 원" : "-"}</div><div className="k">의견서 주장</div></div>
             )}
+            {auditor && d.audit_range_summary && (
+              /* 범위추정(540 문단 28~29) 요약 — 주장값이 감사인 범위 밖이면 개요에서 바로 보인다 */
+              <div className={`kpi${d.audit_range_summary.claimed_within === false ? " hero" : ""}`}>
+                <div className="v">
+                  {Math.round(d.audit_range_summary.low).toLocaleString("ko-KR")} ~{" "}
+                  {Math.round(d.audit_range_summary.high).toLocaleString("ko-KR")}
+                </div>
+                <div className="k">감사인 범위{d.audit_range_summary.claimed_within === false
+                  ? ` — 주장 범위 밖 (조정 ${Math.round(d.audit_range_summary.min_adjustment).toLocaleString("ko-KR")}원)`
+                  : ""}</div>
+              </div>
+            )}
             <div className="kpi"><div className="v">{s ? s.warn : "-"}</div><div className="k">audit 경고</div></div>
           </div>
           <div className="muted" style={{ marginTop: 12 }}>

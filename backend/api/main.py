@@ -253,6 +253,42 @@ async def scenario_endpoint(request: Request) -> dict:
             "weighted_per_share": a.weighted_per_share}
 
 
+@app.post("/api/range-estimate")
+async def range_estimate_endpoint(request: Request) -> dict:
+    """감사인 범위추정치(기준서 540 문단 28~29).
+
+    body: DcfSpineInput 필드(base 입력) + `range_assumptions`: [{field, low, high,
+    basis_low, basis_high}] + `claimed_per_share`?.
+    구간 양끝 근거가 없으면 **계산 자체를 차단**한다(29(a) — 근거 없는 범위 금지).
+    """
+    from calc_core.range_estimate import RangeAssumption, range_estimate
+
+    data = await request.json()
+    base = _parse_input(data)
+    raw = data.get("range_assumptions") or []
+    try:
+        assumptions = [RangeAssumption(
+            field=str(a.get("field", "")),
+            low=float(a.get("low")), high=float(a.get("high")),
+            basis_low=str(a.get("basis_low", "")), basis_high=str(a.get("basis_high", "")),
+        ) for a in raw]
+    except (TypeError, ValueError) as e:
+        raise HTTPException(422, f"range_assumptions 형식 오류: {e}") from e
+    claimed = data.get("claimed_per_share")
+    r = range_estimate(base, assumptions,
+                       claimed_per_share=float(claimed) if claimed not in (None, "") else None)
+    return {
+        "blocked": r.blocked,
+        "low": r.low, "high": r.high, "base_per_share": r.base_per_share,
+        "combo_low": r.combo_low, "combo_high": r.combo_high,
+        "claimed_per_share": r.claimed_per_share,
+        "claimed_within": r.claimed_within, "min_adjustment": r.min_adjustment,
+        "n_evaluations": r.n_evaluations,
+        "findings": [{"rule": f.rule, "severity": f.severity.value, "message": f.message}
+                     for f in r.findings],
+    }
+
+
 # ── xlsx 왕복 (export → 편집 → import/diff → 로컬 모델 반영) ──────────────────
 # 업로드는 base64-in-JSON(멀티파트 의존성 python-multipart 불요, 로컬 단일프로세스에 적합).
 def _decode_xlsx(b64: str) -> bytes:
