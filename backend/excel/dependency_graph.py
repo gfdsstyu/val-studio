@@ -273,6 +273,69 @@ class BreaksReport:
     external_cells: list[str]
 
 
+@dataclass
+class ReconnectProposal:
+    """끊김 수정 제안 — "이 상수를 저 수식 참조로 교체하라" + 캐시값 tie-out.
+
+    tie_out 의미(정직 표기): 재계산 엔진이 없으므로 **캐시값 비교**가 한계다.
+      · "pass"        — 후보 수식의 캐시값 == 상수(연결해도 결과 불변이 강하게 시사됨)
+      · "value_change" — 값이 다름. 연결하면 결과가 바뀐다 = **원래 상수가 낡았거나
+        틀렸다는 뜻**이므로 자동 적용 금지, 변화율을 보여주고 사람이 판단한다.
+    실사례: 비올 DCF!H37=0.113(하드) vs WACC!F43=0.11252(빌드업) — 0.4% 차이가
+    "하드코딩이 낡은 값"의 증거였다(포폴판에서 참조 연결로 수정됨).
+    """
+    constant_cell: str
+    constant_value: float
+    candidate_cell: str
+    candidate_value: float
+    diff_ratio: float
+    tie_out: str                    # "pass" | "value_change"
+    suggested_formula: str          # 예: "=WACC!F43"
+
+
+def propose_reconnections(
+    g: DependencyGraph,
+    breaks: BreaksReport,
+    *,
+    pass_tol: float = 1e-6,
+    match_tol: float = 0.02,
+    max_proposals: int = 20,
+) -> list[ReconnectProposal]:
+    """경로상 상수 잎마다, **결과에 도달하지 못하는 수식** 중 캐시값이 일치/근사한
+    후보를 찾아 참조 교체를 제안한다.
+
+    후보를 '미도달 수식'으로 한정하는 이유: 이미 도달하는 수식과 값이 같은 상수는
+    표시 중복일 뿐이고, 진짜 끊김은 "계산은 존재하는데 소비자가 상수를 쓰는" 형태다
+    (비올 WACC 시트). 0 값 상수는 제외 — 0 끼리는 어디서나 일치해 제안이 무의미하다.
+    """
+    dead = [(k, n) for k, n in g.nodes.items()
+            if n.kind == "formula" and k not in breaks.reach
+            and isinstance(n.value, (int, float))]
+    out: list[ReconnectProposal] = []
+    for ck in breaks.constant_inputs_in_path:
+        cv = g.nodes[ck].value
+        if not isinstance(cv, (int, float)) or cv == 0:
+            continue
+        best: tuple[float, str, float] | None = None      # (diff, key, value)
+        for k, n in dead:
+            d = abs(n.value - cv) / max(abs(cv), 1e-12)
+            if d <= match_tol and (best is None or d < best[0]):
+                best = (d, k, n.value)
+        if best is None:
+            continue
+        d, k, val = best
+        sheet, ref = k.split("!", 1)
+        pref = f"'{sheet}'" if re.search(r"[^\w가-힣.]", sheet) else sheet
+        out.append(ReconnectProposal(
+            constant_cell=ck, constant_value=cv,
+            candidate_cell=k, candidate_value=val, diff_ratio=d,
+            tie_out="pass" if d <= pass_tol else "value_change",
+            suggested_formula=f"={pref}!{ref}",
+        ))
+    out.sort(key=lambda p: p.diff_ratio)
+    return out[:max_proposals]
+
+
 def find_breaks(g: DependencyGraph, target: str) -> BreaksReport:
     if target not in g.nodes:
         raise KeyError(f"목표 셀 '{target}' 이 워크북에 없음")

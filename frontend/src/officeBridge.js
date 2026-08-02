@@ -77,6 +77,31 @@ function slicesToBase64(slices) {
   return btoa(bin);
 }
 
+/** 특정 셀에 수식을 기입한다(재연결 제안 적용 — 다리 3의 셀 단위 버전).
+ *
+ * writeToSelection 과 달리 **주소를 명시**한다: 재연결은 "그 상수 셀"을 정확히
+ * 겨냥해야 하고, 사용자가 다른 셀을 선택해둔 상태에서 눌러도 엉뚱한 곳을 덮으면
+ * 안 된다. 덮어쓰기이므로 호출부가 확인 문구를 띄운다.
+ */
+export function writeFormula(sheetName, ref, formula) {
+  return new Promise((resolve, reject) => {
+    if (!excelWriteAvailable()) {
+      reject(new Error("Excel Task Pane 에서만 사용할 수 있습니다."));
+      return;
+    }
+    window.Excel.run(async (ctx) => {
+      const sh = ctx.workbook.worksheets.getItem(sheetName);
+      const r = sh.getRange(ref);
+      r.formulas = [[formula]];
+      await ctx.sync();
+    })
+      .then(() => resolve({ sheet: sheetName, ref }))
+      .catch((e) => reject(new Error(
+        `수식 기입 실패(${sheetName}!${ref}): ${e?.message || e}` +
+        " — 시트 이름·보호 상태를 확인하세요.")));
+  });
+}
+
 /** 현재 워크북(.xlsx) → base64. 실패는 한국어 메시지 Error 로 던진다. */
 export function currentWorkbookB64() {
   return new Promise((resolve, reject) => {

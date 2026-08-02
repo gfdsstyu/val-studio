@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { api, fileToBase64 } from "../../api.js";
-import { officeAvailable, currentWorkbookB64 } from "../../officeBridge.js";
+import { officeAvailable, currentWorkbookB64, excelWriteAvailable, writeFormula }
+  from "../../officeBridge.js";
 
 /* 엑셀 ⇄ 웹 왕복 루프 — 5. 산출물 단계.
 
@@ -619,6 +620,48 @@ function ConnectivitySheet() {
                   </tr>))}</tbody>
               </table>
             </div>
+
+            {out.reconnect_proposals?.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <h2 style={{ fontSize: "0.9rem" }}>재연결 제안
+                  <span className="muted"> — 상수 잎 ↔ 미도달 수식의 캐시값 매칭</span></h2>
+                <div style={{ overflowX: "auto", marginTop: 6 }}>
+                  <table>
+                    <thead><tr><th>상수 셀</th><th>값</th><th>후보 수식 셀</th>
+                      <th>후보 값</th><th>차이</th><th>판정</th><th>적용</th></tr></thead>
+                    <tbody>{out.reconnect_proposals.map((p, i) => (
+                      <tr key={i} className={p.tie_out === "pass" ? "ok" : "warn"}>
+                        <td>{p.constant_cell}</td>
+                        <td>{p.constant_value.toLocaleString("ko-KR", { maximumFractionDigits: 5 })}</td>
+                        <td><code>{p.suggested_formula}</code></td>
+                        <td>{p.candidate_value.toLocaleString("ko-KR", { maximumFractionDigits: 5 })}</td>
+                        <td>{(p.diff_ratio * 100).toFixed(2)}%</td>
+                        <td>{p.tie_out === "pass" ? "불변 ✓" : "값 변동 ⚠"}</td>
+                        <td>{excelWriteAvailable() ? (
+                          <button className="ghost xs" onClick={async () => {
+                            // value_change 는 결과가 바뀐다(원래 상수가 낡았다는 뜻) — 명시 확인.
+                            const warnMsg = p.tie_out === "pass"
+                              ? `${p.constant_cell} 를 ${p.suggested_formula} 로 교체합니다(결과 불변 예상).`
+                              : `${p.constant_cell} 를 ${p.suggested_formula} 로 교체하면 값이 `
+                                + `${(p.diff_ratio * 100).toFixed(2)}% 바뀝니다 — 원래 상수가 낡았거나 `
+                                + `틀렸다는 뜻입니다. 교체 후 결과 변화를 직접 확인하세요.`;
+                            if (!window.confirm(warnMsg)) return;
+                            const [sh, ref] = p.constant_cell.split("!");
+                            try {
+                              await writeFormula(sh, ref, p.suggested_formula);
+                              setErr(null);
+                            } catch (e) { setErr(e.message); }
+                          }}>기입</button>
+                        ) : <span className="muted" style={{ fontSize: 11 }}>수식 복사</span>}</td>
+                      </tr>))}</tbody>
+                  </table>
+                </div>
+                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                  판정은 <b>캐시값 비교</b>입니다(재계산 없음) — "불변"도 적용 후
+                  <b> 재진단·재계산으로 확인</b>하세요. 값 변동 제안은 자동 적용하지 않습니다.
+                </div>
+              </div>
+            )}
 
             {out.constant_inputs_in_path.length > 0 && (
               <details style={{ marginTop: 10 }}>

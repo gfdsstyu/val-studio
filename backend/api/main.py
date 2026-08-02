@@ -418,7 +418,8 @@ async def xlsx_connectivity(request: Request) -> dict:
     실측 근거: 비올 진본에서 WACC 시트 전체·스파인 중간 상수 재시작(EBIT·WC·매출추정
     미도달)을 이 진단이 검출했다 — 셀 단위 리뷰로는 '연결의 부재'가 보이지 않는다.
     """
-    from excel.dependency_graph import build_graph, find_breaks, formula_ratio
+    from excel.dependency_graph import (build_graph, find_breaks, formula_ratio,
+                                        propose_reconnections)
     from excel.dependency_graph import cycles as graph_cycles
     from excel.template_schema import RESULT
 
@@ -467,6 +468,14 @@ async def xlsx_connectivity(request: Request) -> dict:
         "unknown_cells": b.unknown_cells[:50],
         "external_cells": b.external_cells[:50],
         "cycles": cyc[:20],
+        # 재연결 제안(P1 후반): 상수 잎 ↔ 미도달 수식의 캐시값 매칭 + tie-out.
+        # value_change 는 자동 적용 금지 대상(원래 상수가 낡았다는 뜻) — 사람이 판단.
+        "reconnect_proposals": [{
+            "constant_cell": p.constant_cell, "constant_value": p.constant_value,
+            "candidate_cell": p.candidate_cell, "candidate_value": p.candidate_value,
+            "diff_ratio": p.diff_ratio, "tie_out": p.tie_out,
+            "suggested_formula": p.suggested_formula,
+        } for p in propose_reconnections(g, b)],
     }
 
 

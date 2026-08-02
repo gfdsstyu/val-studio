@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from excel.dependency_graph import (  # noqa: E402
     BreaksReport, ancestors, build_graph, cycles, descendants, find_breaks,
-    formula_ratio,
+    formula_ratio, propose_reconnections,
 )
 from excel.xlsx_reader import RCell  # noqa: E402
 
@@ -122,6 +122,51 @@ def test_string_literals_do_not_create_refs():
     g = build_graph(wb)
     keys = {t[1] for t in g.precedents["S!A1"] if t[0] == "cell"}
     assert keys == {"S!B1", "S!C1"}                    # "A2" 문자열은 참조가 아니다
+
+
+def test_reconnect_proposal_matches_dead_formula():
+    """재연결 제안: 상수 잎 ↔ 미도달 수식의 캐시값 매칭 + tie-out 판정.
+
+    비올 서명 재현: 소비자가 상수(50)를 쓰는데, 죽은 계산 시트에 같은 값을 내는
+    수식이 존재 → "그 수식을 참조하라" 제안. 값이 근사(49.8)하면 value_change —
+    자동 적용 금지 신호(원래 상수가 낡았다는 뜻).
+    """
+    wb = _wb({
+        "OUT": {"A1": (100.0, "B1*2"), "B1": (50.0, None), "C1": (0.0, None)},
+        "CALC": {"A9": (50.0, "A2+A3"), "A2": (30.0, None), "A3": (20.0, None)},
+        "OLD": {"Z1": (49.8, "Z2*2"), "Z2": (24.9, None)},
+    })
+    g = build_graph(wb)
+    b = find_breaks(g, "OUT!A1")
+    props = propose_reconnections(g, b)
+    assert len(props) == 1                          # 0 값 상수(C1)는 제안 대상 아님
+    p = props[0]
+    assert p.constant_cell == "OUT!B1"
+    assert p.candidate_cell == "CALC!A9"            # 정확 일치(50)가 근사(49.8)를 이긴다
+    assert p.tie_out == "pass" and p.suggested_formula == "=CALC!A9"
+
+
+def test_reconnect_value_change_flagged():
+    """근사 매칭만 있으면 value_change — 변화율이 그대로 노출된다."""
+    wb = _wb({
+        "OUT": {"A1": (100.0, "B1*2"), "B1": (0.113, None)},        # 비올 H37 서명
+        "WACC": {"F43": (0.11252, "F41*F42"), "F41": (1.0, None), "F42": (0.11252, None)},
+    })
+    g = build_graph(wb)
+    props = propose_reconnections(g, find_breaks(g, "OUT!A1"))
+    assert [p.candidate_cell for p in props] == ["WACC!F43"]
+    assert props[0].tie_out == "value_change"
+    assert abs(props[0].diff_ratio - abs(0.11252 - 0.113) / 0.113) < 1e-12
+
+
+def test_reconnect_quotes_sheet_names_with_spaces():
+    wb = _wb({
+        "OUT": {"A1": (10.0, "B1+1"), "B1": (7.0, None)},
+        "peer 비용": {"C3": (7.0, "C1+C2"), "C1": (3.0, None), "C2": (4.0, None)},
+    })
+    g = build_graph(wb)
+    props = propose_reconnections(g, find_breaks(g, "OUT!A1"))
+    assert props[0].suggested_formula == "='peer 비용'!C3"
 
 
 # ── 비올 실측 (로컬 전용 — 파일 없으면 이유를 밝히고 skip) ──────────────────
