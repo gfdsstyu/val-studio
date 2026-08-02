@@ -203,7 +203,7 @@ flowchart LR
   manifest 하나로 웹/데스크톱/Mac/iPad가 동일 동작.
 - **Claude for Excel 공존**: 애드인끼리는 직접 통신할 수 없으므로 **워크북 자체(`_VS_STATE`
   숨김 시트)를 프로토콜**로 쓴다 — 에이전트가 기록한 가정 대장·로그를 웹이 파싱해 증적으로 잇는다.
-- **풀모델 정본 템플릿** `ValStudio_DCF_Template.xlsx`(레포 루트, 26시트): 실무 검증 시트 구성
+- **풀모델 정본 템플릿** `ValStudio_DCF_Template.xlsx`(26시트, **레포 미포함** — 아래 고지): 실무 검증 시트 구성
   (Assumption·DCF·EBIT·FA·WC·WACC)에 Comps(Trading Comps)·Peer 퍼널·Research(조사 백데이터
   10섹션)·원자료 시트(rFS·rGDP·rInflation·rWage·rTrading)를 증설했다. **상향 배선 완비** —
   세부(P×Q·회전기간·상각 스케줄)→요약→DCF 스파인→주당가치가 살아있는 수식으로 흐르고(수식
@@ -581,7 +581,101 @@ engagement 코퍼스와 **각 규칙에 달린 계보**(이 규칙은 어느 심
 
 ---
 
-## 실행
+## 사용방법 — 엑셀에 붙이기
+
+> **⚠️ 정본 템플릿은 이 레포에 포함되지 않는다.**
+> 본 프로젝트는 **포트폴리오용 MVP**이며, 표준 Val-Studio 양식 엑셀 시트
+> (`ValStudio_DCF_Template.xlsx`, 26시트) 위에서 최적으로 동작하도록 설계됐다. 이 워크북은
+> 실무 서식 파생물이라 `.gitignore` 대상이므로 clone에는 없다 — **엔진·API·스킬·애드인은
+> 템플릿 없이도 그대로 동작**하고(좌표 SSOT는 `backend/excel/fullmodel_layout.py`에 코드로
+> 남아 있다), 템플릿 위에서 돌아가는 실제 화면은 **스크린샷으로 별도 시연**한다.
+> 임의 워크북은 정적 감사(`/api/xlsx/audit`)가 레이아웃 무관하게 처리하고, 백지에서
+> 시작하려면 스킬 W0 스캐폴딩(`scaffold.py`)이 수식 살아있는 스파인을 찍는다.
+
+두 창구를 각각 엑셀에 설치한다. **둘은 독립적이라 하나만 써도 동작한다** — 애드인은 네트워크·검증,
+스킬은 대화형 판단 보조를 맡고, 서로 통신하지 않고 **워크북(`_VS_STATE`)을 통해 상태를 공유**한다.
+
+### ① Claude 스킬 — Claude for Excel에 zip 업로드
+
+```bash
+python scripts/build_excel_skill.py
+# → .claude/skills/excel-valuation-workbook/dist/excel-valuation-workbook.zip (약 477KB)
+```
+
+이 zip은 **자기완결**이다 — 엔진(`calc_core`)·검증기·지식문서가 `vendor/`로 함께 packaging되므로
+레포 없이도 동작한다. 빌드가 해시 매니페스트를 남기고 드리프트(파일 추가·삭제 포함)를 검사한다.
+
+1. Claude 설정 → **Capabilities/Skills** → 스킬 업로드 → 위 zip 선택
+2. Excel에서 Claude for Excel 패널을 열고 `/excel-valuation-workbook` 호출
+3. 백지 워크북이면 W0 스캐폴딩, 정본 템플릿이면 `_VS_STATE`를 읽어 **중단 지점부터 재개**
+
+> ⚠️ 스킬 샌드박스에는 **네트워크가 없다.** DART 조회 같은 외부 데이터는 ①붙여넣기 ②MCP 커넥터
+> ③애드인(아래) 중 하나로 들어온다. 스킬은 **API 키가 필요 없다** — `scripts/`가 전부 stdlib 결정론이다.
+
+### ② Task Pane 애드인 — 엑셀 추가 기능에 manifest 등록
+
+애드인 본체는 별도 바이너리가 아니라 **웹 페이지**다. manifest는 "이 URL을 Task Pane으로 띄워라"는
+등록표일 뿐이라, 설치가 곧 URL 등록이다.
+
+| manifest | Task Pane URL | 용도 |
+|---|---|---|
+| `add-in/manifest.xml` | Cloud Run (HTTPS) | **웹 Excel·데스크톱 공용 — 여기서 시작** |
+| `add-in/manifest.dev.xml` | `http://localhost:8000` | 로컬 개발 (데스크톱 전용, 별도 GUID) |
+
+**A. 웹 Excel — 관리자 불요, 최속**
+
+1. [office.com](https://office.com) → Excel → **새 통합 문서 생성** (시작 화면이 아니라 편집 화면이어야 리본에 버튼이 있다)
+2. **홈 탭 → 오른쪽 끝 "추가 기능"**(퍼즐 아이콘) → 패널 하단 **"더 많은 설정"**
+3. **"내 추가 기능 업로드"** → `add-in/manifest.xml` 선택
+4. 작업창에 "Val-Studio DCF"가 뜨면 성공
+
+> 경로가 **삽입 탭이 아니라 홈 탭**이다(구 UI에서 개편됨). sideload는 브라우저 localStorage에
+> 저장되므로 캐시 삭제·브라우저 변경 시 재업로드가 필요하다.
+
+**B. 데스크톱 Excel — 레지스트리 등록이 가장 간단** (공유 폴더·인증서 불요)
+
+```powershell
+$dev = "HKCU:\Software\Microsoft\Office\16.0\WEF\Developer"
+if (-not (Test-Path $dev)) { New-Item -Path $dev -Force | Out-Null }
+New-ItemProperty -Path $dev -Name "ValStudioDcf" `
+  -Value "D:\valuation-platform\add-in\manifest.xml" -PropertyType String -Force
+```
+
+→ **Excel 완전 종료 후 재실행** → 삽입 → 내 추가 기능 → **개발자** 탭에서 선택.
+해제는 같은 키에서 `Remove-ItemProperty`. 요건은 **M365 구독 데스크톱**(Task Pane이 WebView2 기반).
+
+로컬 서버로 붙이려면 `manifest.dev.xml`을 등록한다 — 데스크톱 sideload에는 localhost 예외가
+적용되어 **HTTPS 인증서 작업이 불필요**하다(웹 Excel은 https 필수라 Cloud Run manifest를 써야 한다).
+
+상세 런북(3경로·트러블슈팅·CORS·DoD): [`add-in/README.md`](add-in/README.md)
+
+### ③ 평가 한 바퀴
+
+정본 템플릿 `ValStudio_DCF_Template.xlsx`를 열고:
+
+```
+rFS·rTrading·r*  원자료 붙여넣기 (또는 애드인으로 DART 조회→기입)
+      ↓
+Research         회사개요·제품별 매출 정리          ← Claude 제안, 평가인 확정
+      ↓
+H_FS             계정매핑 (NOA/OA/FA/WC/OL/IBD)    ← uncertain은 확정 금지
+      ↓
+EBIT             매출 세분(P×Q)·원가 드라이버       ← Research 부문명이 라벨로 자동 반영
+FA · WC          상각 스케줄 · 회전기간
+      ↓
+WACC             빌드업 9칸 입력(무부채β·D/E·세율·Rf·MRP·프리미엄·Kd)
+      ↓
+DCF!H49          주당가치 자동 산출                 ← 상향 배선이 전부 수식
+      ↓
+애드인 "검증"     워크북 vs 엔진 tie-out · 정적 감사 · findings
+```
+
+파랑=직접 입력, 검정=시트 내 계산, 초록=타 시트 참조 — 규약은 워크북의 `Format` 시트에 있다.
+**초록·검정 셀은 덮어쓰지 않는다**(덮어쓰면 tie-out이 주당가치 불일치로 잡아낸다).
+
+---
+
+## 실행 (개발)
 
 ```bash
 # 백엔드 (Python 3.12+)
@@ -591,12 +685,13 @@ python -m uvicorn backend.api.main:app --port 8000
 # 프론트
 cd frontend && npm install && npm run dev
 
-# 테스트 (pytest 불요 — 각 파일 stdlib 러너 내장)
-python tests/golden/test_viol_spine.py           # 골든 재현
-PYTHONPATH=backend python tests/test_checks.py   # 가정 게이트
+# 테스트
+python -m pytest -q                              # 전체 811
+python tests/golden/test_viol_spine.py           # 골든 재현(stdlib 러너)
 
 # 스킬 패키징
-python scripts/build_excel_skill.py
+python scripts/build_excel_skill.py --check      # 드리프트만 검사(CI 게이트)
+python scripts/build_excel_skill.py              # vendoring + zip
 ```
 
 ---
@@ -616,7 +711,7 @@ add-in/         Excel Task Pane manifest (웹·데스크톱 공통, dev/staging/
 tests/          811 통과 / 97 파일 (golden·skill·unit)
 docs/           방법론 지식 코퍼스 · 설계 문서 · 검증 리포트
 scripts/        스킬 빌드·골든 픽스처 추출·재계산 게이트
-ValStudio_DCF_Template.xlsx   풀모델 정본 템플릿 (26시트, valstudio-full-v1)
+(ValStudio_DCF_Template.xlsx)  풀모델 정본 템플릿 (26시트, valstudio-full-v1) — gitignore, 레포 미포함
 ```
 
 주요 문서: `docs/architecture_map.md`(전 계층 지도 — 여기서 시작) · `docs/engine_spec.md`(임의 회사 DCF 재현 명세) · `docs/plan.md`(전체 설계) · `docs/plan/addin_two_panel_ux.md`(엑셀 통합 UX 분석) · [`docs/plan/firm_scale_knowledge_flywheel.md`](docs/plan/firm_scale_knowledge_flywheel.md)(법인 스케일 지식 환류 — L0~L3 로드맵·3-store·익명화 3계층).
@@ -625,6 +720,7 @@ ValStudio_DCF_Template.xlsx   풀모델 정본 템플릿 (26시트, valstudio-fu
 
 ## 고지
 
-- **이 공개 레포는 코드(엔진·API·웹·스킬 도구)와 테스트만 담는다.** 방법론 지식 코퍼스(`docs/reference/` 31문서)와 원본 자료(엑셀·PDF)는 저작권상 **포함하지 않는다** — 지식이 없어도 엔진·도구는 그대로 동작하도록 설계했다.
+- **이 공개 레포는 코드(엔진·API·웹·스킬 도구)와 테스트만 담는다.** 방법론 지식 코퍼스(`docs/reference/`)와 원본 자료(엑셀·PDF)는 저작권상 **포함하지 않는다** — 지식이 없어도 엔진·도구는 그대로 동작하도록 설계했다.
+- **포트폴리오용 MVP다.** 표준 Val-Studio 양식 엑셀 시트(`ValStudio_DCF_Template.xlsx`) 위에서 최적으로 동작하도록 만들었으나, 이 워크북은 실무 서식 파생물이라 위 원칙에 따라 레포에 포함하지 않는다. **템플릿 위에서 돌아가는 실제 화면은 스크린샷으로 시연**하며, 셀 좌표 계약은 `backend/excel/fullmodel_layout.py`에 코드로 공개되어 있어 검증 로직 자체는 그대로 읽고 재현할 수 있다.
 - 방법론 근거는 **공개 인용이 가능한 표준 출처**(Damodaran·Kroll·Bloomberg·한국공인회계사회 가이던스·DART·ECOS·KRX)로 표기한다 — 근거를 밝히지 않으면 감사 방어와 재현성이 성립하지 않기 때문.
 - 실측 검증에 쓴 회사는 **상장사 공개 재무정보** 기반이며 교육 목적의 재현 검증이다. 투자 권유가 아니다.
