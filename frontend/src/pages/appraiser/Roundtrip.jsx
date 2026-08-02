@@ -417,6 +417,11 @@ function AuditSheet() {
 
   const nonPass = out ? out.findings.filter((f) => f.severity !== "pass") : [];
   const center = out?.findings.find((f) => f.rule === "sensitivity_center");
+  /* 우선순위 분리 — 실측(비올 워크북)에서 패턴 경고의 대부분이 **구간 양끝**이었고
+     (edge 73 vs inner 7), 양끝은 첫해 반년상각·터미널 외삽처럼 정상일 여지가 크다.
+     다만 실제 결함도 양끝에서 나온 적이 있어 **숨기지 않고 접어서** 둔다(끄지 않고 순서). */
+  const primary = nonPass.filter((f) => f.detail?.position !== "edge");
+  const edge = nonPass.filter((f) => f.detail?.position === "edge");
 
   return (
     <>
@@ -463,7 +468,7 @@ function AuditSheet() {
             {nonPass.length === 0 && (
               <div className="finding pass">경고 없음 — 패턴·리터럴·중심셀 전 검사 통과</div>
             )}
-            {nonPass.map((f, i) => (
+            {primary.map((f, i) => (
               <div key={i} className={`finding ${f.severity}`}>
                 <b>[{f.severity.toUpperCase()}] {f.rule}</b> — {f.message}
                 {f.rule === "formula_pattern" && f.detail?.mode_sample && (
@@ -473,6 +478,24 @@ function AuditSheet() {
                 )}
               </div>
             ))}
+            {edge.length > 0 && (
+              <details style={{ marginTop: 10 }}>
+                <summary style={{ cursor: "pointer", fontSize: 12 }}>
+                  구간 양끝 경고 {edge.length}건 — 첫 열(반년상각)·마지막 열(터미널 외삽)처럼
+                  구조가 달라도 정상인 자리. 다만 참조 밀림이 여기서 나온 사례도 있어 접어만 둡니다.
+                </summary>
+                {edge.map((f, i) => (
+                  <div key={i} className={`finding ${f.severity}`}>
+                    <b>[{f.severity.toUpperCase()}] {f.rule}</b> — {f.message}
+                    {f.detail?.mode_sample && (
+                      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                        이웃 다수 패턴: <code>{f.detail.mode_sample}</code>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </details>
+            )}
           </div>
         </div>
       )}

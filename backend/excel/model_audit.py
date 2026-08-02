@@ -43,7 +43,17 @@ _REF_RE = re.compile(
     r"(\$?)([A-Z]{1,3})(\$?)([1-9][0-9]{0,6})"
     r"(?![\w(])")
 _QUOTED_RE = re.compile(r'"[^"]*"')
-_UNIT_CONV_RE = re.compile(r"10\^6")
+# 자릿수 환산은 10^6 만이 아니다 — 10^3(천원)·10^9 도 같은 성격의 구조 상수.
+_UNIT_CONV_RE = re.compile(r"10\^\d+")
+
+# ── 하드코딩 스캔 면제 패턴 ────────────────────────────────────────────────
+# 리터럴이라고 다 숨은 가정은 아니다. 아래 둘은 **이 프로젝트가 스스로 권장·생성**하는
+# 형태여서, 경고하면 자기 규약을 자기가 지적하는 꼴이 된다(실측: 비올 워크북 199 WARN 중
+# CHECK 행·세율 계단이 상당수를 차지해 진짜 신호 `T164=M165*32` 를 파묻었다).
+#   ① CHECK 행 허용오차 — `IF(ABS(좌-우)<0.001,"TRUE",…)` (template_schema.CHECK_TOL 규약)
+#   ② 한국 법인세 계단식 — 9%/19%/21%/24%·지방세 1.1 배. dcf_export._tax_formula 가 만드는 식.
+_CHECK_TOL_RE = re.compile(r"IF\s*\(\s*ABS\s*\(", re.I)
+_TAX_BRACKET_RE = re.compile(r"9\s*%.*?19\s*%.*?21\s*%", re.S)
 
 
 def _col_idx(letters: str) -> int:
@@ -92,18 +102,40 @@ def _contiguous_runs(sorted_keys: list[int]) -> list[list[int]]:
     return runs
 
 
+def _external_sheets(formula: str) -> frozenset:
+    """수식이 참조하는 **타 시트 이름 집합** — 실적 구간과 추정 구간을 가르는 지문.
+
+    실무 모델은 한 행 안에서 실적 열(=H_FS!·BackData! 등 외부 인용)과 추정 열(자기 시트
+    성장식)이 나란히 온다. 이 둘을 한 다수결에 넣으면 **정상 구조가 소수로 몰려** 무더기
+    오탐이 된다(실측: 비올 EBIT 시트에서 실적 4열이 전부 이탈로 잡힘).
+    """
+    return frozenset(m.group(1) for m in _REF_RE.finditer(formula) if m.group(1))
+
+
 def formula_pattern_lint(
     cells: dict,
     *,
     sheet_name: str = "",
-    min_run: int = 3,
+    min_run: int = 4,
     report: ValidationReport | None = None,
 ) -> list[Finding]:
     """행·열 방향 연속 수식 구간에서 다수 패턴을 깨는 셀 감지 (WARN, 셀 단위).
 
     구간 내 최빈 패턴이 과반이고 소수 셀이 있으면 그 셀을 지목한다. 비올 실측:
     E-6(`M162=J162` vs 이웃 `$G$162`)·E-10(합계가 SUM vs 이웃 ×)·E-8(열별 항 개수
-    상이)이 전부 이 형태. 정상적 구조 변화(구간 경계)는 연속 구간 분리로 배제된다.
+    상이)이 전부 이 형태.
+
+    ⚠️ 오탐 억제 2종 — 안 하면 경고가 수백 건으로 불어나 진짜 신호가 묻힌다
+    (실측: 비올 워크북 199건 안에 실제 결함 `T164=M165*32` 가 파묻혔다).
+      ① **외부참조 그룹 분리**: 실적(타 시트 인용) vs 추정(자기 시트 수식)을 나눠 각각
+         다수결로 본다(`_external_sheets`). 섞으면 정상 구조가 소수로 몰린다.
+      ② **압도적 다수(70%↑)만 기준**: 3칸의 2:1 은 "이웃 패턴"이라 부를 수 없다.
+
+    ⚠️ **양끝을 배제하지 않는다** — 첫 열의 반년상각·마지막 열의 터미널 외삽처럼 "양끝은
+    달라도 정상"인 경우가 많지만, **실측 결함 3종이 전부 양끝에 있었다**(E-6 첫 열 참조
+    밀림 / E-10 첫 열 연산자 / E-5 마지막 행 열밀림). 배제하면 잡아야 할 것을 놓친다.
+    대신 `detail["position"]`(edge/inner)을 남겨 소비자가 우선순위를 매기게 한다 —
+    끄는 게 아니라 **순서를 주는** 방식.
     """
     findings: list[Finding] = []
     parsed = []
@@ -123,27 +155,43 @@ def formula_pattern_lint(
             g, k = (row, col) if axis == "row" else (col, row)
             groups.setdefault(g, {})[k] = (ref, f)
         for g, members in sorted(groups.items()):
-            for run in _contiguous_runs(sorted(members)):
-                if len(run) < min_run:
+            for full_run in _contiguous_runs(sorted(members)):
+                if len(full_run) < min_run:
                     continue
-                norm = {k: normalize_r1c1(members[k][1], members[k][0]) for k in run}
-                mode, mode_n = Counter(norm.values()).most_common(1)[0]
-                if mode_n <= len(run) // 2:            # 과반 아님 — 판정 불가
-                    continue
-                sample = next(members[k][0] + "=" + members[k][1]
-                              for k in run if norm[k] == mode)
-                for k in run:
-                    if norm[k] == mode:
+                edges = {full_run[0], full_run[-1]}
+                # ① 외부참조 지문으로 실적/추정 서브그룹 분리 후 각각 다수결.
+                by_class: dict[frozenset, list[int]] = {}
+                for k in full_run:
+                    by_class.setdefault(_external_sheets(members[k][1]), []).append(k)
+                for cls_keys in by_class.values():
+                    if len(cls_keys) < 4:
+                        continue                       # 표본 부족 — 다수결 성립 안 함
+                    norm = {k: normalize_r1c1(members[k][1], members[k][0]) for k in cls_keys}
+                    mode, mode_n = Counter(norm.values()).most_common(1)[0]
+                    # ③ 단순 과반이 아니라 **압도적 다수**(70%↑)만 기준으로 삼는다.
+                    # 3칸의 2:1(67%)은 "이웃 패턴"이라 부를 수 없다 — 그 구간은 원래 셀마다
+                    # 참조 원천이 다른 경우가 많다(실측: EBIT 실적열이 H_FS 의 서로 다른
+                    # 블록을 가리켜 무더기 오탐). 진짜 참조 밀림은 비율이 훨씬 높다
+                    # (비올 E-6: 명시 5열 중 4:1 = 80%).
+                    if mode_n < max(3, len(cls_keys) * 0.7):
                         continue
-                    ref, f = members[k]
-                    findings.append(Finding(
-                        "formula_pattern", Severity.WARN,
-                        f"{sheet_name}!{ref}: 이웃 {mode_n}개 패턴과 다른 수식 "
-                        f"`={f}` (다수 예: `{sample}`) — 참조 밀림/구조 이탈 의심",
-                        {"sheet": sheet_name, "ref": ref, "formula": f,
-                         "direction": axis, "run_size": len(run),
-                         "mode_pattern": mode, "cell_pattern": norm[k],
-                         "mode_sample": sample, "layer": "execution"}))
+                    sample = next(members[k][0] + "=" + members[k][1]
+                                  for k in cls_keys if norm[k] == mode)
+                    for k in cls_keys:
+                        if norm[k] == mode:
+                            continue
+                        ref, f = members[k]
+                        findings.append(Finding(
+                            "formula_pattern", Severity.WARN,
+                            f"{sheet_name}!{ref}: 이웃 {mode_n}개 패턴과 다른 수식 "
+                            f"`={f}` (다수 예: `{sample}`) — 참조 밀림/구조 이탈 의심",
+                            {"sheet": sheet_name, "ref": ref, "formula": f,
+                             "direction": axis, "run_size": len(cls_keys),
+                             # edge=구간 양끝(반년상각·터미널처럼 정상일 여지가 큼)
+                             # inner=구간 중간(정상 사유가 드묾 → 우선 검토)
+                             "position": "edge" if k in edges else "inner",
+                             "mode_pattern": mode, "cell_pattern": norm[k],
+                             "mode_sample": sample, "layer": "execution"}))
 
     _scan("row")
     _scan("col")
@@ -178,6 +226,8 @@ def hardcode_scan(
         f = getattr(cell, "formula", None)
         if not f:
             continue
+        if _CHECK_TOL_RE.search(f) or _TAX_BRACKET_RE.search(f):
+            continue                      # 규약이 요구하는 상수 — §면제 패턴 주석 참조
         stripped = _UNIT_CONV_RE.sub("", _REF_RE.sub("", _QUOTED_RE.sub("", f)))
         nums = [float(t) for t in
                 re.findall(r"(?<![\w.])\d+(?:\.\d+)?(?![\w.])", stripped)]

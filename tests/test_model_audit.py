@@ -65,6 +65,44 @@ def test_col_lint_catches_e5_column_shift():
     assert fs[0].detail["direction"] == "col"
 
 
+def test_edge_and_inner_positions_are_labeled():
+    """양끝/중간 위치 표기 — 소비자(UI)가 **끄지 않고 순서를 매길** 근거.
+
+    실측(비올 워크북): 패턴 경고 80건 중 대부분이 구간 양끝이었고 양끝은 첫해 반년상각·
+    터미널 외삽처럼 정상일 여지가 크다. 그렇다고 배제하면 안 된다 — E-6·E-10·E-5 가
+    전부 양끝 결함이었다(이 파일 위쪽 테스트). 그래서 라벨만 붙이고 판정은 유지한다.
+    """
+    # 중간(inner) 이탈: 5칸 중 가운데가 다름
+    mid = {f"{c}10": RCell(None, "$G$10") for c in "MNPQ"}
+    mid["O10"] = RCell(None, "J10")
+    fs = formula_pattern_lint(mid, sheet_name="X")
+    assert [f.detail["position"] for f in fs] == ["inner"]
+    # 양끝(edge) 이탈: E-6 형태(첫 칸)
+    head = {"M162": RCell(None, "J162"),
+            **{f"{c}162": RCell(None, "$G$162") for c in "NOPQ"}}
+    fs2 = formula_pattern_lint(head, sheet_name="EBIT")
+    assert [f.detail["position"] for f in fs2] == ["edge"]
+
+
+def test_tax_bracket_and_check_row_are_not_hardcode():
+    """규약이 요구하는 상수는 하드코딩이 아니다 — 자기 규약을 자기가 경고하지 않는다.
+
+    ① CHECK 행 허용오차(template_schema.CHECK_TOL) ② 한국 법인세 계단식
+    (dcf_export._tax_formula 가 생성하는 바로 그 수식). 실측에서 이 둘이 다수를 차지해
+    진짜 신호(`T164=M165*32`)를 파묻었다.
+    """
+    cells = {
+        "H16": RCell(None, 'IF(ABS((H14)-(H10-H13))<0.001,"TRUE",(H14)-(H10-H13))'),
+        "M17": RCell(None, "IF(M15<0,0,IF(M15<200,M15*9%*1.1,IF(M15<20000,"
+                           "(200*9%+(M15-200)*19%)*1.1,(200*9%+19800*19%+(M15-20000)*21%)*1.1)))"),
+    }
+    assert hardcode_scan(cells, sheet_name="DCF").severity is Severity.PASS
+    # 반면 진짜 숨은 가정은 그대로 잡힌다(비올 J-1: 인건비 ×32 중복)
+    real = {"T164": RCell(None, "M165*32")}
+    f = hardcode_scan(real, sheet_name="EBIT")
+    assert f.severity is Severity.WARN and f.detail["offenders"][0]["literals"] == [32.0]
+
+
 def test_uniform_shift_is_blind_spot_by_design():
     # E-3(ΔNWC 5열 밀림)은 행 전체가 **균일하게** 밀려 이웃 대조로는 안 잡힌다
     # — L3 분석적 절차(성장-운전자본 정합)가 담당하는 계층 분담의 문서화.
