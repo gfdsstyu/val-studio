@@ -36,7 +36,27 @@ Add-in 본체는 **웹 페이지**다(우리 HTTPS 앱 `?embed=1`). manifest 는
    - "추가 기능" 버튼 자체가 없으면: ①문서 편집 모드인지 ②조직 계정이면 관리자의 스토어
      차단 여부(개인 Microsoft 계정으로 우회 테스트 가능) ③삽입 탭(구 UI) 순으로 확인
 
-### B. Excel Desktop (Microsoft 365)
+### B. Excel Desktop (Microsoft 365) — **레지스트리 등록이 가장 간단**(실측 권장)
+
+공유 폴더·관리자 권한·인증서 전부 불요. `HKCU` 하위에 manifest 경로를 등록하면 Excel 이
+시작할 때 읽는다(office-addin-debugging 이 내부적으로 쓰는 방법과 동일).
+
+```powershell
+$dev = "HKCU:\Software\Microsoft\Office\16.0\WEF\Developer"
+if (-not (Test-Path $dev)) { New-Item -Path $dev -Force | Out-Null }
+New-ItemProperty -Path $dev -Name "ValStudioDcfDev" `
+  -Value "D:\valuation-platform\add-in\manifest.dev.xml" -PropertyType String -Force
+```
+→ **Excel 완전 종료 후 재실행** → 삽입 → 내 추가 기능 → **개발자** 탭 → "Val-Studio DCF (dev)".
+해제는 같은 키에서 해당 값 삭제(`Remove-ItemProperty`).
+
+> ✅ **실측(2026-08-01)**: 이 경로로 `http://localhost:8000` Task Pane 이 **데스크톱 엑셀에서
+> 정상 로드**됐다. `office-addin-manifest validate` 는 dev manifest 의 http 를 오류로 보고하지만
+> 그건 **AppSource 제출 기준**이고, 개발 sideload 에는 localhost 예외가 적용된다 —
+> HTTPS 인증서(`office-addin-dev-certs`) 작업은 **불필요**했다.
+> ⚠️ 단 **웹 엑셀(Excel Online)은 https 필수** — 웹에서 쓰려면 Cloud Run(prod manifest)으로.
+
+### B-2. Excel Desktop — 공유 폴더 카탈로그 (대안)
 
 같은 manifest·같은 GUID 가 그대로 동작한다(이식 불요 — Add-in 본체는 호스팅된 웹 페이지).
 ⚠️ 요건: **M365 구독 데스크톱**(Task Pane = Edge WebView2/Chromium). 영구 라이선스
