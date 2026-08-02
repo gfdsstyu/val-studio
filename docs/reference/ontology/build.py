@@ -104,6 +104,20 @@ def main() -> None:
             edges.append({"from": path.stem, "to": tgt,
                           "resolved": tgt in stems})
 
+    # ── 드리프트 가드(fail-closed) ──────────────────────────────────────────
+    # searcher 의 랭킹 신호는 canonical_questions → keywords → topic → 그래프 1-hop
+    # 순이다. 셋이 모두 비면 인덱스에 레코드는 있어도 어떤 질의로도 도달할 수 없는
+    # "조용한 누락"이 된다(실제 발생 이력: 모델감사_분석적절차). has_frontmatter 로
+    # 탐지만 하고 통과시키면 챕터를 추가할 때마다 같은 구멍이 재발하므로 여기서 막는다.
+    required = ("topic", "keywords", "canonical_questions")
+    incomplete = [(r["id"], [k for k in required if not r[k]])
+                  for r in records if not all(r[k] for k in required)]
+    if incomplete:
+        raise SystemExit(
+            "frontmatter 필수 필드 누락 — 검색으로 도달 불가한 챕터가 생긴다:\n"
+            + "\n".join(f"  - {cid}: {', '.join(miss)}" for cid, miss in incomplete)
+            + "\n  → 해당 md 최상단에 --- 블록으로 채운 뒤 재실행.")
+
     OUT.mkdir(exist_ok=True)
     (OUT / "rag_index.json").write_text(
         json.dumps({"chapters": records}, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -171,6 +185,12 @@ def main() -> None:
     for k, v in sorted(multi.items(), key=lambda x: -len(set(x[1]))):
         lines.append(f"- **{k}**: {', '.join(sorted(set(v)))}")
     (OUT / "CONCEPTS.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    # layer 는 위계 트리 표현용이라 차단하지 않는다(미분류는 루트로 렌더될 뿐).
+    unlayered = [r["id"] for r in records if r["layer"] == "unclassified"]
+    if unlayered:
+        # 이모지 금지 — cp949 콘솔에서 print 가 UnicodeEncodeError 로 죽는다.
+        print("[warn] layer 미분류(위계 트리에서 루트로 렌더됨): " + ", ".join(unlayered))
 
     print(f"컴파일 완료: {len(records)}챕터 · {len(concepts)}개념 · {len(edges)}링크 "
           f"({sum(1 for e in edges if not e['resolved'])} 미해소)")
