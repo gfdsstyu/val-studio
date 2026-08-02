@@ -1717,3 +1717,72 @@ def check_metric_vs_industry(
         for f in out:
             report.add(f)
     return out
+
+
+# ── 추정치 간 교차 일관성 (기준서 540 문단 24(c) — A3) ─────────────────────
+# "유의적 가정이 서로 간에 그리고 **다른 회계추정치에 사용되는 가정과** 일관되는지".
+# 같은 기업이 같은 보고기간에 손상검사(VIU)·평가모델(DCF)·PPA 를 각각 만들 때, 공유해야
+# 할 가정(영구성장률·무위험이자율·세율·환율)이 추정치마다 다르면 — 개별 게이트는 전부
+# 통과해도 — 그 자체가 왜곡표시위험 신호다(어느 한쪽이 목적에 맞춰 구부러졌다는 뜻).
+# 개별 값의 타당성은 기존 게이트(PGR·β/MRP 등) 소관이고, 여기는 **서로 같은가**만 본다.
+
+# 가정 키별 허용 편차(절대). 비율류는 0.1%p — 반올림·표기 차이는 흡수하되 의도적
+# 차등(손상 g 3% vs 평가 g 1%)은 잡는다. 환율·기타 스칼라는 상대 0.1%.
+_CROSS_TOL_PP = 0.001
+_CROSS_REL = 0.001
+
+
+def check_cross_estimate_consistency(
+    estimates: dict,
+    *,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """추정치별 공유 가정 교차 대조.
+
+    estimates: {추정치 라벨: {가정 키: 값}} — 예:
+        {"평가모델(DCF)": {"terminal_growth": 0.01, "risk_free": 0.032},
+         "손상검사(VIU)": {"terminal_growth": 0.03, "risk_free": 0.032}}
+    같은 키가 두 추정치 이상에 등장하면 쌍별로 비교한다. 키가 겹치지 않으면 침묵
+    — 비교할 수 없는 것을 통과로 표시하지 않기 위해 검사한 쌍 수를 detail 에 남긴다.
+    """
+    findings: list[Finding] = []
+    labels = sorted(estimates)
+    compared = 0
+    for i, a in enumerate(labels):
+        for b in labels[i + 1:]:
+            shared = sorted(set(estimates[a]) & set(estimates[b]))
+            for key in shared:
+                va, vb = estimates[a][key], estimates[b][key]
+                if not (isinstance(va, (int, float)) and isinstance(vb, (int, float))):
+                    continue
+                compared += 1
+                # 비율(|값|<1)은 절대 %p, 레벨 값은 상대 비교 — 단위 성격이 다르다.
+                if max(abs(va), abs(vb)) < 1.0:
+                    diff, tol, unit = abs(va - vb), _CROSS_TOL_PP, "%p"
+                    shown = f"{va:.4%} vs {vb:.4%} (Δ{diff * 100:.2f}%p)"
+                else:
+                    base = max(abs(va), abs(vb), 1e-12)
+                    diff, tol, unit = abs(va - vb) / base, _CROSS_REL, "%"
+                    shown = f"{va:,.4g} vs {vb:,.4g} (Δ{diff:.2%})"
+                if diff > tol:
+                    findings.append(Finding(
+                        "cross_estimate_consistency", Severity.WARN,
+                        f"'{key}' 가 추정치 간 불일치 — {a}: {shown.split(' vs ')[0]} vs "
+                        f"{b}: {shown.split(' vs ')[1]} — 같은 기업·같은 기간의 공유 가정이 "
+                        "다르면 개별 값이 각각 합리적이어도 어느 한쪽이 목적에 맞춰 "
+                        "선택됐다는 신호다(기준서 540 문단 24(c))",
+                        {"key": key, "a": a, "b": b, "va": va, "vb": vb,
+                         "unit": unit, "layer": "judgment"}))
+    if not findings and compared:
+        findings.append(Finding(
+            "cross_estimate_consistency", Severity.PASS,
+            f"추정치 간 공유 가정 {compared}쌍 일치", {"compared": compared}))
+    elif not compared:
+        findings.append(Finding(
+            "cross_estimate_consistency", Severity.WARN,
+            "겹치는 가정 키가 없어 교차 대조를 수행하지 못함 — 추정치별 가정 키 이름을 "
+            "통일하라(비교 불가는 통과가 아니다)", {"compared": 0, "layer": "judgment"}))
+    if report is not None:
+        for f in findings:
+            report.add(f)
+    return findings

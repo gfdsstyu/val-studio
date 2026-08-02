@@ -253,6 +253,24 @@ async def scenario_endpoint(request: Request) -> dict:
             "weighted_per_share": a.weighted_per_share}
 
 
+@app.post("/api/review/cross-estimate")
+async def cross_estimate_endpoint(request: Request) -> dict:
+    """추정치 간 교차 일관성(기준서 540 문단 24(c), A3).
+
+    body: {"estimates": {라벨: {가정키: 값}}} — 손상검사 g 3% vs 평가모델 g 1% 같은
+    공유 가정 불일치를 WARN 으로. 겹치는 키가 없으면 '비교 불가'도 WARN(통과 아님).
+    """
+    from calc_core.checks import check_cross_estimate_consistency
+
+    data = await request.json()
+    est = data.get("estimates") or {}
+    if not isinstance(est, dict) or len(est) < 2:
+        raise HTTPException(422, "estimates 에 추정치 2개 이상이 필요합니다")
+    fs = check_cross_estimate_consistency(est)
+    return {"findings": [{"rule": f.rule, "severity": f.severity.value,
+                          "message": f.message, "detail": f.detail} for f in fs]}
+
+
 @app.post("/api/range-estimate")
 async def range_estimate_endpoint(request: Request) -> dict:
     """감사인 범위추정치(기준서 540 문단 28~29).

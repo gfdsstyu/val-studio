@@ -71,6 +71,11 @@ function CoverSheet({ project }) {
                   : ""}</div>
               </div>
             )}
+            {auditor && (d.audit_cross_findings?.length > 0) && (
+              /* 교차 일관성(540 24(c)) — 공유 가정 불일치는 개요에서 바로 보여야 한다 */
+              <div className="kpi hero"><div className="v">{d.audit_cross_findings.length}</div>
+                <div className="k">추정치 간 가정 불일치</div></div>
+            )}
             <div className="kpi"><div className="v">{s ? s.warn : "-"}</div><div className="k">audit 경고</div></div>
           </div>
           <div className="muted" style={{ marginTop: 12 }}>

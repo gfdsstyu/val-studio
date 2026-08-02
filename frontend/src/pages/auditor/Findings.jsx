@@ -40,6 +40,11 @@ function collectFindings(data) {
     if (f.severity === "pass") continue;      // 통과 규칙은 조서에 싣지 않는다
     out.push({ key: f.rule, severity: f.severity, title: f.rule, detail: f.message });
   }
+  // 교차 일관성(24(c)) 발견사항 — CrossEstimateCard 가 저장한 것을 조서에 합류.
+  for (const f of data?.audit_cross_findings || []) {
+    out.push({ key: `cross_${f.detail?.key || "?"}_${f.detail?.a || ""}`,
+               severity: f.severity, title: "추정치 간 가정 불일치", detail: f.message });
+  }
   const ex = data?.opinion_extract;
   if (ex && ex.confidence < 0.6) {
     out.push({
@@ -60,18 +65,96 @@ function Empty() {
   );
 }
 
+/* 교차 일관성(기준서 540 문단 24(c), A3) — 같은 기업의 추정치들(평가모델·손상검사·PPA)이
+   공유해야 할 가정(영구성장률·무위험이자율·세율·환율)을 나란히 놓고 대조한다.
+   개별 게이트가 전부 통과해도, 손상 g 3% vs 평가 g 1% 처럼 **서로 다르면** 어느 한쪽이
+   목적에 맞춰 선택됐다는 신호다. 값은 감사인이 각 산출물에서 직접 읽어 입력한다. */
+function CrossEstimateCard({ project, onSave }) {
+  const [rows, setRows] = useState(project?.data?.audit_cross_input || [
+    { estimate: "평가모델(DCF)", key: "terminal_growth", value: "" },
+    { estimate: "손상검사(VIU)", key: "terminal_growth", value: "" },
+  ]);
+  const [res, setRes] = useState(project?.data?.audit_cross_state || null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const setCell = (i, k) => (e) => {
+    const next = rows.slice(); next[i] = { ...next[i], [k]: e.target.value }; setRows(next);
+  };
+  const add = () => setRows([...rows, { estimate: "", key: "", value: "" }]);
+  const rm = (i) => setRows(rows.filter((_, j) => j !== i));
+
+  const run = async () => {
+    setBusy(true); setErr(null); setRes(null);
+    const estimates = {};
+    for (const r of rows) {
+      const label = r.estimate.trim(), key = r.key.trim();
+      if (!label || !key || String(r.value).trim() === "") continue;
+      (estimates[label] = estimates[label] || {})[key] = Number(r.value);
+    }
+    try {
+      const d = await api.review.crossEstimate({ estimates });
+      setRes(d);
+      onSave?.({
+        audit_cross_input: rows,
+        audit_cross_state: d,
+        // 조서 합류용(비-pass 만) — collectFindings·CoverSheet 가 소비.
+        audit_cross_findings: d.findings.filter((f) => f.severity !== "pass"),
+      });
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="card">
+      <h2>추정치 간 교차 일관성 <span className="muted">— 기준서 540 문단 24(c)</span></h2>
+      <div className="pad">
+        <div className="muted" style={{ marginBottom: 8, fontSize: "0.82rem" }}>
+          같은 기업·같은 기간의 다른 추정치(손상검사·PPA·타 평가)에서 <b>같은 가정</b>을
+          읽어와 나란히 입력하세요. 가정 키 이름이 같아야 비교됩니다(예: terminal_growth).
+        </div>
+        <table>
+          <thead><tr><th>추정치</th><th>가정 키</th><th>값(소수)</th><th /></tr></thead>
+          <tbody>{rows.map((r, i) => (
+            <tr key={i}>
+              <td><input type="text" value={r.estimate} onChange={setCell(i, "estimate")}
+                style={{ width: 150 }} placeholder="손상검사(VIU)" /></td>
+              <td><input type="text" value={r.key} onChange={setCell(i, "key")}
+                style={{ width: 150 }} placeholder="terminal_growth" /></td>
+              <td><input type="text" value={r.value} onChange={setCell(i, "value")}
+                style={{ width: 90 }} placeholder="0.01" /></td>
+              <td><button className="ghost xs" onClick={() => rm(i)}>✕</button></td>
+            </tr>))}</tbody>
+        </table>
+        <button className="ghost" onClick={add} style={{ marginTop: 6 }}>+ 행</button>{" "}
+        <button className="primary" disabled={busy} onClick={run}>
+          {busy ? "대조 중…" : "교차 대조"}
+        </button>
+        {err && <div className="err" style={{ marginTop: 8 }}>{err}</div>}
+        {res && res.findings.map((f, i) => (
+          <div key={i} className={`finding ${f.severity}`} style={{ marginTop: 8 }}>
+            <b>[{f.severity.toUpperCase()}]</b> {f.message}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ListSheet({ project, onSave }) {
   const data = project?.data || {};
   const auto = collectFindings(data);
   const notes = data.audit_finding_notes || {};
   const [draft, setDraft] = useState(notes);
 
-  if (!auto.length) return <Empty />;
+  if (!auto.length)
+    return (<><CrossEstimateCard project={project} onSave={onSave} /><Empty /></>);
 
   const setNote = (key, field) => (e) =>
     setDraft({ ...draft, [key]: { ...(draft[key] || {}), [field]: e.target.value } });
 
   return (
+    <>
+    <CrossEstimateCard project={project} onSave={onSave} />
     <div className="card">
       <h2>finding 리스트 <span className="muted">— {auto.length}건(기계 수집)</span></h2>
       <div className="pad">
@@ -105,6 +188,7 @@ function ListSheet({ project, onSave }) {
         </button>
       </div>
     </div>
+    </>
   );
 }
 
