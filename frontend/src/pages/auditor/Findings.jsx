@@ -211,8 +211,18 @@ function buildNarrative(project) {
   L.push(`# 평가 검증 조서 — ${project?.company || project?.name || "(대상 미지정)"}`);
   L.push("");
   L.push("## 1. 검증 범위");
-  L.push("- 대상: 제출된 외부평가의견서의 유의적 가정·방법·데이터 (ISA 540 회계추정치)");
-  L.push("- 방법: 감사인의 독립적 점추정(calc_core 결정론 엔진) + 구조버그 가설 진단 + 민감도 추적");
+  L.push("- 대상: 제출된 외부평가의견서의 유의적 가정·방법·데이터 (기준서 540 회계추정치)");
+  // 문단 18 의 대응 3접근 중 무엇을 수행했는지가 조서의 뼈대다(39(b) 위험↔절차 연결).
+  const approaches = [];
+  if (data.audit_result) approaches.push("독립 점추정(문단 28)");
+  if (data.audit_range_summary) approaches.push("범위추정(문단 28~29)");
+  if (data.audit_recover_state?.mode === "standard"
+      || data.audit_recover_state?.mode === "detected")
+    approaches.push("경영진 모델 복원·산술 검증(문단 22~25·23(c))");
+  if (data.audit_bias_state) approaches.push("소급 검토·편의 징후 평가(문단 14·32)");
+  if (data.audit_cross_findings?.length || data.audit_cross_state)
+    approaches.push("추정치 간 가정 교차 대조(문단 24(c))");
+  L.push(`- 수행 접근: ${approaches.length ? approaches.join(" · ") : "(미수행)"}`);
   L.push("");
 
   L.push("## 2. 의견서에서 식별한 유의적 가정");
@@ -243,6 +253,48 @@ function buildNarrative(project) {
   }
   L.push("");
 
+  // ── 범위추정(문단 28~29) — 주장값 위치와 최소 조정액이 450 집계로 이어진다 ──
+  const rg = data.audit_range_summary;
+  if (rg) {
+    L.push("## 3-2. 감사인 범위추정 (기준서 540 문단 28~29)");
+    L.push(`- 감사인 범위: **${fmt(rg.low)} ~ ${fmt(rg.high)} 원** (구간 양끝 근거 입력 완료 — 29(a))`);
+    if (rg.claimed_within === false) {
+      L.push(`- 경영진 주장값이 범위 **밖** — 최소 조정액 ${fmt(rg.min_adjustment)} 원`
+        + ` (${rg.min_adjustment > 0 ? "과대" : "과소"}). 미수정왜곡표시 집계(기준서 450) 대상 후보`);
+    } else if (rg.claimed_within === true) {
+      L.push("- 경영진 주장값이 범위 내 — 점추정 선택의 합리성은 별도 평가(문단 26)");
+    }
+    L.push("");
+  }
+
+  // ── 값-only 복원(문단 22~25) — 복원은 후보, 미해결은 질의사항 ──
+  const rc = data.audit_recover_state;
+  if (rc && rc.mode !== "failed") {
+    L.push("## 3-3. 경영진 모델 산술 검증 (기준서 540 문단 22~25)");
+    if (rc.mode === "standard" && rc.recomputed_per_share != null) {
+      L.push(`- 값-only 모델 복원 재계산: ${fmt(rc.recomputed_per_share)} 원`
+        + (rc.cached_per_share != null ? ` vs 워크북 표기 ${fmt(rc.cached_per_share)} 원` : ""));
+    }
+    if (rc.mode === "detected" && rc.implied?.wacc != null) {
+      L.push(`- 암묵 할인율(PV/FCFF 역산): ${(rc.implied.wacc * 100).toFixed(3)}%`
+        + ` (${rc.implied.mid_year ? "mid-year" : "기말"} 할인) — 의견서 표기 할인율과 대조(문단 23(c))`);
+    }
+    L.push("");
+  }
+
+  // ── 편의 징후(문단 14·32) ──
+  const bias = data.audit_bias_state;
+  if (bias) {
+    L.push("## 3-4. 편의 징후 평가 (기준서 540 문단 14·32)");
+    const bw = (bias.findings || []).filter((f) => f.severity !== "pass");
+    if (bw.length) {
+      for (const f of bw) L.push(`- ⚠️ ${f.message}`);
+    } else {
+      L.push("- 소급 오차·판단 방향에서 쏠림 미발견 (표본 수 확인 완료)");
+    }
+    L.push("");
+  }
+
   L.push("## 4. 발견사항");
   if (!findings.length) {
     L.push("- 없음");
@@ -259,7 +311,20 @@ function buildNarrative(project) {
     }
   }
 
-  L.push("## 5. 결론");
+  // ── 미해결 질의사항(문단 22~25 — 값에서 복원 불가한 원천·근거) ──
+  const unresolved = [
+    ...(data.audit_recover_state?.unresolved || []),
+    ...(rg ? [] : data.audit_result
+      ? ["감사인 범위추정 미수행 — 점추정만으로는 추정불확실성 평가(문단 26·29)가 불완전"]
+      : []),
+  ];
+  if (unresolved.length) {
+    L.push("## 5. 미해결 질의사항 (경영진 문의 필요)");
+    for (const u of unresolved) L.push(`- ${u}`);
+    L.push("");
+  }
+
+  L.push(`## ${unresolved.length ? 6 : 5}. 결론`);
   if (res && claimed != null) {
     const pct = Math.abs((res.per_share - claimed) / claimed) * 100;
     L.push(pct > 10
@@ -270,6 +335,9 @@ function buildNarrative(project) {
   }
   L.push("");
   L.push("> 본 조서는 결정론 엔진의 계산·게이트 결과 위에 감사인 판단을 기재한 초안이다.");
+  L.push("> 절차↔근거 문단 연결(기준서 540 문단 39(b)): 독립추정=28 · 범위=28~29 ·");
+  L.push("> 모델 산술검증=22~25·23(c) · 편의=14·32 · 교차 일관성=24(c).");
+  L.push("> 통제테스트(19~20)·서면진술(37)·지배기구 커뮤니케이션(38)은 본 도구 밖 절차로 별도 수행.");
   return L.join("\n");
 }
 
