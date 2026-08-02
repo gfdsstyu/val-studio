@@ -5,6 +5,8 @@
 > 작성 2026-08-01. 관련: [architecture_map.md](../architecture_map.md) ·
 > [analytical_review_workflow.md](analytical_review_workflow.md)(L3 계층) ·
 > `backend/excel/model_audit.py`(정적 감사) · `.claude/skills/.../promote.py`(참조 승격).
+> 감사인 트랙의 기준서 정렬 상세: [auditor_track_ksa540.md](auditor_track_ksa540.md)
+> — 본 문서 P2(값-only 복원)가 그 계획의 문단 22~25(경영진 방법 테스트) 전제다.
 
 ---
 
