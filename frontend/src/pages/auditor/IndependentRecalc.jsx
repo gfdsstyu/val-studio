@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { api } from "../../api.js";
+import { api, fileToBase64 } from "../../api.js";
 
 /* 감사인 2. 독립 재계산 — 감사인이 스스로 세운 입력으로 점추정치를 만들고 주장값과 대조.
 
@@ -372,8 +372,143 @@ function RangeSheet({ project, onSave }) {
   );
 }
 
+/* ── 값-only 복원(기준서 540 문단 22~25 의 입구, P2) ────────────────────────
+   평가인이 준 모델은 대개 값 붙여넣기다 — 수식이 없으니 정적 감사·연결성 진단이
+   무력하다. 그러나 산술 관계는 값에 새겨져 있다: 표준 레이아웃이면 스파인 전체를
+   복원해 재계산 대조하고, 임의 레이아웃이면 FCFF↔PV 행 쌍에서 **암묵 할인율**을
+   역산한다. 산출물은 "복원된 모델"이 아니라 **후보 + 질의 목록**이다. */
+
+function RecoverSheet({ project, onSave }) {
+  const [file, setFile] = useState(null);
+  const [res, setRes] = useState(project?.data?.audit_recover_state || null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [applied, setApplied] = useState(false);
+
+  const run = async () => {
+    if (!file) { setErr("xlsx 파일을 선택하세요."); return; }
+    setBusy(true); setErr(null); setRes(null); setApplied(false);
+    try {
+      const d = await api.xlsx.recover(await fileToBase64(file));
+      setRes(d);
+      onSave?.({ audit_recover_state: d });
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  // 입력 재구성 폼이 지원하지 않는 파라미터 — 있으면 반영을 막는다(조용한 소실 방지).
+  const unsupported = res?.input ? [
+    ["tax_override", "세금 주입"], ["effective_tax_rate", "유효세율"],
+    ["terminal_fcff_override", "터미널 FCFF 주입"], ["fade_years", "페이드"],
+    ["terminal_reinvestment_rate", "재투자율"],
+  ].filter(([k]) => res.input[k] != null) : [];
+
+  const apply = () => {
+    const inp = res.input;
+    const s = (arr) => (arr || []).map((v) => String(v)).join(", ");
+    onSave?.({
+      audit_input: {
+        wacc: String(inp.wacc), terminal_growth: String(inp.terminal_growth),
+        non_operating_assets: String(inp.non_operating_assets),
+        net_debt: String(inp.net_debt),
+        shares_outstanding: String(inp.shares_outstanding),
+        claimed_per_share: res.cached_per_share != null ? String(res.cached_per_share) : "",
+        revenue: s(inp.revenue), cogs: s(inp.cogs), sga: s(inp.sga),
+        dep_amort: s(inp.dep_amort), capex: s(inp.capex),
+        delta_nwc_cash_adj: s(inp.delta_nwc_cash_adj),
+      },
+      audit_claimed: res.cached_per_share ?? null,
+    });
+    setApplied(true);
+  };
+
+  return (
+    <>
+      <div className="card">
+        <h2>값-only 복원 <span className="muted">— 경영진 모델 테스트의 입구(540 문단 22~25)</span></h2>
+        <div className="pad">
+          <div className="muted" style={{ marginBottom: 10, fontSize: "0.82rem" }}>
+            수식이 제거된(값 붙여넣기) 모델을 올리세요. 산술 관계는 값에 새겨져 있습니다 —
+            할인계수는 PV/FCFF 비율에, 세금 정책은 EBIT 대비 세액 패턴에. 복원 결과는
+            <b> 후보</b>이며, 원천·근거는 문서·질의로만 확인됩니다.
+          </div>
+          <div className="row" style={{ gap: 16 }}>
+            <label>값-only xlsx <input type="file" accept=".xlsx"
+              onChange={(e) => setFile(e.target.files[0])} /></label>
+            <button className="primary" disabled={busy} onClick={run}>
+              {busy ? "복원 중…" : "복원 시도"}
+            </button>
+          </div>
+          {err && <div className="err" style={{ marginTop: 10 }}>{err}</div>}
+        </div>
+      </div>
+
+      {res && (
+        <div className="card">
+          <h2>복원 결과 <span className="muted">— 모드: {
+            { standard: "표준 레이아웃(스파인 복원)", detected: "자동 탐지(암묵 할인율)",
+              failed: "복원 불가" }[res.mode] || res.mode}</span></h2>
+          <div className="pad">
+            {res.mode === "standard" && (
+              <>
+                <div className="kpis">
+                  <div className="kpi"><div className="v">{fmt(res.recomputed_per_share)}</div>
+                    <div className="k">복원 재계산 주당가치</div></div>
+                  <div className="kpi"><div className="v">{fmt(res.cached_per_share)}</div>
+                    <div className="k">워크북 표기값</div></div>
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  {unsupported.length === 0 ? (
+                    <button className="primary" disabled={applied} onClick={apply}>
+                      {applied ? "반영됨 ✓" : "입력 재구성에 반영"}
+                    </button>
+                  ) : (
+                    <div className="warn-box">
+                      복원에 <b>{unsupported.map(([, l]) => l).join("·")}</b> 파라미터가
+                      포함돼 있어 폼 반영 시 소실됩니다 — 반영 대신 이 화면의 복원값을
+                      직접 근거로 쓰세요(조용한 단순화 방지).
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+            {res.mode === "detected" && res.candidates?.length > 0 && (
+              <div style={{ overflowX: "auto" }}>
+                <table>
+                  <thead><tr><th>시트</th><th>FCFF행</th><th>PV행</th><th>열수</th>
+                    <th>암묵 WACC</th><th>할인 방식</th></tr></thead>
+                  <tbody>{res.candidates.map((c, i) => (
+                    <tr key={i} className={i === 0 ? "ok" : ""}>
+                      <td>{c.sheet}</td><td>{c.fcff_row}</td><td>{c.pv_row}</td>
+                      <td>{c.cols}</td>
+                      <td><b>{(c.implied_wacc * 100).toFixed(3)}%</b></td>
+                      <td>{c.mid_year ? "mid-year" : "기말"}</td>
+                    </tr>))}</tbody>
+                </table>
+              </div>
+            )}
+            {res.findings.map((f, i) => (
+              <div key={i} className={`finding ${f.severity}`} style={{ marginTop: 8 }}>
+                <b>[{f.severity.toUpperCase()}] {f.rule}</b> — {f.message}
+              </div>
+            ))}
+            {res.unresolved?.length > 0 && (
+              <div className="finding warn" style={{ marginTop: 8 }}>
+                <b>미해결(질의사항)</b>
+                <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+                  {res.unresolved.map((u, i) => <li key={i}>{u}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function IndependentRecalc({ project, sheet, onSave }) {
   if (sheet === "result") return <ResultSheet project={project} />;
   if (sheet === "range") return <RangeSheet project={project} onSave={onSave} />;
+  if (sheet === "recover") return <RecoverSheet project={project} onSave={onSave} />;
   return <InputsSheet project={project} onSave={onSave} />;
 }

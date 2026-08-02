@@ -50,6 +50,7 @@ export const NAV = {
     ]},
     { id: "recalc", label: "2. 독립 재계산", sheets: [
       { id: "inputs", label: "입력 재구성" },
+      { id: "recover", label: "값-only 복원" },
       { id: "result", label: "재계산 vs 주장" },
       { id: "range", label: "범위추정" },
     ]},

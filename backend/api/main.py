@@ -526,6 +526,35 @@ async def xlsx_connectivity(request: Request) -> dict:
     }
 
 
+@app.post("/api/xlsx/recover")
+async def xlsx_recover(request: Request) -> dict:
+    """값-only 워크북 복원(P2) — 기준서 540 문단 22~25(경영진 방법 테스트)의 입구.
+
+    표준 레이아웃이면 스파인 전체를 복원해 재계산 대조(캐시 불일치는 그 자체가 발견),
+    임의 레이아웃이면 FCFF↔PV 행 쌍에서 **암묵 할인율**을 역산한다. 산출물은 복원된
+    모델이 아니라 **후보 + 미해결(질의) 목록**이다 — 감사증거인 척하지 않는다.
+    """
+    from excel.value_recovery import recover
+
+    data = await request.json()
+    path = _write_temp_xlsx(_decode_xlsx(data.get("xlsx_b64") or ""))
+    r = recover(read_workbook(path))
+    out = {
+        "mode": r.mode,
+        "findings": [{"rule": f.rule, "severity": f.severity.value,
+                      "message": f.message, "detail": f.detail} for f in r.findings],
+        "unresolved": r.unresolved,
+        "recomputed_per_share": r.recomputed_per_share,
+        "cached_per_share": r.cached_per_share,
+        "implied": r.implied,
+        "candidates": r.candidates[:10],
+    }
+    if r.input is not None:
+        from dataclasses import asdict
+        out["input"] = asdict(r.input)
+    return out
+
+
 @app.post("/api/xlsx/diff")
 async def xlsx_diff(request: Request) -> dict:
     """편집본 → 4버킷 diff + apply-정책 계획.
