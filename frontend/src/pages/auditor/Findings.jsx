@@ -40,6 +40,12 @@ function collectFindings(data) {
     if (f.severity === "pass") continue;      // 통과 규칙은 조서에 싣지 않는다
     out.push({ key: f.rule, severity: f.severity, title: f.rule, detail: f.message });
   }
+  // 편의 징후(14·32) — BiasSheet 가 저장한 것 중 비-pass 를 조서에 합류.
+  for (const f of (data?.audit_bias_state?.findings || [])) {
+    if (f.severity === "pass") continue;
+    out.push({ key: `bias_${f.rule}`, severity: f.severity,
+               title: "편의 징후", detail: f.message });
+  }
   // 교차 일관성(24(c)) 발견사항 — CrossEstimateCard 가 저장한 것을 조서에 합류.
   for (const f of data?.audit_cross_findings || []) {
     out.push({ key: `cross_${f.detail?.key || "?"}_${f.detail?.a || ""}`,
@@ -330,8 +336,135 @@ function NarrativeSheet({ project }) {
   );
 }
 
+/* ── 편의 징후(기준서 540 문단 14·32, A5) ──────────────────────────────────
+   개별 게이트가 전부 통과해도 잡아야 할 것: "개별적으로는 합리적일지라도" 판단의
+   **총합이 한쪽을 향하는가**(32) + 전기 추정이 **항상 같은 방향으로 빗나갔는가**(14).
+   유리/불리의 판정은 감사인 입력이고, 코드는 집계·임계만 맡는다. */
+
+function BiasSheet({ project, onSave }) {
+  const [prior, setPrior] = useState(project?.data?.audit_bias_input?.prior || [
+    { label: "매출액(전기 추정)", estimated: "", actual: "" },
+    { label: "영업이익(전기 추정)", estimated: "", actual: "" },
+    { label: "CAPEX(전기 추정)", estimated: "", actual: "" },
+  ]);
+  const [judg, setJudg] = useState(project?.data?.audit_bias_input?.judgments || [
+    { label: "영구성장률 선택", direction: "0" },
+    { label: "할인율(WACC) 선택", direction: "0" },
+    { label: "운전자본 가정", direction: "0" },
+  ]);
+  const [res, setRes] = useState(project?.data?.audit_bias_state || null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const setP = (i, k) => (e) => {
+    const n = prior.slice(); n[i] = { ...n[i], [k]: e.target.value }; setPrior(n);
+  };
+  const setJ = (i, k) => (e) => {
+    const n = judg.slice(); n[i] = { ...n[i], [k]: e.target.value }; setJudg(n);
+  };
+
+  const run = async () => {
+    setBusy(true); setErr(null); setRes(null);
+    const body = {
+      prior: prior.filter((r) => String(r.estimated).trim() && String(r.actual).trim())
+        .map((r) => ({ label: r.label, estimated: Number(r.estimated), actual: Number(r.actual) })),
+      judgments: judg.filter((r) => r.direction !== "0")
+        .map((r) => ({ label: r.label, direction: Number(r.direction) })),
+    };
+    try {
+      const d = await api.review.bias(body);
+      setRes(d);
+      onSave?.({
+        audit_bias_input: { prior, judgments: judg },
+        audit_bias_state: d,
+        // 개요 KPI 소비용 요약 — WARN 없으면 균형이라는 사실도 남긴다.
+        audit_bias_summary: { warn_count: d.warn_count },
+      });
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <>
+      <div className="card">
+        <h2>소급 검토 <span className="muted">— 전기 추정 vs 실제(540 문단 14)</span></h2>
+        <div className="pad">
+          <div className="muted" style={{ marginBottom: 8, fontSize: "0.82rem" }}>
+            목적은 당시 판단에 의문 제기가 아니라(기준서가 명시적으로 금지) <b>오차가
+            항상 같은 방향인지</b> 보는 것입니다. 값은 전기 의견서·사업보고서에서 읽어
+            입력하세요(DART 자동 대조는 로드맵).
+          </div>
+          <table>
+            <thead><tr><th>항목</th><th>당초 추정</th><th>실제</th></tr></thead>
+            <tbody>{prior.map((r, i) => (
+              <tr key={i}>
+                <td><input type="text" value={r.label} onChange={setP(i, "label")} style={{ width: 170 }} /></td>
+                <td><input type="text" value={r.estimated} onChange={setP(i, "estimated")} style={{ width: 110 }} /></td>
+                <td><input type="text" value={r.actual} onChange={setP(i, "actual")} style={{ width: 110 }} /></td>
+              </tr>))}</tbody>
+          </table>
+          <button className="ghost" style={{ marginTop: 6 }}
+            onClick={() => setPrior([...prior, { label: "", estimated: "", actual: "" }])}>+ 행</button>
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>판단 방향성 <span className="muted">— 유의적 판단의 쏠림(540 문단 32)</span></h2>
+        <div className="pad">
+          <div className="muted" style={{ marginBottom: 8, fontSize: "0.82rem" }}>
+            각 판단이 <b>가치를 올리는 쪽인지 내리는 쪽인지</b>만 표시하세요(예: 성장률을
+            컨센서스 상단으로 = 증가). 판정은 감사인, 집계는 도구.
+          </div>
+          <table>
+            <thead><tr><th>유의적 판단</th><th>방향</th></tr></thead>
+            <tbody>{judg.map((r, i) => (
+              <tr key={i}>
+                <td><input type="text" value={r.label} onChange={setJ(i, "label")} style={{ width: 220 }} /></td>
+                <td><select value={r.direction} onChange={setJ(i, "direction")} style={{ fontSize: 12 }}>
+                  <option value="0">— 미표시</option>
+                  <option value="1">가치 증가(+)</option>
+                  <option value="-1">가치 감소(−)</option>
+                </select></td>
+              </tr>))}</tbody>
+          </table>
+          <button className="ghost" style={{ marginTop: 6 }}
+            onClick={() => setJudg([...judg, { label: "", direction: "0" }])}>+ 행</button>{" "}
+          <button className="primary" disabled={busy} onClick={run}>
+            {busy ? "집계 중…" : "편의 징후 집계"}
+          </button>
+          {err && <div className="err" style={{ marginTop: 8 }}>{err}</div>}
+        </div>
+      </div>
+
+      {res && (
+        <div className="card">
+          <h2>판정</h2>
+          <div className="pad">
+            {res.rows.length > 0 && (
+              <table style={{ marginBottom: 10 }}>
+                <thead><tr><th>항목</th><th>추정</th><th>실제</th><th>오차</th></tr></thead>
+                <tbody>{res.rows.map((r, i) => (
+                  <tr key={i} className={r.error != null && Math.abs(r.error) > 0.1 ? "warn" : ""}>
+                    <td style={{ textAlign: "left" }}>{r.label}</td>
+                    <td>{r.estimated.toLocaleString("ko-KR")}</td>
+                    <td>{r.actual.toLocaleString("ko-KR")}</td>
+                    <td>{r.error == null ? "-" : `${(r.error * 100).toFixed(1)}%`}</td>
+                  </tr>))}</tbody>
+              </table>
+            )}
+            {res.findings.map((f, i) => (
+              <div key={i} className={`finding ${f.severity}`} style={{ marginTop: 6 }}>
+                <b>[{f.severity.toUpperCase()}] {f.rule}</b> — {f.message}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function Findings({ project, sheet, onSave }) {
-  return sheet === "narrative"
-    ? <NarrativeSheet project={project} />
-    : <ListSheet project={project} onSave={onSave} />;
+  if (sheet === "narrative") return <NarrativeSheet project={project} />;
+  if (sheet === "bias") return <BiasSheet project={project} onSave={onSave} />;
+  return <ListSheet project={project} onSave={onSave} />;
 }

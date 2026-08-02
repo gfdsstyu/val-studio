@@ -71,6 +71,11 @@ function CoverSheet({ project }) {
                   : ""}</div>
               </div>
             )}
+            {auditor && d.audit_bias_summary?.warn_count > 0 && (
+              /* 편의 징후(540 14·32) — 방향 쏠림·소급 오차는 개요에서 바로 보여야 한다 */
+              <div className="kpi hero"><div className="v">{d.audit_bias_summary.warn_count}</div>
+                <div className="k">편의 징후 경고</div></div>
+            )}
             {auditor && (d.audit_cross_findings?.length > 0) && (
               /* 교차 일관성(540 24(c)) — 공유 가정 불일치는 개요에서 바로 보여야 한다 */
               <div className="kpi hero"><div className="v">{d.audit_cross_findings.length}</div>

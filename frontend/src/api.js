@@ -102,6 +102,8 @@ export const api = {
     ledger: (body) => j("POST", "/api/review/ledger", body),
     // 추정치 간 교차 일관성(540 문단 24(c)) — 손상 g vs 평가 g 같은 공유 가정 대조.
     crossEstimate: (body) => j("POST", "/api/review/cross-estimate", body),
+    // 편의 징후(540 문단 14·32) — 소급 검토 + 판단 방향성 집계.
+    bias: (body) => j("POST", "/api/review/bias", body),
   },
   projects: {
     list: () => j("GET", "/api/projects"),

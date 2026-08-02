@@ -59,6 +59,7 @@ export const NAV = {
     ]},
     { id: "findings", label: "4. 발견사항", sheets: [
       { id: "list", label: "finding 리스트" },
+      { id: "bias", label: "편의 징후" },
       { id: "narrative", label: "서사 리포트" },
     ]},
   ],

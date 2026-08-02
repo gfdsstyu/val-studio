@@ -253,6 +253,35 @@ async def scenario_endpoint(request: Request) -> dict:
             "weighted_per_share": a.weighted_per_share}
 
 
+@app.post("/api/review/bias")
+async def bias_endpoint(request: Request) -> dict:
+    """편의 징후(기준서 540 문단 14·32, A5) — 소급 검토 + 판단 방향성 집계.
+
+    body: {"prior": [{label, estimated, actual}], "judgments": [{label, direction}]}
+    (direction: +1=가치 증가 쪽, -1=감소 쪽 — 유리/불리 판정은 감사인 입력).
+    """
+    from calc_core.bias import check_bias_directionality, check_retrospective
+
+    data = await request.json()
+    prior = data.get("prior") or []
+    judgments = data.get("judgments") or []
+    if not prior and not judgments:
+        raise HTTPException(422, "prior(소급 검토) 또는 judgments(판단 방향) 중 하나는 필요합니다")
+    try:
+        retro_f, rows = check_retrospective(prior) if prior else ([], [])
+        dir_f = check_bias_directionality(judgments) if judgments else []
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"입력 형식 오류: {e}") from e
+    fs = retro_f + dir_f
+    return {
+        "rows": [{"label": r.label, "estimated": r.estimated, "actual": r.actual,
+                  "error": r.error} for r in rows],
+        "findings": [{"rule": f.rule, "severity": f.severity.value,
+                      "message": f.message, "detail": f.detail} for f in fs],
+        "warn_count": sum(1 for f in fs if f.severity.value != "pass"),
+    }
+
+
 @app.post("/api/review/cross-estimate")
 async def cross_estimate_endpoint(request: Request) -> dict:
     """추정치 간 교차 일관성(기준서 540 문단 24(c), A3).
