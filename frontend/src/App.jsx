@@ -225,7 +225,7 @@ function Workspace({ projectId, onHome }) {
     if (stage.id === "valuation" && sheet.id === "relative")
       return <RelativeSheet project={project} onSave={saveData} />;
     if (stage.id === "output"
-        && (sheet.id === "export" || sheet.id === "diff" || sheet.id === "audit"))
+        && ["export", "diff", "audit", "connectivity"].includes(sheet.id))
       return <Roundtrip project={project} sheet={sheet.id} onSave={saveData} />;
     // 감사인 트랙 — 평가인 트랙과 데이터·화면 모두 격리(모드는 생성 시 1회 확정).
     if (stage.id === "ingest")

@@ -38,6 +38,7 @@ export const NAV = {
       { id: "export", label: "xlsx 내보내기·되읽기" },
       { id: "diff", label: "엑셀 왕복 diff" },
       { id: "audit", label: "모델 정적 감사" },
+      { id: "connectivity", label: "모델 연결성" },
     ]},
   ],
   auditor: [
@@ -80,7 +81,7 @@ const EMBED_ALLOW = {
     cover: ["summary"],
     materials: ["files", "disclosure"],
     valuation: ["dcf"],
-    output: ["export", "diff", "audit"],
+    output: ["export", "diff", "audit", "connectivity"],
   },
   // auditor: 미지정 = 전체 노출
 };

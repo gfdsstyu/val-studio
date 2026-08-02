@@ -125,6 +125,9 @@ export const api = {
     import: (xlsx_b64) => j("POST", "/api/xlsx/import", { xlsx_b64 }),
     // 정적 감사(재계산 없는 수식 분석): 패턴 린트·하드코딩 스캔·민감도 중심셀 검산.
     audit: (xlsx_b64) => j("POST", "/api/xlsx/audit", { xlsx_b64 }),
+    // 연결성 진단(의존성 그래프): "이 가정이 결과에 도달하는가" — 끊긴 시트·상수 잎·고아.
+    connectivity: (xlsx_b64, target) =>
+      j("POST", "/api/xlsx/connectivity", { xlsx_b64, ...(target ? { target } : {}) }),
     // 기준선 2방식: 저장된 프로젝트에서 재생성(권장 — 왕복 루프가 닫힘) 또는 원본 업로드.
     diffVsProject: (project_id, after_b64) =>
       j("POST", "/api/xlsx/diff", { project_id, after_b64 }),

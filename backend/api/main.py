@@ -409,6 +409,67 @@ async def xlsx_audit(request: Request) -> dict:
     }
 
 
+@app.post("/api/xlsx/connectivity")
+async def xlsx_connectivity(request: Request) -> dict:
+    """모델 연결성 진단(P1) — "이 가정이 결과에 도달하는가"를 그래프로 판정.
+
+    body: {xlsx_b64, target?} — target 미지정 시 표준 레이아웃(DCF!C33)을 시도하고,
+    아니면 422 로 목표 셀 지정을 요구한다(임의 모델은 주당가치 위치를 알 수 없다).
+    실측 근거: 비올 진본에서 WACC 시트 전체·스파인 중간 상수 재시작(EBIT·WC·매출추정
+    미도달)을 이 진단이 검출했다 — 셀 단위 리뷰로는 '연결의 부재'가 보이지 않는다.
+    """
+    from excel.dependency_graph import build_graph, find_breaks, formula_ratio
+    from excel.dependency_graph import cycles as graph_cycles
+    from excel.template_schema import RESULT
+
+    data = await request.json()
+    path = _write_temp_xlsx(_decode_xlsx(data.get("xlsx_b64") or ""))
+    g = build_graph(read_workbook(path))
+
+    target = str(data.get("target") or "").strip()
+    if not target:
+        std = f"DCF!{RESULT['per_share']}"
+        if std in g.nodes and g.nodes[std].kind == "formula":
+            target = std
+        else:
+            raise HTTPException(
+                422, "목표 셀을 지정하세요(예: DCF!H49) — Val-Studio 표준 레이아웃"
+                     f"({std})이 아니라 주당가치 위치를 추정할 수 없습니다.")
+    if target not in g.nodes:
+        raise HTTPException(422, f"목표 셀 '{target}' 이 워크북에 없습니다.")
+
+    b = find_breaks(g, target)
+    fr = formula_ratio(g)
+    # 순환: 3표 시트(Model)의 이자 순환은 정상 규약(R14) — 그 외만 보고.
+    cyc = graph_cycles(g, whitelist_sheets=frozenset({"Model"}))
+
+    orphan_by_sheet: dict[str, int] = {}
+    for k in b.orphan_formulas:
+        s = k.split("!")[0]
+        orphan_by_sheet[s] = orphan_by_sheet.get(s, 0) + 1
+
+    n_formulas = sum(1 for n in g.nodes.values() if n.kind == "formula")
+    return {
+        "target": target,
+        "n_nodes": len(g.nodes), "n_formulas": n_formulas,
+        "formula_ratio": round(fr, 4),
+        # 값-only 판정(감사인 복원 모드 신호) — 임계는 UI 안내용, 판단은 사람.
+        "values_only_suspect": fr < 0.03,
+        "sheet_summary": b.sheet_summary,
+        "dead_sheets": b.dead_sheets,
+        "reach_size": len(b.reach),
+        "constant_inputs_in_path": [
+            {"cell": k, "value": g.nodes[k].value}
+            for k in b.constant_inputs_in_path[:100]],
+        "constant_inputs_total": len(b.constant_inputs_in_path),
+        "orphan_by_sheet": orphan_by_sheet,
+        "orphan_total": len(b.orphan_formulas),
+        "unknown_cells": b.unknown_cells[:50],
+        "external_cells": b.external_cells[:50],
+        "cycles": cyc[:20],
+    }
+
+
 @app.post("/api/xlsx/diff")
 async def xlsx_diff(request: Request) -> dict:
     """편집본 → 4버킷 diff + apply-정책 계획.

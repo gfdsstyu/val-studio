@@ -513,7 +513,159 @@ function AuditSheet() {
   );
 }
 
+/** 모델 연결성 진단(P1) — "이 가정이 결과에 도달하는가"를 의존성 그래프로 판정.
+    실측 근거: 비올 진본에서 WACC 시트 전체 미도달 + 스파인이 중간 상수(DCF!M15)에서
+    재시작(EBIT·WC·매출추정 미도달)을 검출 — **셀 단위 리뷰로는 '연결의 부재'가 보이지
+    않는다**(부재는 어느 셀에도 적혀 있지 않으므로). 표시 전용(저장 없음). */
+function ConnectivitySheet() {
+  const [file, setFile] = useState(null);
+  const [target, setTarget] = useState("");
+  const [out, setOut] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const runWith = async (b64) => {
+    setBusy(true); setErr(null); setOut(null);
+    try {
+      setOut(await api.xlsx.connectivity(b64, target.trim() || undefined));
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  const run = async () => {
+    if (!file) { setErr("xlsx 파일을 선택하세요."); return; }
+    runWith(await fileToBase64(file));
+  };
+  const runCurrent = async () => {
+    try { runWith(await currentWorkbookB64()); } catch (e) { setErr(e.message); }
+  };
+
+  const deadSet = out ? new Set(out.dead_sheets) : new Set();
+  const rows = out ? Object.entries(out.sheet_summary)
+    .sort((a, b) => (deadSet.has(b[0]) - deadSet.has(a[0]))
+      || (b[1].not_reaching - a[1].not_reaching)) : [];
+
+  return (
+    <>
+      <div className="card">
+        <h2>모델 연결성 <span className="muted">— 이 가정이 결과에 도달하는가(의존성 그래프)</span></h2>
+        <div className="pad">
+          <div className="muted" style={{ marginBottom: 10, fontSize: "0.82rem" }}>
+            수식 참조를 그래프로 추적해 <b>목표셀(주당가치)에 도달하지 못하는 시트</b>,
+            경로상 <b>상수 잎</b>(참조화 후보), 아무도 읽지 않는 <b>고아 계산</b>을 찾습니다.
+            셀을 하나씩 읽는 리뷰로는 "연결의 부재"가 보이지 않습니다 — WACC 시트를 다
+            고쳐도 결과가 안 변하는 모델이 실제로 있었습니다(비올 진본 실측).
+          </div>
+          <div className="row" style={{ gap: 16, flexWrap: "wrap" }}>
+            <label>대상 xlsx <input type="file" accept=".xlsx"
+              onChange={(e) => setFile(e.target.files[0])} /></label>
+            <label>목표셀 <input type="text" value={target} placeholder="비우면 표준(DCF!C33) · 예: DCF!H49"
+              onChange={(e) => setTarget(e.target.value)} style={{ width: 170 }} /></label>
+            <button className="primary" disabled={busy} onClick={run}>
+              {busy ? "분석 중…" : "연결성 진단"}
+            </button>
+            {officeAvailable() && (
+              <button className="ghost" disabled={busy} onClick={runCurrent}>
+                {busy ? "분석 중…" : "현재 워크북 진단"}
+              </button>
+            )}
+          </div>
+          {err && <div className="err" style={{ marginTop: 10 }}>{err}</div>}
+        </div>
+      </div>
+
+      {out && (
+        <div className="card">
+          <h2>진단 결과 <span className="muted">— 목표 {out.target}</span></h2>
+          <div className="pad">
+            <div className="kpis">
+              <div className="kpi"><div className="v">{out.n_formulas.toLocaleString()}</div>
+                <div className="k">수식 셀 / 노드 {out.n_nodes.toLocaleString()}</div></div>
+              <div className={`kpi${out.dead_sheets.length ? " hero" : ""}`}>
+                <div className="v">{out.dead_sheets.length}</div>
+                <div className="k">결과 미도달 시트</div></div>
+              <div className="kpi"><div className="v">{out.constant_inputs_total}</div>
+                <div className="k">경로상 상수 잎(참조화 후보)</div></div>
+              <div className="kpi"><div className="v">{out.orphan_total}</div>
+                <div className="k">고아 수식(표시용/죽은 계산)</div></div>
+            </div>
+
+            {out.values_only_suspect && (
+              <div className="warn-box" style={{ marginTop: 10 }}>
+                수식 비율 {(out.formula_ratio * 100).toFixed(1)}% — <b>값 붙여넣기 모델</b>로
+                보입니다. 연결성 진단이 무의미하며, 감사인 트랙의 독립 재계산·범위추정으로
+                검증하세요(값-only 복원은 로드맵 P2).
+              </div>
+            )}
+
+            {out.dead_sheets.length > 0 && (
+              <div className="finding warn" style={{ marginTop: 10 }}>
+                <b>미도달 시트</b> — {out.dead_sheets.join(" · ")}
+                <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                  이 시트들의 계산은 {out.target} 에 흘러들지 않습니다. 고치더라도 결과가
+                  변하지 않으며, 오류가 생겨도 결과에서 드러나지 않습니다("값으로 죽은
+                  수식" 위험). 의도적 참고 시트인지, 끊긴 배선인지 판단하세요.
+                </div>
+              </div>
+            )}
+
+            <div style={{ overflowX: "auto", marginTop: 10 }}>
+              <table>
+                <thead><tr><th style={{ textAlign: "left" }}>시트</th>
+                  <th>도달 수식</th><th>미도달 수식</th><th>고아</th></tr></thead>
+                <tbody>{rows.map(([s, c]) => (
+                  <tr key={s} className={deadSet.has(s) ? "warn" : ""}>
+                    <td style={{ textAlign: "left" }}>{deadSet.has(s) ? "⚠ " : ""}{s}</td>
+                    <td>{c.reaching}</td><td>{c.not_reaching}</td>
+                    <td>{out.orphan_by_sheet[s] || 0}</td>
+                  </tr>))}</tbody>
+              </table>
+            </div>
+
+            {out.constant_inputs_in_path.length > 0 && (
+              <details style={{ marginTop: 10 }}>
+                <summary style={{ cursor: "pointer", fontSize: 12 }}>
+                  경로상 상수 잎 {out.constant_inputs_total}건 — 결과에 직접 흘러드는
+                  하드 입력(가정이면 참조화 후보, R4)
+                </summary>
+                <table style={{ marginTop: 6 }}>
+                  <tbody>{out.constant_inputs_in_path.slice(0, 40).map((c, i) => (
+                    <tr key={i}><td style={{ textAlign: "left" }}>{c.cell}</td>
+                      <td>{typeof c.value === "number"
+                        ? c.value.toLocaleString("ko-KR", { maximumFractionDigits: 4 })
+                        : String(c.value)}</td></tr>))}</tbody>
+                </table>
+                {out.constant_inputs_total > 40 && (
+                  <div className="muted">…외 {out.constant_inputs_total - 40}건</div>)}
+              </details>
+            )}
+
+            {out.unknown_cells.length > 0 && (
+              <div className="finding warn" style={{ marginTop: 8 }}>
+                <b>동적 참조 {out.unknown_cells.length}건</b>(INDIRECT/OFFSET) —
+                이 셀들의 연결은 추적할 수 없어 진단이 <b>과소평가</b>될 수 있습니다:
+                {" "}{out.unknown_cells.slice(0, 8).join(", ")}
+              </div>
+            )}
+            {out.external_cells.length > 0 && (
+              <div className="finding warn" style={{ marginTop: 8 }}>
+                <b>외부 워크북 참조 {out.external_cells.length}건</b> —
+                {" "}{out.external_cells.slice(0, 8).join(", ")}
+              </div>
+            )}
+            {out.cycles.length > 0 && (
+              <div className="finding warn" style={{ marginTop: 8 }}>
+                <b>순환 참조 {out.cycles.length}건</b>(3표 Model 시트 정상 순환 제외) —
+                예: {out.cycles[0].slice(0, 5).join(" → ")}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function Roundtrip({ project, sheet, onSave }) {
+  if (sheet === "connectivity") return <ConnectivitySheet />;
   if (sheet === "export")
     return (
       <>
