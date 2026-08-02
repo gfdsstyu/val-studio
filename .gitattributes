@@ -1,0 +1,4 @@
+# core.autocrlf=true 환경에서 셸 스크립트가 CRLF 로 체크아웃되면 실행 자체가 불가하다
+# (`$'\r': command not found`). git 훅은 체크아웃 직후 그대로 실행되므로 LF 를 강제한다.
+.githooks/* text eol=lf
+*.sh        text eol=lf

@@ -40,6 +40,17 @@ function collectFindings(data) {
     if (f.severity === "pass") continue;      // 통과 규칙은 조서에 싣지 않는다
     out.push({ key: f.rule, severity: f.severity, title: f.rule, detail: f.message });
   }
+  // 편의 징후(14·32) — BiasSheet 가 저장한 것 중 비-pass 를 조서에 합류.
+  for (const f of (data?.audit_bias_state?.findings || [])) {
+    if (f.severity === "pass") continue;
+    out.push({ key: `bias_${f.rule}`, severity: f.severity,
+               title: "편의 징후", detail: f.message });
+  }
+  // 교차 일관성(24(c)) 발견사항 — CrossEstimateCard 가 저장한 것을 조서에 합류.
+  for (const f of data?.audit_cross_findings || []) {
+    out.push({ key: `cross_${f.detail?.key || "?"}_${f.detail?.a || ""}`,
+               severity: f.severity, title: "추정치 간 가정 불일치", detail: f.message });
+  }
   const ex = data?.opinion_extract;
   if (ex && ex.confidence < 0.6) {
     out.push({
@@ -60,18 +71,96 @@ function Empty() {
   );
 }
 
+/* 교차 일관성(기준서 540 문단 24(c), A3) — 같은 기업의 추정치들(평가모델·손상검사·PPA)이
+   공유해야 할 가정(영구성장률·무위험이자율·세율·환율)을 나란히 놓고 대조한다.
+   개별 게이트가 전부 통과해도, 손상 g 3% vs 평가 g 1% 처럼 **서로 다르면** 어느 한쪽이
+   목적에 맞춰 선택됐다는 신호다. 값은 감사인이 각 산출물에서 직접 읽어 입력한다. */
+function CrossEstimateCard({ project, onSave }) {
+  const [rows, setRows] = useState(project?.data?.audit_cross_input || [
+    { estimate: "평가모델(DCF)", key: "terminal_growth", value: "" },
+    { estimate: "손상검사(VIU)", key: "terminal_growth", value: "" },
+  ]);
+  const [res, setRes] = useState(project?.data?.audit_cross_state || null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const setCell = (i, k) => (e) => {
+    const next = rows.slice(); next[i] = { ...next[i], [k]: e.target.value }; setRows(next);
+  };
+  const add = () => setRows([...rows, { estimate: "", key: "", value: "" }]);
+  const rm = (i) => setRows(rows.filter((_, j) => j !== i));
+
+  const run = async () => {
+    setBusy(true); setErr(null); setRes(null);
+    const estimates = {};
+    for (const r of rows) {
+      const label = r.estimate.trim(), key = r.key.trim();
+      if (!label || !key || String(r.value).trim() === "") continue;
+      (estimates[label] = estimates[label] || {})[key] = Number(r.value);
+    }
+    try {
+      const d = await api.review.crossEstimate({ estimates });
+      setRes(d);
+      onSave?.({
+        audit_cross_input: rows,
+        audit_cross_state: d,
+        // 조서 합류용(비-pass 만) — collectFindings·CoverSheet 가 소비.
+        audit_cross_findings: d.findings.filter((f) => f.severity !== "pass"),
+      });
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="card">
+      <h2>추정치 간 교차 일관성 <span className="muted">— 기준서 540 문단 24(c)</span></h2>
+      <div className="pad">
+        <div className="muted" style={{ marginBottom: 8, fontSize: "0.82rem" }}>
+          같은 기업·같은 기간의 다른 추정치(손상검사·PPA·타 평가)에서 <b>같은 가정</b>을
+          읽어와 나란히 입력하세요. 가정 키 이름이 같아야 비교됩니다(예: terminal_growth).
+        </div>
+        <table>
+          <thead><tr><th>추정치</th><th>가정 키</th><th>값(소수)</th><th /></tr></thead>
+          <tbody>{rows.map((r, i) => (
+            <tr key={i}>
+              <td><input type="text" value={r.estimate} onChange={setCell(i, "estimate")}
+                style={{ width: 150 }} placeholder="손상검사(VIU)" /></td>
+              <td><input type="text" value={r.key} onChange={setCell(i, "key")}
+                style={{ width: 150 }} placeholder="terminal_growth" /></td>
+              <td><input type="text" value={r.value} onChange={setCell(i, "value")}
+                style={{ width: 90 }} placeholder="0.01" /></td>
+              <td><button className="ghost xs" onClick={() => rm(i)}>✕</button></td>
+            </tr>))}</tbody>
+        </table>
+        <button className="ghost" onClick={add} style={{ marginTop: 6 }}>+ 행</button>{" "}
+        <button className="primary" disabled={busy} onClick={run}>
+          {busy ? "대조 중…" : "교차 대조"}
+        </button>
+        {err && <div className="err" style={{ marginTop: 8 }}>{err}</div>}
+        {res && res.findings.map((f, i) => (
+          <div key={i} className={`finding ${f.severity}`} style={{ marginTop: 8 }}>
+            <b>[{f.severity.toUpperCase()}]</b> {f.message}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ListSheet({ project, onSave }) {
   const data = project?.data || {};
   const auto = collectFindings(data);
   const notes = data.audit_finding_notes || {};
   const [draft, setDraft] = useState(notes);
 
-  if (!auto.length) return <Empty />;
+  if (!auto.length)
+    return (<><CrossEstimateCard project={project} onSave={onSave} /><Empty /></>);
 
   const setNote = (key, field) => (e) =>
     setDraft({ ...draft, [key]: { ...(draft[key] || {}), [field]: e.target.value } });
 
   return (
+    <>
+    <CrossEstimateCard project={project} onSave={onSave} />
     <div className="card">
       <h2>finding 리스트 <span className="muted">— {auto.length}건(기계 수집)</span></h2>
       <div className="pad">
@@ -105,6 +194,7 @@ function ListSheet({ project, onSave }) {
         </button>
       </div>
     </div>
+    </>
   );
 }
 
@@ -121,8 +211,18 @@ function buildNarrative(project) {
   L.push(`# 평가 검증 조서 — ${project?.company || project?.name || "(대상 미지정)"}`);
   L.push("");
   L.push("## 1. 검증 범위");
-  L.push("- 대상: 제출된 외부평가의견서의 유의적 가정·방법·데이터 (ISA 540 회계추정치)");
-  L.push("- 방법: 감사인의 독립적 점추정(calc_core 결정론 엔진) + 구조버그 가설 진단 + 민감도 추적");
+  L.push("- 대상: 제출된 외부평가의견서의 유의적 가정·방법·데이터 (기준서 540 회계추정치)");
+  // 문단 18 의 대응 3접근 중 무엇을 수행했는지가 조서의 뼈대다(39(b) 위험↔절차 연결).
+  const approaches = [];
+  if (data.audit_result) approaches.push("독립 점추정(문단 28)");
+  if (data.audit_range_summary) approaches.push("범위추정(문단 28~29)");
+  if (data.audit_recover_state?.mode === "standard"
+      || data.audit_recover_state?.mode === "detected")
+    approaches.push("경영진 모델 복원·산술 검증(문단 22~25·23(c))");
+  if (data.audit_bias_state) approaches.push("소급 검토·편의 징후 평가(문단 14·32)");
+  if (data.audit_cross_findings?.length || data.audit_cross_state)
+    approaches.push("추정치 간 가정 교차 대조(문단 24(c))");
+  L.push(`- 수행 접근: ${approaches.length ? approaches.join(" · ") : "(미수행)"}`);
   L.push("");
 
   L.push("## 2. 의견서에서 식별한 유의적 가정");
@@ -153,6 +253,48 @@ function buildNarrative(project) {
   }
   L.push("");
 
+  // ── 범위추정(문단 28~29) — 주장값 위치와 최소 조정액이 450 집계로 이어진다 ──
+  const rg = data.audit_range_summary;
+  if (rg) {
+    L.push("## 3-2. 감사인 범위추정 (기준서 540 문단 28~29)");
+    L.push(`- 감사인 범위: **${fmt(rg.low)} ~ ${fmt(rg.high)} 원** (구간 양끝 근거 입력 완료 — 29(a))`);
+    if (rg.claimed_within === false) {
+      L.push(`- 경영진 주장값이 범위 **밖** — 최소 조정액 ${fmt(rg.min_adjustment)} 원`
+        + ` (${rg.min_adjustment > 0 ? "과대" : "과소"}). 미수정왜곡표시 집계(기준서 450) 대상 후보`);
+    } else if (rg.claimed_within === true) {
+      L.push("- 경영진 주장값이 범위 내 — 점추정 선택의 합리성은 별도 평가(문단 26)");
+    }
+    L.push("");
+  }
+
+  // ── 값-only 복원(문단 22~25) — 복원은 후보, 미해결은 질의사항 ──
+  const rc = data.audit_recover_state;
+  if (rc && rc.mode !== "failed") {
+    L.push("## 3-3. 경영진 모델 산술 검증 (기준서 540 문단 22~25)");
+    if (rc.mode === "standard" && rc.recomputed_per_share != null) {
+      L.push(`- 값-only 모델 복원 재계산: ${fmt(rc.recomputed_per_share)} 원`
+        + (rc.cached_per_share != null ? ` vs 워크북 표기 ${fmt(rc.cached_per_share)} 원` : ""));
+    }
+    if (rc.mode === "detected" && rc.implied?.wacc != null) {
+      L.push(`- 암묵 할인율(PV/FCFF 역산): ${(rc.implied.wacc * 100).toFixed(3)}%`
+        + ` (${rc.implied.mid_year ? "mid-year" : "기말"} 할인) — 의견서 표기 할인율과 대조(문단 23(c))`);
+    }
+    L.push("");
+  }
+
+  // ── 편의 징후(문단 14·32) ──
+  const bias = data.audit_bias_state;
+  if (bias) {
+    L.push("## 3-4. 편의 징후 평가 (기준서 540 문단 14·32)");
+    const bw = (bias.findings || []).filter((f) => f.severity !== "pass");
+    if (bw.length) {
+      for (const f of bw) L.push(`- ⚠️ ${f.message}`);
+    } else {
+      L.push("- 소급 오차·판단 방향에서 쏠림 미발견 (표본 수 확인 완료)");
+    }
+    L.push("");
+  }
+
   L.push("## 4. 발견사항");
   if (!findings.length) {
     L.push("- 없음");
@@ -169,7 +311,20 @@ function buildNarrative(project) {
     }
   }
 
-  L.push("## 5. 결론");
+  // ── 미해결 질의사항(문단 22~25 — 값에서 복원 불가한 원천·근거) ──
+  const unresolved = [
+    ...(data.audit_recover_state?.unresolved || []),
+    ...(rg ? [] : data.audit_result
+      ? ["감사인 범위추정 미수행 — 점추정만으로는 추정불확실성 평가(문단 26·29)가 불완전"]
+      : []),
+  ];
+  if (unresolved.length) {
+    L.push("## 5. 미해결 질의사항 (경영진 문의 필요)");
+    for (const u of unresolved) L.push(`- ${u}`);
+    L.push("");
+  }
+
+  L.push(`## ${unresolved.length ? 6 : 5}. 결론`);
   if (res && claimed != null) {
     const pct = Math.abs((res.per_share - claimed) / claimed) * 100;
     L.push(pct > 10
@@ -180,6 +335,9 @@ function buildNarrative(project) {
   }
   L.push("");
   L.push("> 본 조서는 결정론 엔진의 계산·게이트 결과 위에 감사인 판단을 기재한 초안이다.");
+  L.push("> 절차↔근거 문단 연결(기준서 540 문단 39(b)): 독립추정=28 · 범위=28~29 ·");
+  L.push("> 모델 산술검증=22~25·23(c) · 편의=14·32 · 교차 일관성=24(c).");
+  L.push("> 통제테스트(19~20)·서면진술(37)·지배기구 커뮤니케이션(38)은 본 도구 밖 절차로 별도 수행.");
   return L.join("\n");
 }
 
@@ -246,8 +404,135 @@ function NarrativeSheet({ project }) {
   );
 }
 
+/* ── 편의 징후(기준서 540 문단 14·32, A5) ──────────────────────────────────
+   개별 게이트가 전부 통과해도 잡아야 할 것: "개별적으로는 합리적일지라도" 판단의
+   **총합이 한쪽을 향하는가**(32) + 전기 추정이 **항상 같은 방향으로 빗나갔는가**(14).
+   유리/불리의 판정은 감사인 입력이고, 코드는 집계·임계만 맡는다. */
+
+function BiasSheet({ project, onSave }) {
+  const [prior, setPrior] = useState(project?.data?.audit_bias_input?.prior || [
+    { label: "매출액(전기 추정)", estimated: "", actual: "" },
+    { label: "영업이익(전기 추정)", estimated: "", actual: "" },
+    { label: "CAPEX(전기 추정)", estimated: "", actual: "" },
+  ]);
+  const [judg, setJudg] = useState(project?.data?.audit_bias_input?.judgments || [
+    { label: "영구성장률 선택", direction: "0" },
+    { label: "할인율(WACC) 선택", direction: "0" },
+    { label: "운전자본 가정", direction: "0" },
+  ]);
+  const [res, setRes] = useState(project?.data?.audit_bias_state || null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const setP = (i, k) => (e) => {
+    const n = prior.slice(); n[i] = { ...n[i], [k]: e.target.value }; setPrior(n);
+  };
+  const setJ = (i, k) => (e) => {
+    const n = judg.slice(); n[i] = { ...n[i], [k]: e.target.value }; setJudg(n);
+  };
+
+  const run = async () => {
+    setBusy(true); setErr(null); setRes(null);
+    const body = {
+      prior: prior.filter((r) => String(r.estimated).trim() && String(r.actual).trim())
+        .map((r) => ({ label: r.label, estimated: Number(r.estimated), actual: Number(r.actual) })),
+      judgments: judg.filter((r) => r.direction !== "0")
+        .map((r) => ({ label: r.label, direction: Number(r.direction) })),
+    };
+    try {
+      const d = await api.review.bias(body);
+      setRes(d);
+      onSave?.({
+        audit_bias_input: { prior, judgments: judg },
+        audit_bias_state: d,
+        // 개요 KPI 소비용 요약 — WARN 없으면 균형이라는 사실도 남긴다.
+        audit_bias_summary: { warn_count: d.warn_count },
+      });
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <>
+      <div className="card">
+        <h2>소급 검토 <span className="muted">— 전기 추정 vs 실제(540 문단 14)</span></h2>
+        <div className="pad">
+          <div className="muted" style={{ marginBottom: 8, fontSize: "0.82rem" }}>
+            목적은 당시 판단에 의문 제기가 아니라(기준서가 명시적으로 금지) <b>오차가
+            항상 같은 방향인지</b> 보는 것입니다. 값은 전기 의견서·사업보고서에서 읽어
+            입력하세요(DART 자동 대조는 로드맵).
+          </div>
+          <table>
+            <thead><tr><th>항목</th><th>당초 추정</th><th>실제</th></tr></thead>
+            <tbody>{prior.map((r, i) => (
+              <tr key={i}>
+                <td><input type="text" value={r.label} onChange={setP(i, "label")} style={{ width: 170 }} /></td>
+                <td><input type="text" value={r.estimated} onChange={setP(i, "estimated")} style={{ width: 110 }} /></td>
+                <td><input type="text" value={r.actual} onChange={setP(i, "actual")} style={{ width: 110 }} /></td>
+              </tr>))}</tbody>
+          </table>
+          <button className="ghost" style={{ marginTop: 6 }}
+            onClick={() => setPrior([...prior, { label: "", estimated: "", actual: "" }])}>+ 행</button>
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>판단 방향성 <span className="muted">— 유의적 판단의 쏠림(540 문단 32)</span></h2>
+        <div className="pad">
+          <div className="muted" style={{ marginBottom: 8, fontSize: "0.82rem" }}>
+            각 판단이 <b>가치를 올리는 쪽인지 내리는 쪽인지</b>만 표시하세요(예: 성장률을
+            컨센서스 상단으로 = 증가). 판정은 감사인, 집계는 도구.
+          </div>
+          <table>
+            <thead><tr><th>유의적 판단</th><th>방향</th></tr></thead>
+            <tbody>{judg.map((r, i) => (
+              <tr key={i}>
+                <td><input type="text" value={r.label} onChange={setJ(i, "label")} style={{ width: 220 }} /></td>
+                <td><select value={r.direction} onChange={setJ(i, "direction")} style={{ fontSize: 12 }}>
+                  <option value="0">— 미표시</option>
+                  <option value="1">가치 증가(+)</option>
+                  <option value="-1">가치 감소(−)</option>
+                </select></td>
+              </tr>))}</tbody>
+          </table>
+          <button className="ghost" style={{ marginTop: 6 }}
+            onClick={() => setJudg([...judg, { label: "", direction: "0" }])}>+ 행</button>{" "}
+          <button className="primary" disabled={busy} onClick={run}>
+            {busy ? "집계 중…" : "편의 징후 집계"}
+          </button>
+          {err && <div className="err" style={{ marginTop: 8 }}>{err}</div>}
+        </div>
+      </div>
+
+      {res && (
+        <div className="card">
+          <h2>판정</h2>
+          <div className="pad">
+            {res.rows.length > 0 && (
+              <table style={{ marginBottom: 10 }}>
+                <thead><tr><th>항목</th><th>추정</th><th>실제</th><th>오차</th></tr></thead>
+                <tbody>{res.rows.map((r, i) => (
+                  <tr key={i} className={r.error != null && Math.abs(r.error) > 0.1 ? "warn" : ""}>
+                    <td style={{ textAlign: "left" }}>{r.label}</td>
+                    <td>{r.estimated.toLocaleString("ko-KR")}</td>
+                    <td>{r.actual.toLocaleString("ko-KR")}</td>
+                    <td>{r.error == null ? "-" : `${(r.error * 100).toFixed(1)}%`}</td>
+                  </tr>))}</tbody>
+              </table>
+            )}
+            {res.findings.map((f, i) => (
+              <div key={i} className={`finding ${f.severity}`} style={{ marginTop: 6 }}>
+                <b>[{f.severity.toUpperCase()}] {f.rule}</b> — {f.message}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function Findings({ project, sheet, onSave }) {
-  return sheet === "narrative"
-    ? <NarrativeSheet project={project} />
-    : <ListSheet project={project} onSave={onSave} />;
+  if (sheet === "narrative") return <NarrativeSheet project={project} />;
+  if (sheet === "bias") return <BiasSheet project={project} onSave={onSave} />;
+  return <ListSheet project={project} onSave={onSave} />;
 }

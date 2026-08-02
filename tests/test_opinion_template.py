@@ -81,9 +81,15 @@ def test_real_dasan_smoke():
     e = extract_opinion(text, garble_confidence=0.3)
     assert e.entity_count >= 2               # 5개 종속회사(WACC 반복)
     assert e.is_sotp is True
-    assert 0.01 in e.terminal_growths        # 영구성장률 1.00%
+    assert e.terminal_growths                # 후보를 하나도 못 뽑으면 실패
+    # 한글 라벨이 살아있는 추출이면 **원문 표기값**과 일치해야 한다.
+    # (과거엔 `0.01` 을 단언했는데, 그건 CID 손실 시절 빈도앵커가 뽑던 값이고 원문에는
+    #  "영구성장률: 0.00% ~ 2.00%" 로 적혀 있다 — 틀린 기대치를 테스트가 고정하고 있었다.)
+    if "영구성장률" in text:
+        assert 0.02 in e.terminal_growths, e.terminal_growths      # 상한 2.00%
+        assert 0.0 in e.terminal_growths, e.terminal_growths       # 하한 0.00%
     print(f"  다산: entity={e.entity_count} terminal={e.terminal_growths} "
-          f"currencies={e.currencies}")
+          f"currencies={e.currencies} note={e.note or '-'}")
 
 
 if __name__ == "__main__":

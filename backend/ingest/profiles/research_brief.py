@@ -157,6 +157,27 @@ _FIELD_KO = {
 }
 
 
+def segment_allocation(segments: list[SegmentRevenue]) -> dict[str, float]:
+    """부문 매출(최신기간) → 정규화 배분율 dict {label: share}(합=1).
+
+    부문 트리 재현(calc_core 세그먼트 CAGR)의 배분 입력을 DART XBRL 세그먼트에서
+    자동 산출. 최신 기간의 부문별 매출 비중을 그대로 배분율로 쓴다(수기 하드코딩 대체).
+    부문이 없으면 빈 dict(호출자가 폴백). 음수/0 매출 부문은 제외(비중 왜곡 방지).
+    """
+    if not segments:
+        return {}
+    latest = max(s.period for s in segments)
+    rows = [s for s in segments if s.period == latest and s.revenue > 0]
+    total = sum(s.revenue for s in rows)
+    if total <= 0:
+        return {}
+    # 동일 라벨 중복은 합산(축 중복 방지)
+    agg: dict[str, float] = {}
+    for s in rows:
+        agg[s.label] = agg.get(s.label, 0.0) + s.revenue
+    return {label: rev / total for label, rev in agg.items()}
+
+
 def _fmt(v: float) -> str:
     return f"{v:,.0f}"
 

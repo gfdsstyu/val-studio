@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "./api.js";
-import { NAV, MODE_LABEL, firstAvailable } from "./nav.js";
+import { MODE_LABEL, firstAvailable, hiddenSheetCount, navFor } from "./nav.js";
 import Home from "./pages/Home.jsx";
 import ByokPanel from "./pages/Byok.jsx";
 import DcfSheet from "./pages/appraiser/DcfSheet.jsx";
@@ -19,6 +19,8 @@ import MaterialsSheet from "./pages/appraiser/MaterialsSheet.jsx";
 import MappingSheet from "./pages/appraiser/MappingSheet.jsx";
 import Dashboard from "./pages/appraiser/Dashboard.jsx";
 import Roundtrip from "./pages/appraiser/Roundtrip.jsx";
+import ReviewPanel from "./pages/appraiser/ReviewPanel.jsx";
+import AssembleSheet from "./pages/appraiser/AssembleSheet.jsx";
 import OpinionIngest from "./pages/auditor/OpinionIngest.jsx";
 import IndependentRecalc from "./pages/auditor/IndependentRecalc.jsx";
 import GapDiagnosis from "./pages/auditor/GapDiagnosis.jsx";
@@ -56,6 +58,28 @@ function CoverSheet({ project }) {
             <div className="kpi"><div className="v">{s ? Math.round(s.per_share).toLocaleString("ko-KR") + " 원" : "-"}</div><div className="k">{auditor ? "독립 추정 주당가치" : "최근 주당가치"}</div></div>
             {auditor && (
               <div className="kpi"><div className="v">{claimed != null ? Math.round(claimed).toLocaleString("ko-KR") + " 원" : "-"}</div><div className="k">의견서 주장</div></div>
+            )}
+            {auditor && d.audit_range_summary && (
+              /* 범위추정(540 문단 28~29) 요약 — 주장값이 감사인 범위 밖이면 개요에서 바로 보인다 */
+              <div className={`kpi${d.audit_range_summary.claimed_within === false ? " hero" : ""}`}>
+                <div className="v">
+                  {Math.round(d.audit_range_summary.low).toLocaleString("ko-KR")} ~{" "}
+                  {Math.round(d.audit_range_summary.high).toLocaleString("ko-KR")}
+                </div>
+                <div className="k">감사인 범위{d.audit_range_summary.claimed_within === false
+                  ? ` — 주장 범위 밖 (조정 ${Math.round(d.audit_range_summary.min_adjustment).toLocaleString("ko-KR")}원)`
+                  : ""}</div>
+              </div>
+            )}
+            {auditor && d.audit_bias_summary?.warn_count > 0 && (
+              /* 편의 징후(540 14·32) — 방향 쏠림·소급 오차는 개요에서 바로 보여야 한다 */
+              <div className="kpi hero"><div className="v">{d.audit_bias_summary.warn_count}</div>
+                <div className="k">편의 징후 경고</div></div>
+            )}
+            {auditor && (d.audit_cross_findings?.length > 0) && (
+              /* 교차 일관성(540 24(c)) — 공유 가정 불일치는 개요에서 바로 보여야 한다 */
+              <div className="kpi hero"><div className="v">{d.audit_cross_findings.length}</div>
+                <div className="k">추정치 간 가정 불일치</div></div>
             )}
             <div className="kpi"><div className="v">{s ? s.warn : "-"}</div><div className="k">audit 경고</div></div>
           </div>
@@ -101,7 +125,7 @@ function ContextPanel({ project }) {
   const prov = d.wacc_provenance || {};
   const provKeys = Object.keys(prov);
   const findings = [...(d.wacc_findings || []), ...(d.dcf_findings || []),
-    ...(d.three_statement_findings || [])];
+    ...(d.three_statement_findings || []), ...(d.review_findings || [])];
   const empty = !provKeys.length && !findings.length;
   return (
     <aside className="context-panel">
@@ -150,14 +174,15 @@ function Workspace({ projectId, onHome }) {
 
   useEffect(() => {
     api.projects.get(projectId)
-      .then((p) => { setProject(p); setPos(firstAvailable(p.mode)); })
+      .then((p) => { setProject(p); setPos(firstAvailable(p.mode, EMBED)); })
       .catch((e) => setErr(e.message));
   }, [projectId]);
 
   if (err) return <div className="err" style={{ padding: 20 }}>{err}</div>;
   if (!project || !pos) return <div className="placeholder">불러오는 중…</div>;
 
-  const stages = NAV[project.mode];
+  // Task Pane 은 브리지 축만(nav.js EMBED_ALLOW) — 넓은 스튜디오 시트는 탭에서.
+  const stages = navFor(project.mode, EMBED);
   const stage = stages.find((s) => s.id === pos.stage) ?? stages[0];
   const sheet = stage.sheets.find((s) => s.id === pos.sheet) ?? stage.sheets[0];
 
@@ -201,11 +226,16 @@ function Workspace({ projectId, onHome }) {
       return <DcfSheet project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "model")
       return <ModelSheet project={project} onSave={saveData} />;
+    if (stage.id === "valuation" && sheet.id === "review")
+      return <ReviewPanel project={project} onSave={saveData} />;
+    if (stage.id === "valuation" && sheet.id === "assemble")
+      return <AssembleSheet project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "scenario")
       return <ScenarioSheet project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "relative")
       return <RelativeSheet project={project} onSave={saveData} />;
-    if (stage.id === "output" && (sheet.id === "export" || sheet.id === "diff"))
+    if (stage.id === "output"
+        && ["export", "diff", "audit", "connectivity"].includes(sheet.id))
       return <Roundtrip project={project} sheet={sheet.id} onSave={saveData} />;
     // 감사인 트랙 — 평가인 트랙과 데이터·화면 모두 격리(모드는 생성 시 1회 확정).
     if (stage.id === "ingest")
@@ -279,13 +309,25 @@ function Workspace({ projectId, onHome }) {
             {sh.label}
           </button>
         ))}
+        {/* 축약이 '기능 없음'으로 오해되지 않도록 — 어디로 가면 되는지 명시(같은 프로젝트 공유). */}
+        {EMBED && !showByok && (
+          <a className="embed-more" target="_blank" rel="noreferrer"
+             href={`${window.location.pathname}?project=${project.id}`}
+             title="같은 프로젝트를 브라우저 탭에서 전체 화면으로 엽니다">
+            +{hiddenSheetCount(project.mode)} 시트 ↗
+          </a>
+        )}
       </div>
     </div>
   );
 }
 
 export default function App() {
-  const [view, setView] = useState({ page: "home" });
+  // 딥링크 `?project=<id>` — Task Pane 에서 "탭에서 이어서" 이동, 북마크 진입에 쓴다.
+  // (라우터를 도입하지 않고 초기 진입만 URL 에서 읽는다 — 이후 이동은 종전대로 상태.)
+  const initial = new URLSearchParams(window.location.search).get("project");
+  const [view, setView] = useState(
+    initial ? { page: "project", id: initial } : { page: "home" });
   if (view.page === "home")
     return <Home onOpen={(id) => setView({ page: "project", id })} />;
   return <Workspace projectId={view.id} onHome={() => setView({ page: "home" })} />;

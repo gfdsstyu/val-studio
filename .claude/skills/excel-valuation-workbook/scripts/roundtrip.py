@@ -22,6 +22,7 @@ import _bootstrap  # noqa: F401
 
 from calc_core import DcfSpineInput, run  # noqa: E402
 from excel.dcf_import import import_dcf_model  # noqa: E402
+from excel.fullmodel_layout import detect_fullmodel, import_fullmodel  # noqa: E402
 from excel.workbook_diff import diff_workbooks  # noqa: E402
 from excel.xlsx_reader import read_workbook  # noqa: E402
 
@@ -50,16 +51,32 @@ def main() -> None:
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return
 
-    # import → 재계산
-    inp = import_dcf_model(path)
+    # import → 재계산. 레이아웃 판별: 풀모델 템플릿(valstudio-full-v1)이면 셀맵
+    # 어댑터로, 아니면 기존 스파인(template_schema) 되읽기로.
+    wb = read_workbook(path)
+    meta = None
+    if detect_fullmodel(wb):
+        inp, meta = import_fullmodel(path)
+    else:
+        inp = import_dcf_model(path)
     res = run(inp)
     recovered = {f: getattr(inp, f) for f in _FIELDS}
     out = {
         "mode": "roundtrip",
+        "layout": meta.layout if meta else "valstudio-spine",
         "recovered_input": recovered,
         "per_share": round(res.per_share, 4),
         "enterprise_value": round(res.enterprise_value, 2),
     }
+    if meta is not None:
+        if meta.warnings:
+            out["warnings"] = meta.warnings
+        # 워크북 주장값(H49) vs 엔진 재계산 — 풀모델 tie-out 게이트
+        if meta.claimed_per_share is not None:
+            tie = isclose(res.per_share, meta.claimed_per_share, rel_tol=1e-6)
+            out["workbook_per_share"] = round(meta.claimed_per_share, 4)
+            out["tie_out_workbook"] = tie
+            out["gate_ok"] = tie
 
     if "--expect" in args:
         exp_path = args[args.index("--expect") + 1]

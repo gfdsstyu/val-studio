@@ -30,6 +30,9 @@ export const api = {
   health: () => j("GET", "/api/health"),
   dcf: (body) => j("POST", "/api/dcf", body),
   scenario: (body) => j("POST", "/api/scenario", body),
+  // 감사인 범위추정(기준서 540 문단 28~29): base 입력 + 가정별 구간(양끝 근거 필수)
+  // → 주당가치 범위 + 주장값 판정·최소 조정액. 근거 없는 구간은 서버가 계산을 차단.
+  rangeEstimate: (body) => j("POST", "/api/range-estimate", body),
   // 어셈블리: 커넥터 원천값(복붙 문자열 or 숫자) → 검증된 WACC/DCF.
   // 복붙 문자열(예 "3.45%")은 서버가 커넥터로 통과시켜 range 게이트를 건다.
   wacc: { assemble: (body) => j("POST", "/api/wacc/assemble", body) },
@@ -37,6 +40,10 @@ export const api = {
   revenueBuild: (body) => j("POST", "/api/revenue/build", body),
   peerSelect: (body) => j("POST", "/api/peer/select", body),
   ksicSearch: (q) => j("GET", `/api/ksic/search?q=${encodeURIComponent(q)}`),
+  // 산업 벤치마크 분포(OPM·DSO·DIO·CAPEX, p25/p50/p75) — IndustryProfileCard·감사 스킬용.
+  benchmarksIndustry: (name) => j("GET", `/api/benchmarks/industry?name=${encodeURIComponent(name)}`),
+  // 사업 성격 플래그 → 기법 추천(밸류에이션_기법선택_로직.md). MethodWizard용.
+  methodRecommend: (flags) => j("POST", "/api/method/recommend", flags),
   assumptionsBuild: (body) => j("POST", "/api/assumptions/build", body),
   assumptionsBuildCosts: (body) => j("POST", "/api/assumptions/costs-build", body),
   assumptionsLease: (body) => j("POST", "/api/assumptions/lease", body),
@@ -77,6 +84,8 @@ export const api = {
   uploadSheet: (body) => j("POST", "/api/upload/sheet", body),
   damodaranCrp: (country) => j("GET", `/api/damodaran/crp${country ? `?country=${encodeURIComponent(country)}` : ""}`),
   relativeValue: (body) => j("POST", "/api/relative/value", body),
+  backlog: (body) => j("POST", "/api/backlog", body),
+  briefFromXbrl: (body) => j("POST", "/api/brief/from_xbrl", body),
   bridgeCheck: (body) => j("POST", "/api/bridge/check", body),
   pgrSuggest: (body) => j("POST", "/api/macro/pgr-suggest", body),
   threeStatement: (body) => j("POST", "/api/three-statement", body),
@@ -87,6 +96,15 @@ export const api = {
     j("POST", "/api/macro/series", body, ecosKey ? { "X-Ecos-Key": ecosKey } : {}),
   // 서사 표현 가드: 단정·순환설명·무설명·뭉뚱그리기 + 필수 슬롯 공란(전부 WARN).
   reportLint: (body) => j("POST", "/api/report/lint", body),
+  // L3 분석적 절차(ISA 520 동형): 실적(DART)×추정 탑다운 검사 + 결함 영향 분리 원장.
+  review: {
+    analytical: (body) => j("POST", "/api/review/analytical", body),
+    ledger: (body) => j("POST", "/api/review/ledger", body),
+    // 추정치 간 교차 일관성(540 문단 24(c)) — 손상 g vs 평가 g 같은 공유 가정 대조.
+    crossEstimate: (body) => j("POST", "/api/review/cross-estimate", body),
+    // 편의 징후(540 문단 14·32) — 소급 검토 + 판단 방향성 집계.
+    bias: (body) => j("POST", "/api/review/bias", body),
+  },
   projects: {
     list: () => j("GET", "/api/projects"),
     create: (body) => j("POST", "/api/projects", body),
@@ -109,6 +127,13 @@ export const api = {
       return r.blob();
     },
     import: (xlsx_b64) => j("POST", "/api/xlsx/import", { xlsx_b64 }),
+    // 정적 감사(재계산 없는 수식 분석): 패턴 린트·하드코딩 스캔·민감도 중심셀 검산.
+    audit: (xlsx_b64) => j("POST", "/api/xlsx/audit", { xlsx_b64 }),
+    // 연결성 진단(의존성 그래프): "이 가정이 결과에 도달하는가" — 끊긴 시트·상수 잎·고아.
+    connectivity: (xlsx_b64, target) =>
+      j("POST", "/api/xlsx/connectivity", { xlsx_b64, ...(target ? { target } : {}) }),
+    // 값-only 복원(540 문단 22~25 입구): 표준=스파인 복원, 임의=암묵 WACC 역산.
+    recover: (xlsx_b64) => j("POST", "/api/xlsx/recover", { xlsx_b64 }),
     // 기준선 2방식: 저장된 프로젝트에서 재생성(권장 — 왕복 루프가 닫힘) 또는 원본 업로드.
     diffVsProject: (project_id, after_b64) =>
       j("POST", "/api/xlsx/diff", { project_id, after_b64 }),

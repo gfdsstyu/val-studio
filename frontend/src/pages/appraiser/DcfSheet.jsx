@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { api } from "../../api.js";
+import { DCF_FORM_DEFAULTS } from "../../demoCase.js";
+import TableTransfer from "../../TableTransfer.jsx";
 
 /* 4.밸류에이션 > DCF 시트 — 결정론 엔진 호출. 결과는 항상 KPI+게이트 동반.
    ⚠️ 과도기: 입력이 아직 이 시트에 있다 — IA 확정안(hard number 는 2.가정에만)대로
@@ -7,20 +9,9 @@ import { api } from "../../api.js";
 
 const parseSeries = (s) => s.split(/[\s,]+/).filter(Boolean).map(Number);
 
-const DEMO = {
-  wacc: "0.10", terminal_growth: "0.01",
-  revenue: "100000, 115000, 132000, 149000, 165000",
-  cogs: "40000, 46000, 52800, 59600, 66000",
-  sga: "20000, 23000, 26400, 29800, 33000",
-  dep_amort: "5000, 5000, 5000, 5000, 5000",
-  capex: "5000, 5000, 5000, 5000, 5000",
-  delta_nwc_cash_adj: "0, 0, 0, 0, 0",
-  non_operating_assets: "20000", net_debt: "10000", non_controlling_interest: "0",
-  shares_outstanding: "10000000", claimed_per_share: "", terminal_wc_ratio: "",
-  fade_years: "", fade_growth: "", terminal_from_last_fcff: false,
-  pgr_source: "", pgr_basis: "",
-  terminal_discount_period: "",
-};
+// 폼 기본값은 demoCase.js 가 단일 출처 — Home 의 샘플 프로젝트 생성이 같은 형태를
+// 만들어야 하고, 한쪽만 필드가 늘면 부분 폼이 되어 runDcf 에서 터진다.
+const DEMO = DCF_FORM_DEFAULTS;
 
 const FIELD_LABELS = [
   ["revenue", "매출액"],
@@ -130,6 +121,14 @@ export default function DcfSheet({ project, onSave }) {
     // R15: 터미널 할인기간 명시 선언(비우면 audit 가 WARN + 대안 영향 제시)
     if (form.terminal_discount_period?.toString().trim())
       body.terminal_discount_period = Number(form.terminal_discount_period);
+    // 컨벤션·오버라이드 3종 — 원본 모델 재현에 필요하다. 폼이 이들을 못 보내던 동안은
+    // 골든 입력을 그대로 넣어도 결과가 어긋났다(mid-year 를 안 보내니 기말 할인으로 계산).
+    if (form.mid_year_periods?.trim())
+      body.mid_year_periods = parseSeries(form.mid_year_periods);
+    if (form.tax_override?.trim())
+      body.tax_override = parseSeries(form.tax_override);
+    if (form.terminal_fcff_override?.toString().trim())
+      body.terminal_fcff_override = Number(form.terminal_fcff_override);
     // R2: PGR 출처 — 없으면 audit 이 '무근거 하드코드' WARN
     if (form.pgr_source?.trim()) body.pgr_source = form.pgr_source.trim();
     if (form.pgr_basis?.trim()) body.pgr_basis = form.pgr_basis.trim();
@@ -229,6 +228,26 @@ export default function DcfSheet({ project, onSave }) {
                 기말 t=n 과 mid-year t=n−0.5 모두 통용되나 <b>선택은 밝혀야 한다</b>(실측 영향 주당 −2.1%).
                 비우면 audit 이 대안 컨벤션의 금액 영향을 계산해 WARN 으로 제시한다.
               </div></div>
+            <div className="row"><label>중간연도 할인기간 (선택 — 연도별 t 배열)</label>
+              <input type="text" value={form.mid_year_periods}
+                onChange={set("mid_year_periods")}
+                placeholder="예: 0.5, 1.5, 2.5, 3.5, 4.5 (비우면 기말 1,2,3…)" />
+              <div className="muted" style={{ fontSize: "0.8rem", marginTop: 2 }}>
+                현금흐름이 연중 고르게 발생한다는 가정. 원본 모델을 재현할 땐 원본이
+                쓴 배열을 그대로 넣어야 값이 일치한다.
+              </div></div>
+            <div className="row"><label>법인세 직접 지정 (선택 — 연도별)</label>
+              <input type="text" value={form.tax_override}
+                onChange={set("tax_override")}
+                placeholder="비우면 EBIT×실효세율로 산출" />
+              <div className="muted" style={{ fontSize: "0.8rem", marginTop: 2 }}>
+                원본이 세금을 별도 산식으로 잡은 경우에만 쓴다(이연·공제 등).
+              </div></div>
+            <div className="row"><label>터미널 FCFF 직접 지정 (선택)</label>
+              <input type="text" value={form.terminal_fcff_override}
+                onChange={set("terminal_fcff_override")}
+                placeholder="비우면 터미널 컨벤션에 따라 산출" />
+            </div>
           </div>
           <label style={{ marginTop: 6 }}>추정 시계열 (백만원, 연도=열)</label>
           <div style={{ overflowX: "auto" }}>
@@ -282,7 +301,23 @@ export default function DcfSheet({ project, onSave }) {
 
       {res && (
         <div className="card">
-          <h2>결과</h2>
+          <h2>결과{" "}
+            {/* 결과 → 워크북(다리 3). 스파인 시계열 + 결론 KPI 를 한 표로 — 워크북에서
+                재입력하다 생기는 전기 오류를 없앤다. 값은 number(엑셀 숫자 셀). */}
+            <TableTransfer label="DCF 결과"
+              hint="선택 셀을 좌상단으로 기입"
+              rows={[
+                ["항목", ...Array.from({ length: years }, (_, i) => `Y${i + 1}`)],
+                ...FIELD_LABELS.map(([k, lab]) => [lab, ...grid[k].map(Number)]),
+                [],
+                ["주당가치(원)", Math.round(res.per_share)],
+                ["EV(백만원)", Math.round(res.enterprise_value)],
+                ["지분가치(백만원)", Math.round(res.equity_value)],
+                ["TV 비중", res.tv_weight == null ? "" : Number((res.tv_weight * 100).toFixed(1))],
+                ["WACC", Number(form.wacc)],
+                ["영구성장률(g)", Number(form.terminal_growth)],
+              ]} />
+          </h2>
           <div className="pad">
             <div className="kpis">
               <div className="kpi hero"><div className="v">{fmt(res.per_share)} 원</div><div className="k">주당가치</div></div>

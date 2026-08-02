@@ -14,10 +14,17 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 try:
     from fastapi.testclient import TestClient
-    from backend.api.main import app
 except ImportError:                                   # 3.14 등 미설치 환경
+    if "pytest" in sys.modules:                       # 수집 중 — 모듈 단위 skip
+        import pytest
+        pytest.skip("fastapi 미설치 — py -3.12 로 실행", allow_module_level=True)
     print("fastapi 미설치 — skip (py -3.12 로 실행)")
     sys.exit(0)
+
+# app 임포트는 try **밖**에 둔다. 안에 넣으면 ingest·excel·calc_core 로 이어지는
+# 연쇄 임포트 중 어디서 난 ImportError 든 "fastapi 미설치"로 오진하고 모듈레벨
+# sys.exit(0) 을 때린다 → pytest 에선 INTERNALERROR 로 죽고 진짜 예외는 가려진다.
+from backend.api.main import app                      # noqa: E402
 
 C = TestClient(app)
 
@@ -162,6 +169,11 @@ def test_dcf_assemble_end_to_end():
     assert not d["blocked"]
     assert d["per_share"] > 0 and d["enterprise_value"] > 0
     assert any(f["rule"] == "tv_weight" for f in d["findings"])
+    # 조립 스파인 동봉 — 프론트가 dcf_input 으로 반영하는 왕복 루프 재료
+    s = d["spine"]
+    for k in ("revenue", "cogs", "sga", "dep_amort", "capex", "delta_nwc_cash_adj"):
+        assert len(s[k]) == len(_OPS_BODY["revenue"])
+    assert s["cogs"][0] == 600.0                    # 1000 × cogs_pct 0.6
 
 
 def test_dcf_assemble_pgr_ge_wacc_blocks():
@@ -192,6 +204,80 @@ def test_peer_select_no_reason_422():
             "target_industry_codes": ["2710"],
             "judgments": [{"ticker": "A", "similar": True, "reason": " "}]}
     assert C.post("/api/peer/select", json=body).status_code == 422
+
+
+def test_viu_endpoint():
+    from calc_core.viu import ViuInputs, compute_viu
+    body = {"post_tax_cashflows": [120, 130, 140, 150, 160],
+            "post_tax_rate": 0.09, "tax_rate": 0.22,
+            "fvlcd": 400, "carrying_amount": 700}
+    r = C.post("/api/viu", json=body)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    direct = compute_viu(ViuInputs(post_tax_cashflows=[120, 130, 140, 150, 160],
+                                   post_tax_rate=0.09, tax_rate=0.22,
+                                   fvlcd=400, carrying_amount=700))
+    assert abs(d["viu_post_tax"] - direct.viu_post_tax) < 1e-9      # API=엔진 무가공
+    assert abs(d["viu_pre_tax"] - d["viu_post_tax"]) < 1e-6         # 유효세전율 정합
+    assert d["impairment_loss"] is not None
+
+
+def test_viu_bad_input_422():
+    assert C.post("/api/viu", json={"post_tax_rate": 0.1}).status_code == 422
+
+
+def test_rcps_endpoint():
+    from calc_core.backsolve import OpmParams, PreferredClass, price_rcps
+    body = {"enterprise_value": 1000, "liquidation_preference": 300,
+            "conversion_fraction": 0.2, "term_years": 3, "volatility": 0.3,
+            "risk_free": 0.05}
+    r = C.post("/api/rcps", json=body)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    direct = price_rcps(1000.0, PreferredClass("P", 300.0, 0.2),
+                        OpmParams(term_years=3, volatility=0.3, risk_free=0.05))
+    assert abs(d["preferred_value"] - direct.preferred_value) < 1e-9
+    assert abs(d["conversion_boundary"] - 1500.0) < 1e-6            # LP/frac
+    # 잔여 항등식: 우선주 + 보통주 = V0
+    assert abs(d["preferred_value"] + d["common_value"] - 1000.0) < 1e-6
+
+
+def test_relative_psr():
+    body = {"peers": [{"name": "H1", "psr": 6.0}, {"name": "H2", "psr": 8.0}],
+            "target_sps": 1000.0}
+    r = C.post("/api/relative/value", json=body)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert abs(d["psr"]["implied_per_share"] - 7000.0) < 1e-6       # median 7 × 1000
+
+
+def test_backlog_endpoint():
+    from calc_core.backlog import BacklogInputs, project_backlog
+    body = {"opening_backlog": 100000, "conversion_rate": 0.35,
+            "new_orders": [35000] * 5, "normalized_margin": 0.12, "years": 5}
+    r = C.post("/api/backlog", json=body)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    direct = project_backlog(BacklogInputs(
+        opening_backlog=100000, conversion_rate=0.35, new_orders=[35000.0] * 5,
+        normalized_margin=0.12, years=5))
+    assert abs(d["revenue"][0] - direct.revenue[0]) < 1e-9         # API=엔진 무가공
+    assert "revenue" in d["spine_lines"] and "cogs" in d["spine_lines"]
+
+
+def test_backlog_bad_input_422():
+    assert C.post("/api/backlog", json={"conversion_rate": 0.3}).status_code == 422
+
+
+def test_segment_allocation_helper():
+    from ingest.profiles.research_brief import SegmentRevenue, segment_allocation
+    segs = [SegmentRevenue("SegmentsAxis", "DS", "반도체", "2024", 600.0),
+            SegmentRevenue("SegmentsAxis", "DX", "디바이스", "2024", 400.0),
+            SegmentRevenue("SegmentsAxis", "DS", "반도체", "2023", 500.0)]  # 구기간 무시
+    alloc = segment_allocation(segs)
+    assert abs(alloc["반도체"] - 0.6) < 1e-9 and abs(alloc["디바이스"] - 0.4) < 1e-9
+    assert abs(sum(alloc.values()) - 1.0) < 1e-12
+    assert segment_allocation([]) == {}                            # 폴백
 
 
 if __name__ == "__main__":

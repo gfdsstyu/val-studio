@@ -19,10 +19,17 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 try:
     from fastapi.testclient import TestClient
-    from backend.api.main import app
 except ImportError:                                   # 3.14 등 미설치 환경
+    if "pytest" in sys.modules:                       # 수집 중 — 모듈 단위 skip
+        import pytest
+        pytest.skip("fastapi 미설치 — py -3.12 로 실행", allow_module_level=True)
     print("fastapi 미설치 — skip (py -3.12 로 실행)")
     sys.exit(0)
+
+# app 임포트는 try **밖**에 둔다. 안에 넣으면 ingest·excel·calc_core 로 이어지는
+# 연쇄 임포트 중 어디서 난 ImportError 든 "fastapi 미설치"로 오진하고 모듈레벨
+# sys.exit(0) 을 때린다 → pytest 에선 INTERNALERROR 로 죽고 진짜 예외는 가려진다.
+from backend.api.main import app                      # noqa: E402
 
 from excel.xlsx_reader import read_workbook            # noqa: E402
 from excel.xlsx_writer import Workbook                 # noqa: E402

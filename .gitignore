@@ -13,6 +13,10 @@ venv/
 .env.*
 *.key
 
+# 채용·대외 제안 성격 문서(개인 자산) — 기술 레포의 맥락과 분리한다.
+# 이 분석의 결론(문제 정의·검출 결함 카탈로그)은 README 에 녹여 공개한다.
+docs/plan/ax_consulting_model_quality.md
+
 # 대용량/재생성 가능 산출물 (원본 엑셀에서 재추출 가능, 원본은 레포 미포함)
 fixtures/**/raw_dump.json
 
@@ -23,6 +27,24 @@ out/
 data/source/
 *.xlsx
 *.pdf
+
+# 레퍼런스 코퍼스(저작권) — origin 이 public 레포라 원문·발췌는 올리지 않는다.
+#
+# 대상: 학회(SMIC) 기업 리포트 182편 원문 + 발췌/표 582개(31MB),
+#       산업 리포트 26편 원문 + 발췌(2.5MB).
+# 공개하는 것: 이 코퍼스에서 **귀납한** 지식 — 타이폴로지 6종·가정원장 방법론·
+#       기법선택 로직·산업 프로파일·벤치마크 집계(docs/reference/*.md).
+#       집계 통계(backend/calc_core/data/industry_benchmarks.json)도 기업 식별정보 없음.
+#
+# 비대칭성 주의: 공개는 되돌릴 수 없고(git history·미러·크롤러) 비공개는 한 줄로
+# 되돌린다. 그래서 회색지대(기업별 정리본, 원문의 ~2% 구조화 메타)도 일단 제외한다.
+# 공개로 전환하려면 아래 두 줄을 `docs/reference/*/\_fulltext/` 와
+# `docs/reference/*/\_extract/` 로 좁히면 된다.
+#
+# 런타임 영향 없음: 이 문서들을 읽는 rag/searcher.py 는 .claude/skills 전용이고
+# 웹 API(backend/api)는 참조하지 않는다. 컨테이너에도 docs/ 는 들어가지 않는다.
+docs/reference/smic/
+docs/reference/industry/
 
 # OS/IDE
 .DS_Store

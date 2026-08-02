@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { api } from "../../api.js";
+import MethodWizard from "./MethodWizard.jsx";
 
 /* 3.할인율 > 유사회사 4-step — /api/peer/select 배선.
    결정론 퍼널: step1 산업코드 → step2 사업유사성(판정) → step3 매출비중 → step4 상장·거래.
@@ -106,6 +107,7 @@ export default function PeerSheet({ project, onSave }) {
 
   return (
     <>
+      <MethodWizard />
       <div className="card">
         <h2>유사회사 4-step <span className="muted">— 결정론 퍼널 + 사업유사성 판정</span></h2>
         <div className="pad">

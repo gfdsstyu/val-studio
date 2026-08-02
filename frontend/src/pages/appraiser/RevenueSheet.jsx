@@ -190,6 +190,86 @@ export default function RevenueSheet({ project, onSave }) {
           </div>
         </div>
       )}
+
+      <BacklogPanel project={project} onSave={onSave} />
     </>
+  );
+}
+
+/* 수주산업(조선·건설·플랜트·방산) 매출 — 수주잔고→매출 전환→정상화 마진.
+   /api/backlog 배선. bottom-up 트리와 별개 경로(수주잔고가 매출 출발점). */
+function BacklogPanel({ project, onSave }) {
+  const [f, setF] = useState(project?.data?.backlog_input || {
+    opening_backlog: "10000000", conversion_rate: "0.35",
+    new_orders: "3500000, 3500000, 3500000, 3500000, 3500000",
+    normalized_margin: "0.12", years: "5" });
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState(null);
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+
+  const run = async () => {
+    setErr(null); setRes(null);
+    try {
+      const d = await api.backlog({
+        opening_backlog: Number(f.opening_backlog), conversion_rate: Number(f.conversion_rate),
+        new_orders: parseSeries(f.new_orders), normalized_margin: Number(f.normalized_margin),
+        years: Number(f.years) });
+      setRes(d);
+      onSave?.({ backlog_input: f, backlog_revenue: d.revenue });
+    } catch (e) { setErr(e.message); }
+  };
+
+  const pushToDcf = () => {
+    if (!res) return;
+    const prev = project?.data?.dcf_input || {};
+    onSave?.({ dcf_input: { ...prev,
+      revenue: res.spine_lines.revenue.map(Math.round).join(", "),
+      cogs: res.spine_lines.cogs.map(Math.round).join(", "),
+      sga: res.spine_lines.sga.map(Math.round).join(", ") } });
+  };
+
+  return (
+    <div className="card">
+      <h2>수주산업 매출 <span className="muted">— 수주잔고→매출 전환(조선·건설·플랜트·방산)</span></h2>
+      <div className="pad">
+        <div className="muted" style={{ marginBottom: 8 }}>
+          수주잔고가 매출 출발점(현재 손익 아님). 매출=기초잔고×전환율, 연말=기초−매출+신규수주.
+          선수금 구조라 ΔNWC≈0.</div>
+        <div className="grid2">
+          <div className="row"><label>기초 수주잔고 (백만원)</label>
+            <input type="text" value={f.opening_backlog} onChange={set("opening_backlog")} /></div>
+          <div className="row"><label>연 전환율 (0~1)</label>
+            <input type="text" value={f.conversion_rate} onChange={set("conversion_rate")} /></div>
+          <div className="row"><label>정상화 EBIT 마진 (0~1)</label>
+            <input type="text" value={f.normalized_margin} onChange={set("normalized_margin")} /></div>
+          <div className="row"><label>추정 연수</label>
+            <input type="text" value={f.years} onChange={set("years")} /></div>
+        </div>
+        <div className="row"><label>연도별 신규수주 (콤마, 백만원)</label>
+          <input type="text" value={f.new_orders} onChange={set("new_orders")} /></div>
+        <button className="primary" onClick={run}>수주잔고 매출 투영</button>
+        {err && <div className="err">{err}</div>}
+        {res && (
+          <div style={{ marginTop: 10 }}>
+            {res.warnings.map((w, i) => <div key={i} className="finding warn">{w}</div>)}
+            <table>
+              <thead><tr><th style={{ textAlign: "left" }}>항목</th>
+                {res.revenue.map((_, i) => <th key={i}>Y{i + 1}</th>)}</tr></thead>
+              <tbody>
+                <tr><th style={{ textAlign: "left" }}>매출</th>
+                  {res.revenue.map((v, i) => <td key={i}>{fmt(v)}</td>)}</tr>
+                <tr><th style={{ textAlign: "left" }}>EBIT</th>
+                  {res.ebit.map((v, i) => <td key={i}>{fmt(v)}</td>)}</tr>
+                <tr><th style={{ textAlign: "left" }}>연말잔고</th>
+                  {res.closing_backlog.map((v, i) => <td key={i}>{fmt(v)}</td>)}</tr>
+              </tbody>
+            </table>
+            <button className="primary" onClick={pushToDcf} style={{ marginTop: 12 }}>
+              이 매출을 DCF 입력에 반영
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

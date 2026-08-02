@@ -942,6 +942,8 @@ def audit_dcf(
     long_term_gdp: float = DEFAULT_LONG_TERM_GDP,
     pgr_source: str | None = None,
     pgr_basis: str | None = None,
+    history=None,
+    forecast_segments=None,
 ) -> ValidationReport:
     """DCF 입력·산출·(선택)WACC 입력에 대한 가정 타당성 종합 검사.
 
@@ -949,6 +951,9 @@ def audit_dcf(
     감사인에게 노출, fail(PGR≥WACC 등)은 결과 무효로 취급한다.
 
     pgr_source/pgr_basis 를 주면 PGR 출처 게이트(R2)도 함께 돈다.
+    history(analytical.FinancialHistory)를 주면 L3 분석적 절차(접합부 연속성·
+    V자 시그니처·성장-운전자본 정합 등)가 같은 리포트로 합류한다 — 실적 prior
+    없이는 돌 수 없는 검사들이라 optional(기존 호출부 무영향).
     """
     report = ValidationReport()
     # 터미널에서 재투자가 실제로 반영되는 경로들.
@@ -990,4 +995,794 @@ def audit_dcf(
     if wacc_inputs is not None:
         check_beta_provenance(wacc_inputs, report=report)
         check_beta_mrp_consistency(wacc_inputs, report=report)
+    if history is not None:
+        from .analytical import analytical_review
+        analytical_review(history, inp, forecast_segments=forecast_segments,
+                          report=report)
     return report
+
+
+# ── 복합금융(CB·RCPS) 게이트 — 근거: [[복합금융상품_평가]](Issue Paper 407·408, T-F 워크북 채록) ──
+# 신용악화 질적분석 임계: 스프레드 ≥ 10% (408: B→CCC 급락 구간, 통상 스프레드의 수 배).
+DISTRESSED_SPREAD_WARN = 0.10
+# 상쇄효과 감지 임계: 스프레드 급등에도 CB 가치 변화율이 이 미만이면 "비현실적 안정" 신호.
+CB_OFFSET_STABILITY_TOL = 0.05
+# with-without 분해 항등식 허용오차(상대).
+CB_DECOMP_TOL = 1e-6
+
+
+def check_convertible_distress(
+    credit_spread: float,
+    value: float,
+    *,
+    baseline_value: float | None = None,
+    spread_threshold: float = DISTRESSED_SPREAD_WARN,
+    offset_tol: float = CB_OFFSET_STABILITY_TOL,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """신용악화 CB 의 T-F 기계 산출값 게이트 (Issue Paper 408 승격).
+
+    408 핵심 관찰: 스프레드가 급등해도 변동성이 전환가치를 떠받쳐 CB 총가치가 거의
+    안 변하는 **상쇄효과** — 그러나 부실기업 주식은 휴지화 가능성이 크므로 이 안정성은
+    비현실적일 수 있다. 두 겹 게이트:
+      ① 스프레드 ≥ 임계 → 질적분석 필수 WARN(주가·변동성 동반 조정, Merton/Reduced-form
+         DP·RR 하향조정 CB_adj = CB×(1−DP) + Bond×R×DP, 유사등급 시장가 교차검증).
+      ② baseline_value(신용악화 전 가치)가 주어지고 가치 변화율 < offset_tol 이면
+         상쇄효과 WARN — 모델이 신용위험을 충분히 반영하지 못했을 신호.
+    """
+    out: list[Finding] = []
+    detail = {"credit_spread": credit_spread, "value": value,
+              "baseline_value": baseline_value, "spread_threshold": spread_threshold}
+    if credit_spread >= spread_threshold:
+        out.append(Finding(
+            "cb_distress", Severity.WARN,
+            f"신용스프레드 {credit_spread:.0%} ≥ {spread_threshold:.0%} — 신용악화 구간. "
+            f"T-F 기계 산출값을 회계 반영 전 질적분석 필수(DP·RR 하향조정, 유사등급 시장가 대조)",
+            detail))
+        if baseline_value is not None and baseline_value > 0:
+            change = abs(value - baseline_value) / baseline_value
+            d2 = dict(detail, change=round(change, 6), offset_tol=offset_tol)
+            if change < offset_tol:
+                out.append(Finding(
+                    "cb_offset_effect", Severity.WARN,
+                    f"스프레드 급등에도 CB 가치 변화 {change:.1%} < {offset_tol:.0%} — "
+                    f"변동성이 채권가치 하락을 상쇄(408). 부실기업 주식 휴지화 가능성 미반영 의심",
+                    d2))
+            else:
+                out.append(Finding(
+                    "cb_offset_effect", Severity.PASS,
+                    f"스프레드 반영 후 CB 가치 변화 {change:.1%} — 상쇄효과 신호 없음", d2))
+    else:
+        out.append(Finding(
+            "cb_distress", Severity.PASS,
+            f"신용스프레드 {credit_spread:.1%} < {spread_threshold:.0%} — 정상 신용 구간", detail))
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out
+
+
+def check_cb_decomposition(
+    total_value: float,
+    bond_value: float,
+    embedded_value: float,
+    *,
+    tol: float = CB_DECOMP_TOL,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """"CB 전체 = 일반사채 + 내재파생" 항등식 게이트 (T-F 워크북 반면교사 승격).
+
+    with-without 분해는 **동일 모델·동일 가정** 안에서만 성립한다. 채록 실측:
+    'TF_Model_CB_Valuation_Detailed_Steps' 는 연속할인·쿠폰無 트리(121.02)에서
+    이산할인·쿠폰 4배 채권(119.67)을 차감해 'Residual 1.35' 를 내재옵션이라 표기 —
+    이종 가정 차감이라 분해가 비정합이다. 외부 평가서·워크북 검증 시 이 게이트로 잡는다.
+    """
+    gap = total_value - bond_value - embedded_value
+    scale = max(abs(total_value), 1e-12)
+    detail = {"total": total_value, "bond": bond_value, "embedded": embedded_value,
+              "gap": gap, "tol": tol}
+    if abs(gap) / scale > tol:
+        f = Finding("cb_decomposition", Severity.WARN,
+                    f"CB 분해 비정합: 전체({total_value:,.2f}) − 채권({bond_value:,.2f}) − "
+                    f"내재파생({embedded_value:,.2f}) = {gap:+,.4f} — 이종 가정 차감 의심"
+                    f"(할인방식·쿠폰 규약이 양변 동일한지 확인)",
+                    detail)
+    else:
+        f = Finding("cb_decomposition", Severity.PASS,
+                    f"CB 분해 정합: 전체 = 채권 + 내재파생 (오차 {gap:+.2e})", detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
+# ── 공정가치(FV) 게이트 — 근거: [[공정가치_측정_FV]](IFRS Issue Paper 345/346/347/350/411/412/414) ──
+# Backsolve 앵커 시점 괴리 경고 임계(일): 평가일과 최근 라운드가 반 년 이상 떨어지면 조정 필요.
+BACKSOLVE_ANCHOR_STALE_DAYS = 180.0
+
+
+def check_backsolve_anchor(
+    is_arms_length: bool | None,
+    days_gap: float | None,
+    *,
+    stale_days: float = BACKSOLVE_ANCHOR_STALE_DAYS,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """Backsolve 앵커(최근 라운드 거래) 신뢰성 게이트 (Issue Paper 411/412 승격).
+
+    Backsolve 는 "거래가액=공정가액" 전제 위에 서 있다 — 전제가 무너지는 두 축:
+      ① Arm's Length 아님(특수관계·전략적 투자·강요) → 앵커 자체가 오염.
+      ② 평가일과 거래 시점 괴리 → 그 사이 가치변동 미반영, 조정 필요.
+    LLM 대원칙과 동일하게 미확인(None)은 임의 통과 금지 — 확인 요구 WARN.
+    """
+    out: list[Finding] = []
+    if is_arms_length is None:
+        out.append(Finding(
+            "backsolve_anchor_arms_length", Severity.WARN,
+            "앵커 거래의 Arm's Length 여부 미확인 — 투자계약서·거래상대방 확인 필요"
+            "(특수관계·전략적 프리미엄이면 앵커 오염)", {"is_arms_length": None}))
+    elif not is_arms_length:
+        out.append(Finding(
+            "backsolve_anchor_arms_length", Severity.WARN,
+            "앵커 거래가 Arm's Length 아님 — 거래가액≠공정가액, 조정 없이는 Backsolve 부적합",
+            {"is_arms_length": False}))
+    else:
+        out.append(Finding(
+            "backsolve_anchor_arms_length", Severity.PASS,
+            "앵커 거래 독립성(Arm's Length) 확인", {"is_arms_length": True}))
+
+    if days_gap is not None:
+        detail = {"days_gap": days_gap, "stale_days": stale_days}
+        if days_gap > stale_days:
+            out.append(Finding(
+                "backsolve_anchor_staleness", Severity.WARN,
+                f"평가일과 앵커 거래 시점 괴리 {days_gap:.0f}일 > {stale_days:.0f}일 — "
+                f"그 사이 가치변동 조정 필요(411: 시점이 다르면 적절한 조정)", detail))
+        else:
+            out.append(Finding(
+                "backsolve_anchor_staleness", Severity.PASS,
+                f"앵커 거래 시점 괴리 {days_gap:.0f}일 ≤ {stale_days:.0f}일", detail))
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out
+
+
+def check_fv_hierarchy(
+    input_levels: dict[str, int],
+    *,
+    claimed_level: int | None = None,
+    adjusted_level1: bool = False,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """공정가치 수준 판정 게이트 (Issue Paper 345/346 승격).
+
+    핵심 규칙 2개의 결정론 인코딩:
+      ① **가장 낮은 수준이 지배**: 공정가치 수준 = max(사용 변수들의 level 번호).
+         (예: 주가 L1 + 역사적 변동성 L3 → 전체 L3. 대부분의 CB·RCPS 가 L3 인 이유.)
+      ② **조정 = 강등**: Level 1 가격에 조정을 가하면(문단79 예외 포함) 수준이 내려간다.
+    claimed_level 이 계산 수준보다 높으면(숫자가 작으면) WARN — 서열 과대표기.
+    """
+    if not input_levels:
+        raise ValueError("input_levels 비어 있음 — 변수별 수준을 명시할 것")
+    bad = {k: v for k, v in input_levels.items() if v not in (1, 2, 3)}
+    if bad:
+        raise ValueError(f"level 은 1/2/3 만 허용: {bad}")
+    implied = max(input_levels.values())
+    if adjusted_level1 and implied == 1:
+        implied = 2                     # 조정 가한 L1 은 최소 L2 로 강등(345/346)
+    detail = {"input_levels": input_levels, "implied_level": implied,
+              "claimed_level": claimed_level, "adjusted_level1": adjusted_level1}
+    worst = [k for k, v in input_levels.items() if v == max(input_levels.values())]
+    if claimed_level is not None and claimed_level < implied:
+        f = Finding("fv_hierarchy", Severity.WARN,
+                    f"공정가치 수준 과대표기: 주장 Level {claimed_level} < 계산 Level {implied} "
+                    f"(최저수준 변수 {worst} 가 지배 — 상쇄되어도 상향 불가)", detail)
+    else:
+        f = Finding("fv_hierarchy", Severity.PASS,
+                    f"공정가치 수준 = Level {implied} (지배 변수 {worst})", detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
+def check_day_one_difference(
+    transaction_price: float,
+    fair_value: float,
+    level: int,
+    *,
+    tol: float = 1e-6,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """day-one 차이 처리 게이트 (Issue Paper 347 승격).
+
+    거래가격 ≠ 최초 공정가치이면:
+      Level 1·2 → 즉시 당기손익 인식.
+      Level 3   → 차이를 이연 → 만기 상각(한국 실무 정액법 다수).
+    어느 쪽이든 **비금융요소 판단이 선행**(347/이슈8): 거래상대방이 주주·종업원·제3자면
+    비용·배당·급여 처리 후보 — 이연상각으로 덮지 말 것.
+    """
+    if level not in (1, 2, 3):
+        raise ValueError("level 은 1/2/3")
+    diff = fair_value - transaction_price
+    scale = max(abs(transaction_price), 1e-12)
+    detail = {"transaction_price": transaction_price, "fair_value": fair_value,
+              "level": level, "diff": diff}
+    if abs(diff) / scale <= tol:
+        f = Finding("day_one_difference", Severity.PASS,
+                    "거래가격 ≈ 최초 공정가치 — day-one 차이 없음", detail)
+    elif level == 3:
+        f = Finding("day_one_difference", Severity.WARN,
+                    f"day-one 차이 {diff:+,.0f} (Level 3) — 이연 후 상각 대상. "
+                    f"이연 전 비금융요소(특수관계 저가양도 등) 여부 먼저 판단", detail)
+    else:
+        f = Finding("day_one_difference", Severity.WARN,
+                    f"day-one 차이 {diff:+,.0f} (Level {level}) — 즉시 당기손익 인식 대상. "
+                    f"비금융요소 여부 먼저 판단", detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
+def check_market_price_eligibility(
+    level1_available: bool,
+    method_used: str,
+    *,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """활성시장 가격 우선 게이트 (Issue Paper 350/414 승격).
+
+    "Level 1 정보가 이용가능하면 문단79 예외가 아닌 한 모델·matrix·broker 가격을
+    쓸 수 없다"(350). method_used ∈ {'quoted','model','matrix','broker','consensus'}.
+    ⚠️ 역도 성립: 활성시장 시가가 있는데 DCF 단독 채택이면 근거 요구
+    (414: 공정가치 ≠ Level 1 공정가치 구분은 정당하나, L1 을 두고 하위를 쓰는 건 별개).
+    """
+    allowed = {"quoted", "model", "matrix", "broker", "consensus", "dcf"}
+    if method_used not in allowed:
+        raise ValueError(f"method_used 는 {sorted(allowed)} 중 하나")
+    detail = {"level1_available": level1_available, "method_used": method_used}
+    if level1_available and method_used != "quoted":
+        f = Finding("market_price_eligibility", Severity.WARN,
+                    f"활성시장 Level 1 가격이 이용가능한데 '{method_used}' 사용 — "
+                    f"문단79 예외(대량 유사자산 매트릭스/종가 미대변/부채·자기지분)가 "
+                    f"아니면 Level 1 우선", detail)
+    else:
+        f = Finding("market_price_eligibility", Severity.PASS,
+                    f"가격 원천 '{method_used}' — Level 1 우선 규칙 위반 없음", detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
+# ── SBC·희석 게이트 — 근거: [[주식기준보상_희석_SBC]](Issue Paper 524/526/742/743) ──
+def check_dilution_bridge(
+    has_dilutive_instruments: bool,
+    dilutive_claims_value: float,
+    *,
+    method: str = "value_deduction",
+    report: ValidationReport | None = None,
+) -> Finding:
+    """희석 청구권 반영 게이트 (Issue Paper 526 다모다란 주당가치 승격).
+
+    전환증권·옵션·워런트가 존재하는데 주당가치 브리지가 이를 무시하면 과대평가.
+    method:
+      'value_deduction' — 다모다란 가치차감법(권장): 모든 옵션 FV 를 분자에서 차감,
+        분모=기본 주식수. 시간가치·OTM 옵션까지 반영.
+      'treasury_stock'  — TSM(자기주식법): 분모 조정. **시간가치 미반영·OTM 완전 무시**
+        한계(526 Case B: OTM 이면 희석 0 처리) → WARN 으로 한계 표면화.
+      'none'            — 미처리.
+    """
+    allowed = {"value_deduction", "treasury_stock", "none"}
+    if method not in allowed:
+        raise ValueError(f"method 는 {sorted(allowed)} 중 하나")
+    detail = {"has_dilutive_instruments": has_dilutive_instruments,
+              "dilutive_claims_value": dilutive_claims_value, "method": method}
+    if not has_dilutive_instruments:
+        f = Finding("dilution_bridge", Severity.PASS,
+                    "희석 청구권 없음 — 기본 주식수 브리지 정당", detail)
+    elif method == "none" or (method == "value_deduction" and dilutive_claims_value <= 0):
+        f = Finding("dilution_bridge", Severity.WARN,
+                    "전환증권·옵션 존재하는데 희석 미반영 — 주당가치 과대. "
+                    "옵션 FV 를 지분가치에서 차감(가치차감법)하거나 근거 제시", detail)
+    elif method == "treasury_stock":
+        f = Finding("dilution_bridge", Severity.WARN,
+                    "TSM(자기주식법) 사용 — 시간가치 미반영·OTM 옵션 무시 한계. "
+                    "가치차감법(옵션 FV 분자 차감 + 기본 주식수) 검토 권장", detail)
+    else:
+        f = Finding("dilution_bridge", Severity.PASS,
+                    f"희석 청구권 FV {dilutive_claims_value:,.0f} 분자 차감(가치차감법)", detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
+def check_sbc_treatment(
+    sbc_expense_positive: bool,
+    added_back_to_fcf: bool,
+    *,
+    purpose: str = "valuation",
+    cash_settled: bool = False,
+    discount_rate_adjusted: bool = False,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """주식기준보상(SBC) 처리 게이트 (Issue Paper 742/743 승격).
+
+    purpose='valuation' (계속기업 DCF·내재가치):
+      다모다란 — SBC add-back 은 '공짜 점심'. 주식결제형도 현물(in-kind) 실질비용이므로
+      FCF 에서 차감(add-back 금지). add-back 이면 FCF 과대 → WARN.
+    purpose='viu' (IAS 36 손상 사용가치):
+      현금결제형 → 현금유출이므로 포함(제외하면 WARN).
+      주식결제형 → 문언상 현금흐름에서 제외가 원칙. 대신 경제적 희석은 **할인율 상향**으로
+      반영 가능(BDO, 이중계산 방지 원칙과 정합). 현금흐름 차감(비인정 위험)이나
+      제외+할인율 미조정(손상 은폐 위험) 모두 WARN — 전문판단·근거 요구.
+    """
+    if purpose not in {"valuation", "viu"}:
+        raise ValueError("purpose 는 'valuation' | 'viu'")
+    detail = {"sbc_expense_positive": sbc_expense_positive,
+              "added_back_to_fcf": added_back_to_fcf, "purpose": purpose,
+              "cash_settled": cash_settled,
+              "discount_rate_adjusted": discount_rate_adjusted}
+    if not sbc_expense_positive:
+        f = Finding("sbc_treatment", Severity.PASS, "SBC 비용 없음", detail)
+    elif purpose == "valuation":
+        if added_back_to_fcf:
+            f = Finding("sbc_treatment", Severity.WARN,
+                        "SBC 를 FCF 에 add-back — 현물(in-kind) 실질비용 무시로 FCF 과대"
+                        "(다모다란: malpractice). 차감 유지 + 옵션 FV 는 희석 브리지로", detail)
+        else:
+            f = Finding("sbc_treatment", Severity.PASS,
+                        "SBC 를 비용으로 유지(add-back 안 함) — 경제적 실질 정합", detail)
+    else:  # viu
+        if cash_settled:
+            if added_back_to_fcf:
+                f = Finding("sbc_treatment", Severity.WARN,
+                            "현금결제형 SBC 를 VIU 현금흐름에서 제외 — 실제 현금유출이므로 "
+                            "CGU 배분비용에 포함해야 함", detail)
+            else:
+                f = Finding("sbc_treatment", Severity.PASS,
+                            "현금결제형 SBC 를 VIU 현금유출에 포함", detail)
+        elif not added_back_to_fcf:
+            f = Finding("sbc_treatment", Severity.WARN,
+                        "주식결제형 SBC 를 VIU 현금흐름에서 직접 차감 — IAS 36 문언"
+                        "(비현금성 제외)과 충돌, 회계적 비인정 위험. 할인율 조정 경로 검토", detail)
+        elif not discount_rate_adjusted:
+            f = Finding("sbc_treatment", Severity.WARN,
+                        "주식결제형 SBC 를 VIU 에서 제외했으나 할인율 미조정 — 경제적 희석 "
+                        "미반영으로 VIU 과대(손상 은폐 위험). 할인율 상향+주석공시 검토", detail)
+        else:
+            f = Finding("sbc_treatment", Severity.PASS,
+                        "주식결제형 SBC: VIU 현금흐름 제외 + 할인율 조정 반영"
+                        "(이중계산 방지 정합)", detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
+# ── 손상(VIU) 게이트 — 근거: [[손상검사_impairment]](Issue Paper 234/235/745/746/747/413) ──
+# 세전·세후 VIU 일치 허용오차(상대) — 유효세전율 역산 수렴 기준.
+VIU_PRE_POST_TOL = 0.01
+
+
+def check_viu_discount_rate(
+    viu_pre_tax: float | None = None,
+    viu_post_tax: float | None = None,
+    *,
+    simple_gross_up_used: bool = False,
+    market_observed_rate_available: bool = False,
+    used_capm_surrogate: bool = True,
+    tol: float = VIU_PRE_POST_TOL,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """VIU 할인율 게이트 (Issue Paper 234 승격).
+
+    ① 시장관점 우선: 동일/유사 거래의 내재 할인율이 관측되면 CAPM WACC(대용치)
+       자동적용 금지. ② 세전율은 세후율의 단순 Gross-Up 이 아니다 — 실무 정석은
+       세후 기준 계산 후 **세전 VIU == 세후 VIU** 가 되는 유효세전율을 시행착오 역산.
+    """
+    out: list[Finding] = []
+    if market_observed_rate_available and used_capm_surrogate:
+        out.append(Finding(
+            "viu_rate_market_first", Severity.WARN,
+            "동일/유사 거래의 내재 할인율이 관측 가능한데 CAPM WACC(대용치) 사용 — "
+            "시장관점 우선(234), 관측 할인율 채택 또는 미채택 근거 필요",
+            {"market_observed_rate_available": True}))
+    if simple_gross_up_used:
+        out.append(Finding(
+            "viu_rate_gross_up", Severity.WARN,
+            "세전 할인율을 세후율의 단순 Gross-Up 으로 산출 — 정석은 세전 VIU == 세후 "
+            "VIU 가 되는 유효세전율 역산(gross-up 은 우연히만 일치)",
+            {"simple_gross_up_used": True}))
+    if viu_pre_tax is not None and viu_post_tax is not None:
+        scale = max(abs(viu_post_tax), 1e-12)
+        gap = abs(viu_pre_tax - viu_post_tax) / scale
+        detail = {"viu_pre_tax": viu_pre_tax, "viu_post_tax": viu_post_tax,
+                  "rel_gap": round(gap, 6), "tol": tol}
+        if gap > tol:
+            out.append(Finding(
+                "viu_pre_post_consistency", Severity.WARN,
+                f"세전 VIU 와 세후 VIU 괴리 {gap:.1%} > {tol:.0%} — 유효세전율이 "
+                f"수렴하지 않음(두 VIU 는 동일해야 함)", detail))
+        else:
+            out.append(Finding(
+                "viu_pre_post_consistency", Severity.PASS,
+                f"세전·세후 VIU 일치(괴리 {gap:.2%}) — 유효세전율 정합", detail))
+    if not out:
+        out.append(Finding("viu_discount_rate", Severity.PASS,
+                           "VIU 할인율 위반 신호 없음", {}))
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out
+
+
+def check_viu_cashflow_scope(
+    *,
+    includes_financing: bool = False,
+    includes_tax: bool = False,
+    includes_uncommitted_restructuring: bool = False,
+    includes_enhancement_capex: bool = False,
+    provision_double_counted: bool = False,
+    forecast_years: int | None = None,
+    forecast_justified: bool = False,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """VIU 현금흐름 스코프 게이트 (Issue Paper 745/746 승격).
+
+    IAS 36 '현금흐름 순수성': 금융활동(할인율에 기반영 — 이중계산)·법인세·미확정
+    구조조정·성능 개선/향상 CAPEX 는 배제. 이미 인식된 복구충당부채 관련 유출을
+    현금흐름과 장부금액 양쪽에 반영하면 중복차감. 예측기간 >5년은 정당화 필요.
+    """
+    out: list[Finding] = []
+    viol = [
+        (includes_financing, "viu_cf_financing",
+         "금융활동(이자·차입) 현금흐름 포함 — 차입원가는 할인율에 기반영, 이중계산(745 Case 2)"),
+        (includes_tax, "viu_cf_tax",
+         "법인세 현금흐름 포함 — IAS 36 은 세전 기준(세후 병행 시 유효세전율 역산으로)"),
+        (includes_uncommitted_restructuring, "viu_cf_restructuring",
+         "IAS 37 요건(구체적·공표·임박) 미충족 구조조정 절감 포함 — 배제 대상"),
+        (includes_enhancement_capex, "viu_cf_enhancement",
+         "성능 개선/향상 CAPEX·효과 포함 — VIU 는 자산의 현재 상태 기준(현상유지만)"),
+        (provision_double_counted, "viu_cf_provision_double",
+         "복구충당부채 유출을 현금흐름·장부금액 양쪽에 반영 — 중복차감(746: 하나로만)"),
+    ]
+    for flag, rule, msg in viol:
+        if flag:
+            out.append(Finding(rule, Severity.WARN, msg, {}))
+    if forecast_years is not None and forecast_years > 5 and not forecast_justified:
+        out.append(Finding(
+            "viu_forecast_horizon", Severity.WARN,
+            f"예측기간 {forecast_years}년 > 5년 — 정당화 근거(장기계약·규제산업 등) 없이 "
+            f"초과 금지(K-IFRS 1036.35)", {"forecast_years": forecast_years}))
+    if not out:
+        out.append(Finding("viu_cashflow_scope", Severity.PASS,
+                           "VIU 현금흐름 스코프 위반 없음", {}))
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out
+
+
+def check_impairment_trigger(
+    market_cap: float,
+    net_book_value: float,
+    *,
+    report: ValidationReport | None = None,
+) -> Finding:
+    """외부 손상징후 게이트 (Issue Paper 747 + IAS 36.12(d) 승격).
+
+    시가총액 < 순자산 장부금액 = 명백한 외부 trigger. 단 전사 일괄감액이 아니라
+    실질 영향을 받는 자산·CGU 를 판단으로 식별해 회수가능액 추정(영업권 배분 CGU 우선,
+    IAS 36.90~96; 손상 시 영업권 먼저 차감, 36.104). ⚠️ 시총은 **자사주 제외
+    유통주식수** 기준([[손상검사_impairment]] §9b — KRX 기본 시총은 자사주 포함 과대).
+    """
+    detail = {"market_cap": market_cap, "net_book_value": net_book_value}
+    if net_book_value > 0 and market_cap < net_book_value:
+        f = Finding("impairment_trigger", Severity.WARN,
+                    f"시가총액({market_cap:,.0f}) < 순자산 장부금액({net_book_value:,.0f}) — "
+                    f"외부 손상징후(IAS 36.12(d)). 전사 일괄감액 금지, 영향 CGU 식별 후 "
+                    f"회수가능액 추정(영업권 CGU 우선)", detail)
+    else:
+        f = Finding("impairment_trigger", Severity.PASS,
+                    "시가총액 ≥ 순자산 장부금액 — 외부 손상징후(12(d)) 없음", detail)
+    if report is not None:
+        report.add(f)
+    return f
+
+
+# ── 계속기업·FCFE 게이트 — 근거: [[실전평가_상장사_사례집]](홈플러스)·[[DCF_교육_정본]](FCFE 주의점) ──
+# 홈플러스 실측 임계: Debt/EBITDA 8배(업계 3~4배 대비 과도), ICR<1 지속.
+GOING_CONCERN_DEBT_EBITDA_WARN = 8.0
+
+
+def check_going_concern(
+    *,
+    net_loss_with_positive_ocf: bool = False,
+    current_ratio: float | None = None,
+    icr_below_one_persistent: bool = False,
+    debt_to_ebitda: float | None = None,
+    debt_ebitda_threshold: float = GOING_CONCERN_DEBT_EBITDA_WARN,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """계속기업 가정 게이트 (홈플러스 부실 사례 승격 — 실행 전 게이트 계열).
+
+    계속기업 가정이 흔들리면 계속기업 DCF 자체가 무의미(청산가치 vs 계속기업가치 비교
+    국면). 신호 4축:
+      ① 당기순손실 + 영업현금흐름 큰 양수 = 미지급이자·미지급금 미지급으로 만든
+         "흑자도산" 전형 — 비현금조정·운전자본 내역 확인 필수.
+      ② 유동비율 < 100% — 단기 상환능력 결여.
+      ③ ICR(이자보상배율) < 1 지속 — 이자도 못 갚는 구조.
+      ④ Debt/EBITDA ≥ 임계(기본 8배) — 상환능력 과도 취약.
+    """
+    out: list[Finding] = []
+    if net_loss_with_positive_ocf:
+        out.append(Finding(
+            "going_concern_ocf_paradox", Severity.WARN,
+            "당기순손실인데 영업현금흐름 큰 (+) — 미지급이자·미지급금 내역 확인"
+            "(흑자도산 신호: 지급할 것을 지급하지 않아 만든 현금흐름)", {}))
+    if current_ratio is not None and current_ratio < 1.0:
+        out.append(Finding(
+            "going_concern_current_ratio", Severity.WARN,
+            f"유동비율 {current_ratio:.0%} < 100% — 단기차입 상환능력 결여, "
+            f"계속기업 불확실성 원인", {"current_ratio": current_ratio}))
+    if icr_below_one_persistent:
+        out.append(Finding(
+            "going_concern_icr", Severity.WARN,
+            "이자보상배율(ICR) < 1 지속 — 이자조차 감당 못 하는 구조", {}))
+    if debt_to_ebitda is not None and debt_to_ebitda >= debt_ebitda_threshold:
+        out.append(Finding(
+            "going_concern_leverage", Severity.WARN,
+            f"Debt/EBITDA {debt_to_ebitda:.1f}배 ≥ {debt_ebitda_threshold:.0f}배 — "
+            f"부채상환능력 과도 취약(업계 통상 3~4배)", {"debt_to_ebitda": debt_to_ebitda}))
+    if out:
+        out.append(Finding(
+            "going_concern", Severity.WARN,
+            f"계속기업 신호 {len(out)}건 — 계속기업 DCF 전 청산가치 비교·감사인 "
+            f"계속기업 검토 필요(신호 다수면 계속기업 DCF 자체가 무의미)", {"signals": len(out)}))
+    else:
+        out.append(Finding("going_concern", Severity.PASS, "계속기업 위험 신호 없음", {}))
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out
+
+
+def check_fcfe_usage(
+    *,
+    uses_fcfe: bool,
+    discounted_at_cost_of_equity: bool = False,
+    levered_beta_used: bool = False,
+    net_borrowing_included: bool = False,
+    borrowing_nature_assessed: bool = False,
+    stable_target_leverage: bool = False,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """FCFE 사용 게이트 (FCFF 대신 FCFE 를 쓸 때의 주의점 승격).
+
+    FCFE 는 핵심 변수를 영업성과 → 재무구조·차입정책으로 이동시킨다. 규칙:
+      ① 반드시 자기자본비용(Ke)·레버리지드 베타로 할인(분자·분모 대응).
+      ② 차입금 순증가 기계 포함 = "빚으로 만든 (+) 착시" — 구조적 조달인지
+         일시 브릿지인지 판단 선행.
+      ③ 부채비율 급변에 단일 Ke 적용 금지 — 장기 목표 레버리지 기준.
+      ④ FCFF 음수라는 이유만으로 FCFE 전환 금지(성장기 음수는 '투자 중' 신호 —
+         FCFF 유지 + PSR 등 병행이 정석).
+    """
+    out: list[Finding] = []
+    if not uses_fcfe:
+        out.append(Finding("fcfe_usage", Severity.PASS, "FCFF 사용 — FCFE 게이트 해당 없음", {}))
+    else:
+        if not discounted_at_cost_of_equity:
+            out.append(Finding(
+                "fcfe_discount_rate", Severity.FAIL,
+                "FCFE 를 WACC 로 할인 — 주주귀속 현금흐름은 자기자본비용(Ke)으로"
+                "(분자·분모 불일치 = 구조적 오류)", {}))
+        if not levered_beta_used:
+            out.append(Finding(
+                "fcfe_levered_beta", Severity.WARN,
+                "FCFE 인데 레버리지드 베타 미사용 — Ke 는 목표 자본구조의 levered β 로", {}))
+        if net_borrowing_included and not borrowing_nature_assessed:
+            out.append(Finding(
+                "fcfe_borrowing_illusion", Severity.WARN,
+                "차입금 순증가를 기계적으로 포함 — 구조적 조달 vs 일시 브릿지 판단 없이는 "
+                "'빚으로 만든 양(+) 현금흐름 착시' 위험", {}))
+        if not stable_target_leverage:
+            out.append(Finding(
+                "fcfe_target_leverage", Severity.WARN,
+                "장기 목표 레버리지 미확정 — 부채비율 급변 구간에 단일 Ke 적용은 "
+                "현금흐름-할인율 구조 불일치", {}))
+        if not any(f.severity != Severity.PASS for f in out):
+            out.append(Finding("fcfe_usage", Severity.PASS,
+                               "FCFE 사용 규율 충족(Ke·levered β·차입 판단·목표 레버리지)", {}))
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 산업 벤치마크 이상치 게이트 (지식→규칙 승격)
+#
+# 근거: docs/reference/산업_프로파일.md · 벤치마크_{마진,운전자본,CAPEX}.md
+#   내부 레퍼런스 코퍼스 횡단집계 → 산업별 지표 분포(p25/p50/p75).
+#   rigor=참고 prior. 데이터=벤치마크 빌드 스크립트 생성(비공개).
+# 판정: p25~p75 = 정상, [min,max]∩밖 = WARN(주의), min~max 밖 = WARN(이상치, 사업모델 질문).
+#   n<3 = 저신뢰(참고만).
+import json as _json
+from pathlib import Path as _Path
+
+# 산업 벤치마크 JSON 의 단일 정본 경로·로더·매칭 규칙. API·엔진 게이트가 공유해
+# 세 표면(엔진·API·카드)이 조용히 어긋나지 않게 한다(경로/매칭 중복 제거).
+_BENCH_PATH = _Path(__file__).parent / "data" / "industry_benchmarks.json"
+_BENCH_CACHE: dict | None = None
+_BENCH_MTIME: float | None = None
+
+_METRIC_LABEL = {"opm": "영업이익률", "dso": "매출채권회전일",
+                 "dio": "재고회전일", "capex_sales": "CAPEX/매출"}
+_METRIC_UNIT = {"opm": "%", "dso": "일", "dio": "일", "capex_sales": "%"}
+
+
+def load_benchmarks(*, fresh: bool = False) -> dict:
+    """산업 벤치마크 JSON 로드(캐시). 파일 mtime 이 바뀌면 자동 무효화 —
+
+    pre-commit 이 JSON 을 재생성해도 장수 프로세스(uvicorn)가 stale 캐시를 계속
+    서빙하던 결함을 막는다. 로드 실패 시 {"industries": {}} 로 degrade(예외 없음).
+    fresh=True 면 캐시를 무시하고 강제 재로드.
+    """
+    global _BENCH_CACHE, _BENCH_MTIME
+    try:
+        mtime = _BENCH_PATH.stat().st_mtime
+    except OSError:
+        return {"industries": {}}
+    if fresh or _BENCH_CACHE is None or mtime != _BENCH_MTIME:
+        try:
+            _BENCH_CACHE = _json.loads(_BENCH_PATH.read_text(encoding="utf-8"))
+            _BENCH_MTIME = mtime
+        except Exception:
+            return {"industries": {}}
+    return _BENCH_CACHE
+
+
+def match_industry(industries: dict, name: str) -> tuple[str, dict | None]:
+    """산업명 → (매칭 산업명, 분포dict). 정확일치 우선, 없으면 부분일치.
+
+    부분일치는 **결정적**으로 고른다 — 이름 길이가 입력에 가장 가까운(가장 구체적인)
+    후보, 동률이면 사전순. 이전엔 dict 순회 첫 겹침을 채택해 JSON 키 순서에 따라
+    같은 입력이 다른 코호트로 매칭되던 결함(감사 게이트가 엉뚱한 동종과 대조).
+    매칭 없으면 (name, None).
+    """
+    if not name:
+        return name, None
+    if name in industries:
+        return name, industries[name]
+    cands = [ind for ind in industries if name in ind or ind in name]
+    if not cands:
+        return name, None
+    best = min(cands, key=lambda ind: (abs(len(ind) - len(name)), ind))
+    return best, industries[best]
+
+
+def check_metric_vs_industry(
+    industry: str,
+    metric: str,
+    value: float,
+    *,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """사용자 가정(OPM·DSO·DIO·CAPEX/매출)을 동종 산업 분포 대비 이상치 판정.
+
+    metric ∈ {'opm','dso','dio','capex_sales'} (opm·capex_sales 는 %, dso·dio 는 일).
+    - p25~p75 안        : PASS
+    - min~max 안(밴드 밖): WARN  (동종 대비 이례 — 근거 확인)
+    - min~max 밖         : WARN  (이상치 — 사업모델 재검토, 감사 red flag)
+    - 데이터 없음/n<3    : PASS(정보)  참고 prior 부족
+
+    산업명은 산업_프로파일.md 라벨과 일치해야 매칭(부분일치 fallback).
+    """
+    bench = load_benchmarks().get("industries", {})
+    matched, d = match_industry(bench, industry)
+    dist = d.get(metric) if d else None
+    if dist:
+        industry = matched
+    lbl = _METRIC_LABEL.get(metric, metric)
+    unit = _METRIC_UNIT.get(metric, "")
+    fid = f"{metric}_vs_industry"
+
+    if not dist:
+        f = Finding(fid, Severity.PASS,
+                    f"{lbl}: 산업 '{industry}' 벤치마크 없음 — 대조 생략", {"metric": metric})
+        out = [f]
+    elif dist["n"] < 3:
+        f = Finding(fid, Severity.PASS,
+                    f"{lbl} {value}{unit}: 산업 '{industry}' n={dist['n']}(저신뢰) "
+                    f"참고 p50={dist['p50']}{unit}", {"metric": metric, "dist": dist, "value": value})
+        out = [f]
+    elif dist["p25"] <= value <= dist["p75"]:
+        f = Finding(fid, Severity.PASS,
+                    f"{lbl} {value}{unit} ∈ 정상대역 [{dist['p25']}~{dist['p75']}]{unit} "
+                    f"(산업 '{industry}')", {"metric": metric, "dist": dist, "value": value})
+        out = [f]
+    elif dist["min"] <= value <= dist["max"]:
+        f = Finding(fid, Severity.WARN,
+                    f"{lbl} {value}{unit}: 동종 정상대역 [{dist['p25']}~{dist['p75']}]{unit} 밖 "
+                    f"(min~max 안) — 근거 확인 (산업 '{industry}')",
+                    {"metric": metric, "dist": dist, "value": value})
+        out = [f]
+    else:
+        side = "상회" if value > dist["max"] else "하회"
+        f = Finding(fid, Severity.WARN,
+                    f"⚠️ {lbl} {value}{unit}: 동종 [{dist['min']}~{dist['max']}]{unit} {side} "
+                    f"= 이상치 — 사업모델 재검토(감사 red flag) (산업 '{industry}')",
+                    {"metric": metric, "dist": dist, "value": value})
+        out = [f]
+
+    if report is not None:
+        for f in out:
+            report.add(f)
+    return out
+
+
+# ── 추정치 간 교차 일관성 (기준서 540 문단 24(c) — A3) ─────────────────────
+# "유의적 가정이 서로 간에 그리고 **다른 회계추정치에 사용되는 가정과** 일관되는지".
+# 같은 기업이 같은 보고기간에 손상검사(VIU)·평가모델(DCF)·PPA 를 각각 만들 때, 공유해야
+# 할 가정(영구성장률·무위험이자율·세율·환율)이 추정치마다 다르면 — 개별 게이트는 전부
+# 통과해도 — 그 자체가 왜곡표시위험 신호다(어느 한쪽이 목적에 맞춰 구부러졌다는 뜻).
+# 개별 값의 타당성은 기존 게이트(PGR·β/MRP 등) 소관이고, 여기는 **서로 같은가**만 본다.
+
+# 가정 키별 허용 편차(절대). 비율류는 0.1%p — 반올림·표기 차이는 흡수하되 의도적
+# 차등(손상 g 3% vs 평가 g 1%)은 잡는다. 환율·기타 스칼라는 상대 0.1%.
+_CROSS_TOL_PP = 0.001
+_CROSS_REL = 0.001
+
+
+def check_cross_estimate_consistency(
+    estimates: dict,
+    *,
+    report: ValidationReport | None = None,
+) -> list[Finding]:
+    """추정치별 공유 가정 교차 대조.
+
+    estimates: {추정치 라벨: {가정 키: 값}} — 예:
+        {"평가모델(DCF)": {"terminal_growth": 0.01, "risk_free": 0.032},
+         "손상검사(VIU)": {"terminal_growth": 0.03, "risk_free": 0.032}}
+    같은 키가 두 추정치 이상에 등장하면 쌍별로 비교한다. 키가 겹치지 않으면 침묵
+    — 비교할 수 없는 것을 통과로 표시하지 않기 위해 검사한 쌍 수를 detail 에 남긴다.
+    """
+    findings: list[Finding] = []
+    labels = sorted(estimates)
+    compared = 0
+    for i, a in enumerate(labels):
+        for b in labels[i + 1:]:
+            shared = sorted(set(estimates[a]) & set(estimates[b]))
+            for key in shared:
+                va, vb = estimates[a][key], estimates[b][key]
+                if not (isinstance(va, (int, float)) and isinstance(vb, (int, float))):
+                    continue
+                compared += 1
+                # 비율(|값|<1)은 절대 %p, 레벨 값은 상대 비교 — 단위 성격이 다르다.
+                if max(abs(va), abs(vb)) < 1.0:
+                    diff, tol, unit = abs(va - vb), _CROSS_TOL_PP, "%p"
+                    shown = f"{va:.4%} vs {vb:.4%} (Δ{diff * 100:.2f}%p)"
+                else:
+                    base = max(abs(va), abs(vb), 1e-12)
+                    diff, tol, unit = abs(va - vb) / base, _CROSS_REL, "%"
+                    shown = f"{va:,.4g} vs {vb:,.4g} (Δ{diff:.2%})"
+                if diff > tol:
+                    findings.append(Finding(
+                        "cross_estimate_consistency", Severity.WARN,
+                        f"'{key}' 가 추정치 간 불일치 — {a}: {shown.split(' vs ')[0]} vs "
+                        f"{b}: {shown.split(' vs ')[1]} — 같은 기업·같은 기간의 공유 가정이 "
+                        "다르면 개별 값이 각각 합리적이어도 어느 한쪽이 목적에 맞춰 "
+                        "선택됐다는 신호다(기준서 540 문단 24(c))",
+                        {"key": key, "a": a, "b": b, "va": va, "vb": vb,
+                         "unit": unit, "layer": "judgment"}))
+    if not findings and compared:
+        findings.append(Finding(
+            "cross_estimate_consistency", Severity.PASS,
+            f"추정치 간 공유 가정 {compared}쌍 일치", {"compared": compared}))
+    elif not compared:
+        findings.append(Finding(
+            "cross_estimate_consistency", Severity.WARN,
+            "겹치는 가정 키가 없어 교차 대조를 수행하지 못함 — 추정치별 가정 키 이름을 "
+            "통일하라(비교 불가는 통과가 아니다)", {"compared": 0, "layer": "judgment"}))
+    if report is not None:
+        for f in findings:
+            report.add(f)
+    return findings

@@ -31,20 +31,33 @@ DEAL_TYPES = {
     "inheritance_gift": "상속·증여",
 }
 
-# 방법론 카탈로그 — available: 엔진 가동 여부(정직 표기)
+# 방법론 카탈로그 — 두 축으로 정직하게 표기한다.
+#   available: **엔진** 가동 여부(계산 코어 + API 로 즉시 실행 가능한가)
+#   ui:        평가인 워크스페이스에 **전용 시트**가 있는가(없으면 API/스킬 경로만)
+# 한 축으로 뭉뚱그리면 둘 중 하나가 반드시 거짓말이 된다 — 엔진이 있는데 '미구현'이라
+# 하거나, 화면이 없는데 '가동'이라 해서 유저를 빈 화면으로 보내거나.
 METHODS = {
-    "dcf": {"label": "DCF(수익가치)", "available": True,
+    "dcf": {"label": "DCF(수익가치)", "available": True, "ui": True,
             "engine": "calc_core.dcf"},
     "base_price": {"label": "기준시가(1M·1W·최근일 산술평균)", "available": True,
+                   "ui": False,
                    "engine": "calc_core.merger.base_share_price"},
     "intrinsic": {"label": "본질가치(자산 0.4 : 수익 0.6)", "available": True,
+                  "ui": False,
                   "engine": "calc_core.merger.intrinsic_value (수익가치=DCF 투입)"},
-    "comps": {"label": "상대가치(유사회사 배수)", "available": False,
-              "engine": "⏳ 트랙 예정 — LTM·계절성 유틸만 가동"},
-    "nav": {"label": "조정순자산", "available": False, "engine": "⏳ 미구현"},
-    "viu": {"label": "사용가치(VIU)", "available": False, "engine": "⏳ 손상 트랙 예정"},
-    "fv_ppa": {"label": "공정가치(MEEM·RFRM 등)", "available": False, "engine": "⏳ PPA 트랙 예정"},
-    "tax_supplementary": {"label": "상증세법 보충적 평가", "available": False, "engine": "⏳ 미구현"},
+    # ⚠️ 정직 표기는 **양방향**이다 — 미구현을 가동이라 하는 것만큼이나, 가동 중인
+    # 엔진을 '준비중'으로 두는 것도 부정직하다(있는 기능을 못 쓰게 만든다).
+    # comps·viu 는 엔진·API·테스트가 모두 실재하는데 표기만 낡아 있었다(2026-08-01 정정).
+    "comps": {"label": "상대가치(유사회사 배수)", "available": True, "ui": True,
+              "engine": "calc_core.multiples.relative_valuation "
+                        "(PER·PBR·EV/EBITDA·PSR + 5-10 Rule)"},
+    "nav": {"label": "조정순자산", "available": False, "ui": False, "engine": "⏳ 미구현"},
+    "viu": {"label": "사용가치(VIU)", "available": True, "ui": False,
+            "engine": "calc_core.viu.compute_viu (IAS 36 제약모드·유효세전율 역산)"},
+    "fv_ppa": {"label": "공정가치(MEEM·RFRM 등)", "available": False, "ui": False,
+               "engine": "⏳ PPA 트랙 예정"},
+    "tax_supplementary": {"label": "상증세법 보충적 평가", "available": False, "ui": False,
+                          "engine": "⏳ 미구현"},
 }
 
 
@@ -150,3 +163,58 @@ def recommend_method(
         ["dcf"], uncertain=True,
         legal_basis="해당 조합의 확립된 규칙 없음",
         notes=["목적·거래유형 조합을 확인해 주세요 — 임의 추천하지 않습니다"])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 사업성격 기반 기법 추천 (equity research 트랙 — 법제 트랙과 상보)
+#
+# 근거: docs/reference/밸류에이션_기법선택_로직.md (레퍼런스 코퍼스 귀납).
+#   기법 = 현금흐름 예측가능성 × 자산 성격의 함수.
+# 위 recommend()가 '무엇을 평가하나'(목적·법제)라면, 아래는 '이 사업을 어떻게 볼까'(성격).
+BUSINESS_METHOD_RULES = [
+    # (조건 판정자, 추천기법, 근거)
+    ("pipeline_bio",   "rnpv",  "파이프라인 바이오(이익 부재·성공확률) → rNPV"),
+    ("heterogeneous",  "sotp",  "부문 이질·지주(성장·마진·시황 상이) → 부문별 SOTP"),
+    ("capital_cyclical", "pbr", "자본집약·사이클(이익 변동성↑, 순자산 중요) → PBR"),
+    ("predictable_growth", "dcf", "현금흐름 예측가능+고성장(멀티플이 성장 미반영) → DCF"),
+    ("stable_earnings", "comps", "안정 이익·peer 풍부 → 상대가치(PER)"),
+]
+
+
+def recommend_by_business_nature(
+    *,
+    is_pipeline_bio: bool = False,
+    is_holding_or_heterogeneous: bool = False,
+    is_capital_intensive_or_cyclical: bool = False,
+    is_predictable_high_growth: bool = False,
+    has_stable_earnings_and_peers: bool = True,
+) -> dict:
+    """사업 성격 → 밸류에이션 기법 추천(참고). 법제 recommend()와 병행 사용.
+
+    반환: {method, label, rationale, alternatives}. 순서=우선순위(위→아래 첫 매치).
+    근거: 밸류에이션_기법선택_로직.md 결정 트리.
+    """
+    flags = {
+        "pipeline_bio": is_pipeline_bio,
+        "heterogeneous": is_holding_or_heterogeneous,
+        "capital_cyclical": is_capital_intensive_or_cyclical,
+        "predictable_growth": is_predictable_high_growth,
+        "stable_earnings": has_stable_earnings_and_peers,
+    }
+    picked = None
+    for cond, method, why in BUSINESS_METHOD_RULES:
+        if flags.get(cond):
+            picked = (method, why)
+            break
+    if picked is None:
+        picked = ("comps", "기본값: 안정 이익 가정 → 상대가치(PER)")
+    method, why = picked
+    label_map = {"rnpv": "rNPV", "sotp": "SOTP", "pbr": "PBR(상대가치)",
+                 "dcf": "DCF", "comps": "상대가치(PER)"}
+    return {
+        "method": method,
+        "label": label_map.get(method, method),
+        "rationale": why,
+        "alternatives": [m for _, m, _ in BUSINESS_METHOD_RULES if m != method],
+        "provenance": "docs/reference/밸류에이션_기법선택_로직.md",
+    }

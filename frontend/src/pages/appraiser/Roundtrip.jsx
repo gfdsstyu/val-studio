@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { api, fileToBase64 } from "../../api.js";
+import { officeAvailable, currentWorkbookB64, excelWriteAvailable, writeFormula }
+  from "../../officeBridge.js";
 
 /* 엑셀 ⇄ 웹 왕복 루프 — 5. 산출물 단계.
 
@@ -108,6 +110,14 @@ function ImportPanel({ project, onSave }) {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
+  /** Task Pane 전용: 열려 있는 워크북을 다운로드 없이 바로 되읽기(다리 2 해소). */
+  const loadFromPane = async () => {
+    setBusy(true); setErr(null); setOut(null); setApplied(false);
+    try {
+      setOut(await api.xlsx.import(await currentWorkbookB64()));
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
   const apply = () => {
     if (!out) return;
     onSave?.({
@@ -128,15 +138,30 @@ function ImportPanel({ project, onSave }) {
         <div className="pad">
           <div className="muted" style={{ marginBottom: 10 }}>
             내보낸 표준 레이아웃 xlsx 를 엑셀에서 편집했다면, 기준선 없이 바로 올려
-            입력을 역파싱·재계산합니다(비표준 템플릿은 거부). 무엇이 바뀌었는지
-            분류해서 보려면 <b>왕복 diff</b> 를 쓰세요.
+            입력을 역파싱·재계산합니다. 무엇이 바뀌었는지 분류해서 보려면
+            <b> 왕복 diff</b> 를 쓰세요.
           </div>
+          {/* 실측 피드백: 자체 템플릿(연수 모델 등)으로 되읽기를 시도해 좌표 오류가 났다.
+              어떤 기능이 어떤 파일에 되는지를 **시도 전에** 알려준다. */}
+          <table style={{ marginBottom: 10, fontSize: 12 }}>
+            <thead><tr><th style={{ textAlign: "left" }}>기능</th>
+              <th>Val-Studio export</th><th>자체·타사 모델</th></tr></thead>
+            <tbody>
+              <tr><td style={{ textAlign: "left" }}>모델 정적 감사</td><td>○</td><td>○</td></tr>
+              <tr><td style={{ textAlign: "left" }}>되읽기 · 왕복 diff</td><td>○</td><td>✕ (셀 좌표 고정 필요)</td></tr>
+            </tbody>
+          </table>
           <div className="row" style={{ gap: 16 }}>
             <label>편집본 xlsx <input type="file" accept=".xlsx"
               onChange={(e) => setFile(e.target.files[0])} /></label>
             <button className="primary" disabled={busy} onClick={load}>
               {busy ? "읽는 중…" : "되읽기"}
             </button>
+            {officeAvailable() && (
+              <button className="ghost" disabled={busy} onClick={loadFromPane}>
+                {busy ? "읽는 중…" : "현재 워크북 되읽기"}
+              </button>
+            )}
           </div>
           {err && <div className="err" style={{ marginTop: 10 }}>{err}</div>}
           {out && (
@@ -243,6 +268,15 @@ function DiffSheet({ project, onSave }) {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
+  /** Task Pane 전용: 열려 있는 워크북을 편집본으로, 저장본을 기준선으로 즉시 비교. */
+  const compareCurrent = async () => {
+    if (!hasSaved) { setErr("저장된 DCF 입력이 없어 기준선을 만들 수 없습니다."); return; }
+    setBusy(true); setErr(null); setPlan(null); setApplied(null);
+    try {
+      setPlan(await api.xlsx.diffVsProject(project.id, await currentWorkbookB64()));
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
   /** 입력 변경 반영(전체 safe 면 전량, 아니면 입력분만 — 수식은 리뷰에 남는다). */
   const applyInputs = () => {
     if (!plan?.new_input) return;
@@ -300,6 +334,11 @@ function DiffSheet({ project, onSave }) {
             <button className="primary" disabled={busy} onClick={compare}>
               {busy ? "비교 중…" : "비교"}
             </button>
+            {officeAvailable() && (
+              <button className="ghost" disabled={busy || !hasSaved} onClick={compareCurrent}>
+                {busy ? "비교 중…" : "현재 워크북으로 비교"}
+              </button>
+            )}
           </div>
           {err && <div className="err" style={{ marginTop: 10 }}>{err}</div>}
         </div>
@@ -363,7 +402,313 @@ function DiffSheet({ project, onSave }) {
   );
 }
 
+/** 모델 정적 감사 — 재계산 없는 수식 분석(패턴 린트·하드코딩·민감도 중심셀).
+    외부 편집본·임의 워크북에도 작동(표준 레이아웃이면 중심셀 검산까지). 표시 전용. */
+function AuditSheet() {
+  const [file, setFile] = useState(null);
+  const [out, setOut] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const run = async () => {
+    if (!file) { setErr("xlsx 파일을 선택하세요."); return; }
+    setBusy(true); setErr(null); setOut(null);
+    try {
+      setOut(await api.xlsx.audit(await fileToBase64(file)));
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  /** Task Pane 전용: 열려 있는 워크북을 다운로드 없이 즉시 정적 감사(다리 2 해소). */
+  const runCurrent = async () => {
+    setBusy(true); setErr(null); setOut(null);
+    try {
+      setOut(await api.xlsx.audit(await currentWorkbookB64()));
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const nonPass = out ? out.findings.filter((f) => f.severity !== "pass") : [];
+  const center = out?.findings.find((f) => f.rule === "sensitivity_center");
+  /* 우선순위 분리 — 실측(비올 워크북)에서 패턴 경고의 대부분이 **구간 양끝**이었고
+     (edge 73 vs inner 7), 양끝은 첫해 반년상각·터미널 외삽처럼 정상일 여지가 크다.
+     다만 실제 결함도 양끝에서 나온 적이 있어 **숨기지 않고 접어서** 둔다(끄지 않고 순서). */
+  const primary = nonPass.filter((f) => f.detail?.position !== "edge");
+  const edge = nonPass.filter((f) => f.detail?.position === "edge");
+
+  return (
+    <>
+      <div className="card">
+        <h2>모델 정적 감사 <span className="muted">— 수식 패턴 린트·하드코딩·중심셀 검산</span></h2>
+        <div className="pad">
+          <div className="muted" style={{ marginBottom: 10, fontSize: "0.82rem" }}>
+            재계산 없이 수식 문자열만 분석합니다: <b>이웃 패턴을 깨는 수식</b>(참조 밀림
+            시그니처 — R1C1 정규화 대조), <b>수식 내 숫자 리터럴</b>(숨은 가정),
+            표준 레이아웃이면 <b>민감도 중심셀 ≟ 재계산</b>(축 순환·stale 동시 적발)까지.
+            ⚠️ 행 전체가 균일하게 밀린 오류는 이웃 대조로 안 잡힙니다 — 분석적 리뷰
+            (4.밸류에이션)와 병행하세요.
+          </div>
+          <div className="row" style={{ gap: 16 }}>
+            <label>감사 대상 xlsx <input type="file" accept=".xlsx"
+              onChange={(e) => setFile(e.target.files[0])} /></label>
+            <button className="primary" disabled={busy} onClick={run}>
+              {busy ? "분석 중…" : "정적 감사 실행"}
+            </button>
+            {officeAvailable() && (
+              <button className="ghost" disabled={busy} onClick={runCurrent}>
+                {busy ? "분석 중…" : "현재 워크북 감사"}
+              </button>
+            )}
+          </div>
+          {err && <div className="err" style={{ marginTop: 10 }}>{err}</div>}
+        </div>
+      </div>
+
+      {out && (
+        <div className="card">
+          <h2>감사 결과</h2>
+          <div className="pad">
+            <div className="kpis">
+              <div className="kpi"><div className="v">{out.sheets.length}</div><div className="k">시트</div></div>
+              <div className="kpi"><div className="v" style={out.warn_count ? { color: "var(--warn)" } : {}}>{out.warn_count}</div><div className="k">WARN</div></div>
+              <div className="kpi"><div className="v">{out.center_checked ? (center?.severity === "pass" ? "정합 ✓" : "불일치 ⚠") : "생략"}</div><div className="k">민감도 중심셀</div></div>
+            </div>
+            {!out.center_checked && (
+              <div className="muted" style={{ fontSize: "0.82rem", margin: "6px 0" }}>
+                비표준 레이아웃 — 중심셀 검산은 Val-Studio export 템플릿에서만 수행됩니다.
+              </div>
+            )}
+            {nonPass.length === 0 && (
+              <div className="finding pass">경고 없음 — 패턴·리터럴·중심셀 전 검사 통과</div>
+            )}
+            {primary.map((f, i) => (
+              <div key={i} className={`finding ${f.severity}`}>
+                <b>[{f.severity.toUpperCase()}] {f.rule}</b> — {f.message}
+                {f.rule === "formula_pattern" && f.detail?.mode_sample && (
+                  <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                    이웃 다수 패턴: <code>{f.detail.mode_sample}</code>
+                  </div>
+                )}
+              </div>
+            ))}
+            {edge.length > 0 && (
+              <details style={{ marginTop: 10 }}>
+                <summary style={{ cursor: "pointer", fontSize: 12 }}>
+                  구간 양끝 경고 {edge.length}건 — 첫 열(반년상각)·마지막 열(터미널 외삽)처럼
+                  구조가 달라도 정상인 자리. 다만 참조 밀림이 여기서 나온 사례도 있어 접어만 둡니다.
+                </summary>
+                {edge.map((f, i) => (
+                  <div key={i} className={`finding ${f.severity}`}>
+                    <b>[{f.severity.toUpperCase()}] {f.rule}</b> — {f.message}
+                    {f.detail?.mode_sample && (
+                      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                        이웃 다수 패턴: <code>{f.detail.mode_sample}</code>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </details>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** 모델 연결성 진단(P1) — "이 가정이 결과에 도달하는가"를 의존성 그래프로 판정.
+    실측 근거: 비올 진본에서 WACC 시트 전체 미도달 + 스파인이 중간 상수(DCF!M15)에서
+    재시작(EBIT·WC·매출추정 미도달)을 검출 — **셀 단위 리뷰로는 '연결의 부재'가 보이지
+    않는다**(부재는 어느 셀에도 적혀 있지 않으므로). 표시 전용(저장 없음). */
+function ConnectivitySheet() {
+  const [file, setFile] = useState(null);
+  const [target, setTarget] = useState("");
+  const [out, setOut] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const runWith = async (b64) => {
+    setBusy(true); setErr(null); setOut(null);
+    try {
+      setOut(await api.xlsx.connectivity(b64, target.trim() || undefined));
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  const run = async () => {
+    if (!file) { setErr("xlsx 파일을 선택하세요."); return; }
+    runWith(await fileToBase64(file));
+  };
+  const runCurrent = async () => {
+    try { runWith(await currentWorkbookB64()); } catch (e) { setErr(e.message); }
+  };
+
+  const deadSet = out ? new Set(out.dead_sheets) : new Set();
+  const rows = out ? Object.entries(out.sheet_summary)
+    .sort((a, b) => (deadSet.has(b[0]) - deadSet.has(a[0]))
+      || (b[1].not_reaching - a[1].not_reaching)) : [];
+
+  return (
+    <>
+      <div className="card">
+        <h2>모델 연결성 <span className="muted">— 이 가정이 결과에 도달하는가(의존성 그래프)</span></h2>
+        <div className="pad">
+          <div className="muted" style={{ marginBottom: 10, fontSize: "0.82rem" }}>
+            수식 참조를 그래프로 추적해 <b>목표셀(주당가치)에 도달하지 못하는 시트</b>,
+            경로상 <b>상수 잎</b>(참조화 후보), 아무도 읽지 않는 <b>고아 계산</b>을 찾습니다.
+            셀을 하나씩 읽는 리뷰로는 "연결의 부재"가 보이지 않습니다 — WACC 시트를 다
+            고쳐도 결과가 안 변하는 모델이 실제로 있었습니다(비올 진본 실측).
+          </div>
+          <div className="row" style={{ gap: 16, flexWrap: "wrap" }}>
+            <label>대상 xlsx <input type="file" accept=".xlsx"
+              onChange={(e) => setFile(e.target.files[0])} /></label>
+            <label>목표셀 <input type="text" value={target} placeholder="비우면 표준(DCF!C33) · 예: DCF!H49"
+              onChange={(e) => setTarget(e.target.value)} style={{ width: 170 }} /></label>
+            <button className="primary" disabled={busy} onClick={run}>
+              {busy ? "분석 중…" : "연결성 진단"}
+            </button>
+            {officeAvailable() && (
+              <button className="ghost" disabled={busy} onClick={runCurrent}>
+                {busy ? "분석 중…" : "현재 워크북 진단"}
+              </button>
+            )}
+          </div>
+          {err && <div className="err" style={{ marginTop: 10 }}>{err}</div>}
+        </div>
+      </div>
+
+      {out && (
+        <div className="card">
+          <h2>진단 결과 <span className="muted">— 목표 {out.target}</span></h2>
+          <div className="pad">
+            <div className="kpis">
+              <div className="kpi"><div className="v">{out.n_formulas.toLocaleString()}</div>
+                <div className="k">수식 셀 / 노드 {out.n_nodes.toLocaleString()}</div></div>
+              <div className={`kpi${out.dead_sheets.length ? " hero" : ""}`}>
+                <div className="v">{out.dead_sheets.length}</div>
+                <div className="k">결과 미도달 시트</div></div>
+              <div className="kpi"><div className="v">{out.constant_inputs_total}</div>
+                <div className="k">경로상 상수 잎(참조화 후보)</div></div>
+              <div className="kpi"><div className="v">{out.orphan_total}</div>
+                <div className="k">고아 수식(표시용/죽은 계산)</div></div>
+            </div>
+
+            {out.values_only_suspect && (
+              <div className="warn-box" style={{ marginTop: 10 }}>
+                수식 비율 {(out.formula_ratio * 100).toFixed(1)}% — <b>값 붙여넣기 모델</b>로
+                보입니다. 연결성 진단이 무의미하며, 감사인 트랙의 독립 재계산·범위추정으로
+                검증하세요(값-only 복원은 로드맵 P2).
+              </div>
+            )}
+
+            {out.dead_sheets.length > 0 && (
+              <div className="finding warn" style={{ marginTop: 10 }}>
+                <b>미도달 시트</b> — {out.dead_sheets.join(" · ")}
+                <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                  이 시트들의 계산은 {out.target} 에 흘러들지 않습니다. 고치더라도 결과가
+                  변하지 않으며, 오류가 생겨도 결과에서 드러나지 않습니다("값으로 죽은
+                  수식" 위험). 의도적 참고 시트인지, 끊긴 배선인지 판단하세요.
+                </div>
+              </div>
+            )}
+
+            <div style={{ overflowX: "auto", marginTop: 10 }}>
+              <table>
+                <thead><tr><th style={{ textAlign: "left" }}>시트</th>
+                  <th>도달 수식</th><th>미도달 수식</th><th>고아</th></tr></thead>
+                <tbody>{rows.map(([s, c]) => (
+                  <tr key={s} className={deadSet.has(s) ? "warn" : ""}>
+                    <td style={{ textAlign: "left" }}>{deadSet.has(s) ? "⚠ " : ""}{s}</td>
+                    <td>{c.reaching}</td><td>{c.not_reaching}</td>
+                    <td>{out.orphan_by_sheet[s] || 0}</td>
+                  </tr>))}</tbody>
+              </table>
+            </div>
+
+            {out.reconnect_proposals?.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <h2 style={{ fontSize: "0.9rem" }}>재연결 제안
+                  <span className="muted"> — 상수 잎 ↔ 미도달 수식의 캐시값 매칭</span></h2>
+                <div style={{ overflowX: "auto", marginTop: 6 }}>
+                  <table>
+                    <thead><tr><th>상수 셀</th><th>값</th><th>후보 수식 셀</th>
+                      <th>후보 값</th><th>차이</th><th>판정</th><th>적용</th></tr></thead>
+                    <tbody>{out.reconnect_proposals.map((p, i) => (
+                      <tr key={i} className={p.tie_out === "pass" ? "ok" : "warn"}>
+                        <td>{p.constant_cell}</td>
+                        <td>{p.constant_value.toLocaleString("ko-KR", { maximumFractionDigits: 5 })}</td>
+                        <td><code>{p.suggested_formula}</code></td>
+                        <td>{p.candidate_value.toLocaleString("ko-KR", { maximumFractionDigits: 5 })}</td>
+                        <td>{(p.diff_ratio * 100).toFixed(2)}%</td>
+                        <td>{p.tie_out === "pass" ? "불변 ✓" : "값 변동 ⚠"}</td>
+                        <td>{excelWriteAvailable() ? (
+                          <button className="ghost xs" onClick={async () => {
+                            // value_change 는 결과가 바뀐다(원래 상수가 낡았다는 뜻) — 명시 확인.
+                            const warnMsg = p.tie_out === "pass"
+                              ? `${p.constant_cell} 를 ${p.suggested_formula} 로 교체합니다(결과 불변 예상).`
+                              : `${p.constant_cell} 를 ${p.suggested_formula} 로 교체하면 값이 `
+                                + `${(p.diff_ratio * 100).toFixed(2)}% 바뀝니다 — 원래 상수가 낡았거나 `
+                                + `틀렸다는 뜻입니다. 교체 후 결과 변화를 직접 확인하세요.`;
+                            if (!window.confirm(warnMsg)) return;
+                            const [sh, ref] = p.constant_cell.split("!");
+                            try {
+                              await writeFormula(sh, ref, p.suggested_formula);
+                              setErr(null);
+                            } catch (e) { setErr(e.message); }
+                          }}>기입</button>
+                        ) : <span className="muted" style={{ fontSize: 11 }}>수식 복사</span>}</td>
+                      </tr>))}</tbody>
+                  </table>
+                </div>
+                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                  판정은 <b>캐시값 비교</b>입니다(재계산 없음) — "불변"도 적용 후
+                  <b> 재진단·재계산으로 확인</b>하세요. 값 변동 제안은 자동 적용하지 않습니다.
+                </div>
+              </div>
+            )}
+
+            {out.constant_inputs_in_path.length > 0 && (
+              <details style={{ marginTop: 10 }}>
+                <summary style={{ cursor: "pointer", fontSize: 12 }}>
+                  경로상 상수 잎 {out.constant_inputs_total}건 — 결과에 직접 흘러드는
+                  하드 입력(가정이면 참조화 후보, R4)
+                </summary>
+                <table style={{ marginTop: 6 }}>
+                  <tbody>{out.constant_inputs_in_path.slice(0, 40).map((c, i) => (
+                    <tr key={i}><td style={{ textAlign: "left" }}>{c.cell}</td>
+                      <td>{typeof c.value === "number"
+                        ? c.value.toLocaleString("ko-KR", { maximumFractionDigits: 4 })
+                        : String(c.value)}</td></tr>))}</tbody>
+                </table>
+                {out.constant_inputs_total > 40 && (
+                  <div className="muted">…외 {out.constant_inputs_total - 40}건</div>)}
+              </details>
+            )}
+
+            {out.unknown_cells.length > 0 && (
+              <div className="finding warn" style={{ marginTop: 8 }}>
+                <b>동적 참조 {out.unknown_cells.length}건</b>(INDIRECT/OFFSET) —
+                이 셀들의 연결은 추적할 수 없어 진단이 <b>과소평가</b>될 수 있습니다:
+                {" "}{out.unknown_cells.slice(0, 8).join(", ")}
+              </div>
+            )}
+            {out.external_cells.length > 0 && (
+              <div className="finding warn" style={{ marginTop: 8 }}>
+                <b>외부 워크북 참조 {out.external_cells.length}건</b> —
+                {" "}{out.external_cells.slice(0, 8).join(", ")}
+              </div>
+            )}
+            {out.cycles.length > 0 && (
+              <div className="finding warn" style={{ marginTop: 8 }}>
+                <b>순환 참조 {out.cycles.length}건</b>(3표 Model 시트 정상 순환 제외) —
+                예: {out.cycles[0].slice(0, 5).join(" → ")}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function Roundtrip({ project, sheet, onSave }) {
+  if (sheet === "connectivity") return <ConnectivitySheet />;
   if (sheet === "export")
     return (
       <>
@@ -371,5 +716,6 @@ export default function Roundtrip({ project, sheet, onSave }) {
         <ImportPanel project={project} onSave={onSave} />
       </>
     );
+  if (sheet === "audit") return <AuditSheet />;
   return <DiffSheet project={project} onSave={onSave} />;
 }

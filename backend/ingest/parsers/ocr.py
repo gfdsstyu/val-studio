@@ -139,8 +139,19 @@ class TesseractBackend:
                 ". 설치: ①렌더러=poppler(pdftoppm)/ImageMagick/ghostscript "
                 "②tesseract 한국어 kor.traineddata → tessdata 폴더."
             )
-        # 요청 언어 중 설치된 것만(kor 없으면 eng)
-        want = [x for x in lang.split("+") if x in env["langs"]] or ["eng"]
+        # 요청 언어 중 설치된 것만. ⚠️ **조용한 폴백 금지** — 과거엔 kor 이 없으면 말없이
+        # eng 로 내려갔는데, 한국 재무제표를 영어 엔진으로 읽으면 숫자·계정이 뭉개진 결과가
+        # "OCR 성공"으로 반환된다(신뢰 불가인데 경고 없음 = 이 레포가 금지하는 조용한 실패).
+        # 요청한 언어가 없으면 차단하고 설치 경로를 안내한다. eng 만 요청한 문서는 그대로 통과.
+        requested = [x for x in lang.split("+") if x]
+        want = [x for x in requested if x in env["langs"]]
+        absent = [x for x in requested if x not in env["langs"]]
+        if not want or "kor" in absent:
+            raise RuntimeError(
+                f"OCR 실행 불가 — 요청 언어 {requested} 중 미설치: {absent} "
+                f"(설치됨: {env['langs']}). 한국어 문서를 영어 엔진으로 인식하면 결과를 "
+                "신뢰할 수 없어 폴백하지 않는다. kor.traineddata 를 tessdata 폴더에 설치하라."
+            )
         lang_arg = "+".join(want)
         n = _page_count(path)
         texts: list[str] = []

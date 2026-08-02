@@ -8,12 +8,13 @@ TF 핵심: 전환사채 가치를 두 성분으로 분리해 **다른 할인율*
   - 채권성분(현금상환으로 종결될 부분) → rf + credit_spread 할인
 CRR 격자: u=e^{σ√Δt}, d=1/u, p=(e^{(rf−q)Δt}−d)/(u−d).
 
-의사결정(각 노드, 우선순위):
-  ① 투자자 풋: put_price > 계속가치 → 풋(전액 채권성분)
-  ② 발행자 콜: call_price < 계속가치 → 보유자는 max(전환가치, 콜가격)
+의사결정(각 노드):
+  ① 발행자 콜 캡: call_price < 계속가치 → 계속가치가 max(전환가치, 콜가격)으로 대체
      - 전환가치 ≥ 콜 → **강제전환**(주식성분) ← 강제전환 누락 시 콜 과대평가(북 규칙)
      - 아니면 콜 상환(채권성분)
-  ③ 자발적 전환: 전환가치 > 계속가치 → 전환(주식성분)
+  ② 홀더 선택: max(콜캡 반영 계속가치, 전환가치, 풋가격) — 최대값 채택.
+     풋-우선 캐스케이드가 아님: 전환>풋>계속 구간에서 풋을 먼저 고르면
+     과소평가된다(T-F 워크북 3종 골든 채록에서 발견·교정, tests/golden/test_tf_workbooks.py).
 
 쿠폰: 연 coupon_rate × face 를 스텝별 안분해 채권성분에 가산(연속 근사).
 만기: max(전환가치, 만기상환액+잔여쿠폰) — 전환이면 주식성분, 아니면 채권성분.
@@ -83,6 +84,36 @@ class ConvertibleResult:
     conversion_value_now: float     # 현재 전환가치(참고)
 
 
+@dataclass(frozen=True)
+class WithWithoutResult:
+    """with-without 분해([[복합금융상품_평가]] §with-without, Issue Paper 407).
+
+    with(전체 CB) − without(옵션 제거 host 일반사채) = 내재파생(전환권+상환권 as a whole).
+    양변이 **동일 가정**(같은 위험할인율·쿠폰·만기상환 규약)이어야 분해가 정합 —
+    이종 가정 차감(T-F 워크북 반면교사: 연속할인 트리 − 이산할인 채권)은 checks 의
+    check_cb_decomposition 이 잡는다.
+    """
+    with_value: float               # 전체 CB 공정가치(T-F 격자)
+    without_value: float            # host 일반사채(전환·조기상환 옵션 제거)
+    embedded_value: float           # 내재파생 = with − without
+
+
+def with_without(inp: ConvertibleInputs) -> WithWithoutResult:
+    """내재파생 공정가치 = 전체 CB(T-F) − 동일가정 일반사채 (Issue Paper 407 승격).
+
+    host 는 straight_bond_value — 쿠폰·만기상환(RCPS 보장수익률 포함)을 동일 risky
+    rate 로 할인. 만기 보장상환은 주계약의 일부이므로 host 에 남고, 조기 풋·전환권
+    패키지만 내재파생으로 분리된다(홀더 옵션이므로 embedded ≥ 0).
+    """
+    full = price_convertible(inp)
+    host = straight_bond_value(inp)
+    return WithWithoutResult(
+        with_value=full.value,
+        without_value=host,
+        embedded_value=full.value - host,
+    )
+
+
 def straight_bond_value(inp: ConvertibleInputs) -> float:
     """옵션 없는 채권가치 = 쿠폰·만기상환액을 risky rate 로 할인(연속복리 근사)."""
     r = inp.risk_free + inp.credit_spread
@@ -139,17 +170,23 @@ def price_convertible(inp: ConvertibleInputs) -> ConvertibleResult:
             cont = cont_eq + cont_db
             conv = inp.conversion_value(s)
 
-            if puttable_now and put_now > cont:                     # ① 투자자 풋
-                eq[j], db[j] = 0.0, put_now
-            elif callable_now and call_now < cont:                  # ② 발행자 콜
+            # ① 발행자 콜 캡: 콜이 유리하면 계속가치가 max(전환, 콜상환)으로 대체
+            if callable_now and call_now < cont:
                 if conv >= call_now:                                # 강제전환
-                    eq[j], db[j] = conv, 0.0
+                    cand_eq, cand_db = conv, 0.0
                 else:                                               # 콜 상환
-                    eq[j], db[j] = 0.0, call_now
-            elif conv > cont:                                       # ③ 자발적 전환
-                eq[j], db[j] = conv, 0.0
+                    cand_eq, cand_db = 0.0, call_now
             else:                                                   # 보유
-                eq[j], db[j] = cont_eq, cont_db
+                cand_eq, cand_db = cont_eq, cont_db
+
+            # ② 홀더 선택: max(계속(콜캡), 전환, 풋) — 풋-우선 캐스케이드 금지
+            #    (전환>풋>계속이면 전환이 정답: 풋 먼저 고르면 과소평가)
+            best_eq, best_db = cand_eq, cand_db
+            if conv > best_eq + best_db:                            # 자발적 전환
+                best_eq, best_db = conv, 0.0
+            if puttable_now and put_now > best_eq + best_db:        # 투자자 풋
+                best_eq, best_db = 0.0, put_now
+            eq[j], db[j] = best_eq, best_db
 
     return ConvertibleResult(
         value=eq[0] + db[0],

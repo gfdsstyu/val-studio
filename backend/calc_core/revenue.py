@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 
@@ -139,3 +140,55 @@ def validate_tree_sums(root: RevenueNode, years: int, rel_tol: float = 1e-9) -> 
 
     walk(root)
     return errors
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 매출 드라이버 아키타입 라우터 (A~K)
+#
+# 근거: docs/reference/매출추정_논리_타이폴로지.md (레퍼런스 코퍼스 귀납, A~K).
+# "모든 매출 = P×Q, Q를 무엇으로 두나"의 라우터. 각 아키타입 → 필요 입력 + 계산 힌트.
+# 엔진 빌더가 없는 아키타입은 hint 로 산문 논리를 노출(스킬/UX 위저드가 소비).
+REVENUE_ARCHETYPES = {
+    "A": {"name": "전방 Capex 연동", "inputs": ["전방_capex_시계열", "연동비율(과거평균)"],
+          "formula": "매출 = 연동비율 × 전방Capex", "example": "케이씨(0.436%×삼성·SK Capex)"},
+    "B": {"name": "전방 생산량 연동 P×Q", "inputs": ["전방_판매량", "mixed_asp", "원단위(소재)"],
+          "formula": "매출 = 전방생산량 × ASP (소재는 ×원단위)", "example": "현대모비스·율촌화학"},
+    "C": {"name": "직접 P×Q", "inputs": ["물량", "asp(역산 또는 회귀)"],
+          "formula": "매출 = 물량 × ASP (ASP 역산 고정)", "example": "오리온·하이브·현대차"},
+    "D": {"name": "ARPU × 유저", "inputs": ["mau_또는_가입자", "arpu", "신작_proxy"],
+          "formula": "매출 = 유저 × ARPU", "example": "크래프톤·펄어비스"},
+    "E": {"name": "점유율 침투", "inputs": ["시장규모", "점유율_경로", "침투_앵커"],
+          "formula": "매출 = 시장 × 점유율(침투)", "example": "알테오젠·한화솔루션"},
+    "F": {"name": "수주잔고 인식시차", "inputs": ["수주잔고", "인도_스케줄", "빈티지_마진"],
+          "formula": "매출 = 수주잔고 × 공정/인도 스케줄", "example": "한화오션·한전기술"},
+    "G": {"name": "Top-down TAM/SAM", "inputs": ["tam", "sam_비중", "획득_점유율"],
+          "formula": "매출 = TAM × SAM × 점유율", "example": "한화에어로(방산 SAM)", "engine": "top_down"},
+    "H": {"name": "구독/ARR", "inputs": ["arr_또는_가입자", "nrr", "신규_획득"],
+          "formula": "매출 = ARR × NRR (+ 신규)", "example": "Cellebrite·Tempus·Palantir"},
+    "I": {"name": "캐파 가동률", "inputs": ["캐파", "가동률", "단가(노드/mrr/소모품)"],
+          "formula": "매출 = 캐파 × 가동률 × 단가", "example": "CoreWeave·TSMC·Equinix",
+          "engine": "installed_base_path/consumables_revenue"},
+    "J": {"name": "Take rate (거래액×수수료율)", "inputs": ["거래액(gmv/tpv)", "take_rate"],
+          "formula": "매출 = 거래액 × take rate", "example": "VISA·Alibaba·Sportradar"},
+    "K": {"name": "규제요금", "inputs": ["규제요금", "수요(gdp연동)", "연료비(급전순위)"],
+          "formula": "매출 = 규제요금 × 판매량", "example": "한국전력"},
+}
+
+
+def route_archetype(code: str) -> dict:
+    """아키타입 코드(A~K, 'B+E' 등 복합 허용) → 스펙(입력·공식·예·엔진).
+
+    스킬/UX 매출 위저드가 소비: 산업→아키타입→필요입력 폼. 엔진 빌더 있으면 engine 키.
+    복합('B+E')은 각 축을 리스트로 반환.
+    """
+    base = re.split(r"[+/\-]", str(code).strip())[0].upper() if code else ""
+    codes = [c for c in re.split(r"[+/]", str(code).upper()) if c in REVENUE_ARCHETYPES]
+    if not codes and base in REVENUE_ARCHETYPES:
+        codes = [base]
+    if not codes:
+        return {"code": code, "known": False,
+                "hint": "미분류 — 매출추정_논리_타이폴로지.md 참조"}
+    specs = [{**REVENUE_ARCHETYPES[c], "code": c} for c in codes]
+    return {"code": code, "known": True, "components": specs,
+            "inputs": sorted({i for s in specs for i in s["inputs"]}),
+            "provenance": "docs/reference/매출추정_논리_타이폴로지.md"}

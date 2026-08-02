@@ -151,6 +151,45 @@ def test_three_statement_is_wired_end_to_end():
         assert key in text, f"{fname} 가 {key} 를 소비하지 않는다"
 
 
+def test_embed_whitelist_ids_exist_in_nav():
+    """Task Pane 축약(nav.js EMBED_ALLOW)의 stage/sheet id 가 NAV 에 실재하는지.
+
+    오타 한 글자면 그 시트가 **패널에서 조용히 사라진다** — 사용자는 "기능이 없다"고
+    읽고 우리는 "있는데?"라고 답하는 전형적 어긋남. 정적으로 못박는다.
+    또한 축약 결과가 비면(전 stage 오타) 패널이 빈 화면이 되므로 그것도 검사한다.
+    """
+    nav = SRC / "nav.js"
+    if not nav.is_file():
+        return
+    text = nav.read_text(encoding="utf-8")
+
+    # NAV 원본 파싱: stage 는 `id: "x" … sheets: [ … ]` 구조로만 식별한다.
+    # (sheet 도 `{ id:…, label:… }` 라서 "label 동반" 같은 기준으로는 구분되지 않는다 —
+    #  실제로 첫 구현이 이 함정에 빠져 전 stage 의 sheets 가 빈 집합으로 나왔다.)
+    # 두 모드에 같은 stage id 가 있으면 시트를 합집합으로 본다(오타 검출엔 충분).
+    nav_body = text.split("EMBED_ALLOW", 1)[0]
+    stages: dict[str, set[str]] = defaultdict(set)
+    for m in re.finditer(r'id:\s*"(\w+)"[^{]*?sheets:\s*\[(.*?)\]\s*\}', nav_body, re.S):
+        stages[m.group(1)].update(re.findall(r'id:\s*"(\w+)"', m.group(2)))
+    assert stages, "NAV 파싱 실패 — 스캐너가 깨졌을 가능성"
+    assert stages.get("valuation"), "NAV 파싱 자기검증 실패 — sheets 가 비어 있다"
+
+    # EMBED_ALLOW 블록: `mode: { stage: ["sheet", ...], ... }`
+    block = text.split("EMBED_ALLOW", 1)[1].split("export function navFor", 1)[0]
+    pairs = re.findall(r"(\w+):\s*\[([^\]]*)\]", block)
+    assert pairs, "EMBED_ALLOW 파싱 실패 — 형식이 바뀌었는지 확인"
+
+    bad = []
+    for stage_id, sheets_raw in pairs:
+        if stage_id not in stages:
+            bad.append(f"stage '{stage_id}' 가 NAV 에 없음")
+            continue
+        for sh in re.findall(r'"(\w+)"', sheets_raw):
+            if sh not in stages[stage_id]:
+                bad.append(f"'{stage_id}' 에 sheet '{sh}' 없음 (있는 것: {sorted(stages[stage_id])})")
+    assert not bad, "Task Pane 축약 화이트리스트 오타 — 해당 시트가 패널에서 사라진다:\n  " + "\n  ".join(bad)
+
+
 def test_every_api_client_path_exists_in_backend():
     """프론트가 부르는 경로가 백엔드에 실제로 있는지 — 없으면 런타임 404."""
     api_js = SRC / "api.js"

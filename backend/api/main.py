@@ -16,6 +16,8 @@ import sys
 import tempfile
 import urllib.error
 import urllib.request
+import zipfile
+from math import isclose
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -23,7 +25,7 @@ sys.path.insert(0, str(_ROOT / "backend"))
 
 from fastapi import FastAPI, Header, HTTPException, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.responses import Response  # noqa: E402
+from fastapi.responses import JSONResponse, Response  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 from assemble.dcf_inputs import assemble_dcf_inputs  # noqa: E402
@@ -32,6 +34,10 @@ from calc_core import DcfSpineInput, run  # noqa: E402
 from excel import build_dcf_sheet, import_dcf_model, read_workbook  # noqa: E402
 from excel.apply_policy import build_apply_plan  # noqa: E402
 from excel.dcf_import import DcfModelImportError  # noqa: E402
+from excel.fullmodel_layout import (  # noqa: E402
+    FullModelImportError, detect_fullmodel, import_fullmodel,
+)
+from excel.model_audit import audit_workbook, check_sensitivity_center  # noqa: E402
 from excel.vs_state import parse_vs_state  # noqa: E402
 from ingest.macro_client import (  # noqa: E402
     CPI_INFLATION, EcosProvider, check_macro_vintage, parse_paste_table, usable_as_of,
@@ -42,8 +48,14 @@ from ingest.validators import ValidationReport  # noqa: E402
 from report import lint_report  # noqa: E402
 from excel.workbook_diff import diff_workbooks  # noqa: E402
 from calc_core import fa as _fa, wc as _wc  # noqa: E402
-from calc_core.checks import audit_dcf, diagnose_dcf_gap  # noqa: E402
-from calc_core.method_selector import DEAL_TYPES, PURPOSES, recommend_method  # noqa: E402
+from calc_core.checks import (  # noqa: E402
+    audit_dcf, diagnose_dcf_gap, load_benchmarks, match_industry)
+from calc_core.analytical import (  # noqa: E402
+    FinancialHistory, SegmentSeries, analytical_review, check_consensus_anchor,
+    impact_ledger, mix_decomposition, opm_bridge)
+from assemble.history_inputs import history_from_dart  # noqa: E402
+from calc_core.method_selector import (  # noqa: E402
+    DEAL_TYPES, PURPOSES, recommend_by_business_nature, recommend_method)
 from calc_core.scenario import run_scenarios  # noqa: E402
 from ingest.manual_paste import (  # noqa: E402
     PasteParser, paste_mrp, paste_risk_free,
@@ -55,6 +67,16 @@ app.add_middleware(
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  # Vite dev
     allow_methods=["*"], allow_headers=["*"],
 )
+
+@app.exception_handler(zipfile.BadZipFile)
+async def _bad_zip_handler(request: Request, exc: zipfile.BadZipFile) -> JSONResponse:
+    """유효 base64 이지만 zip 이 아닌 업로드 → 500 대신 422 (xlsx 3종 공통 하드닝).
+
+    xlsx/import·diff·audit 모두 read_workbook(zipfile) 을 타므로 한 곳에서 접는다.
+    임시파일 정리는 각 엔드포인트의 finally 가 이미 보장."""
+    return JSONResponse(status_code=422,
+                        content={"detail": f"xlsx 파일 아님(zip 파싱 실패): {exc}"})
+
 
 _FIELDS = {f.name for f in dataclasses.fields(DcfSpineInput)}
 
@@ -110,6 +132,99 @@ def health() -> dict:
     return {"ok": True, "engine": "calc_core", "mode": "local-byok"}
 
 
+import json as _json
+
+
+@app.post("/api/method/recommend")
+async def method_recommend(request: Request) -> dict:
+    """사업 성격 플래그 → 밸류에이션 기법 추천(참고). 근거: 밸류에이션_기법선택_로직.md.
+
+    body: {is_pipeline_bio, is_holding_or_heterogeneous, is_capital_intensive_or_cyclical,
+           is_predictable_high_growth, has_stable_earnings_and_peers} (모두 bool, 생략가능).
+    """
+    data = await request.json()
+    keys = ("is_pipeline_bio", "is_holding_or_heterogeneous",
+            "is_capital_intensive_or_cyclical", "is_predictable_high_growth",
+            "has_stable_earnings_and_peers")
+    # 생략·명시적 null 키는 전달하지 않는다 — 함수 자체의 기본값을 존중하기 위함.
+    # (has_stable_earnings_and_peers 만 기본 True 라, 일괄 bool(data.get(k)) 는
+    #  생략된 키를 None→False 로 덮어써 함수 계약과 어긋난다.) 명시적 false 는 유지.
+    flags = {k: bool(data[k]) for k in keys if data.get(k) is not None}
+    return recommend_by_business_nature(**flags)
+
+
+@app.get("/api/benchmarks/industry")
+def benchmark_industry(name: str = "") -> dict:
+    """산업 지표 분포(OPM·DSO·DIO·CAPEX/매출, p25/p50/p75/min/max/n) 반환.
+
+    프론트 IndustryProfileCard·감사 스킬이 소비. 근거: 산업_프로파일.md.
+    부분일치 fallback(정확 산업명 없으면 포함관계로 매칭).
+    """
+    data = load_benchmarks()
+    inds = data.get("industries", {})
+    if not inds:
+        raise HTTPException(503, "benchmarks.json 없음/비어있음 — scripts/export_benchmarks_json.py 실행")
+    matched, metrics = match_industry(inds, name)
+    if metrics is None:
+        # 매칭 실패 진단용 힌트. 목록은 50개로 절단하되 total 을 함께 줘 절단을
+        # 소비자가 인지할 수 있게 한다(이전엔 조용히 잘려 50번째 이후가 사라짐).
+        names = sorted(inds)
+        return {"industry": name, "metrics": {},
+                "available_industries": names[:50], "available_total": len(names)}
+    return {"industry": matched, "metrics": metrics, "meta": data.get("_meta", {})}
+
+
+# 골든 케이스 — 원본 엑셀 모델을 1:1 재현하는 회귀 픽스처. 데모 진입점으로도 쓴다.
+# DART·거시 키가 없는 방문자는 대부분의 시트가 비어 보이는데, 이 케이스는 외부
+# 의존이 0이라 키 없이도 엔진의 결정론을 그대로 보여줄 수 있다.
+#
+# tolerance 는 케이스마다 다르고, 그 차이가 곧 주장의 강도다 —
+#   viol   = 원본의 **라이브 수식값**을 받아둔 것이라 부동소수점 수준까지 일치.
+#   classys= 원본 **시트 표기값**(4~5 유효숫자 반올림)이라 ±5원 이내 일치가 상한.
+# UI 가 둘을 똑같이 "일치"로 표시하면 후자를 과대주장하게 되므로 분리해 내려보낸다.
+# (근거: fixtures/*/expected.json 의 _note, tests/golden/test_classys_spine.py)
+_DEMO_CASES = {
+    "viol": {
+        "label": "비올 (VIOL)",
+        "note": "원본 DCF 모델 최종본 재현. 중간연도 할인(mid-year) 적용.",
+        "tolerance": {"abs": 1e-6, "label": "원본 라이브 수식값과 완전 일치"},
+    },
+    "classys": {
+        "label": "클래시스 (CLASSYS)",
+        "note": "2차 검증 케이스. tax_override·terminal_fcff_override 경로.",
+        "tolerance": {"abs": 5.0, "label": "±5원 이내(원본 시트 표기가 반올림값)"},
+    },
+}
+
+
+@app.get("/api/demo/cases")
+def demo_cases() -> dict:
+    """골든 케이스 목록 + 입력 + 기대 출력.
+
+    프론트가 이 입력을 DCF 시트에 그대로 채워 넣고 /api/dcf 를 호출하면
+    expected.per_share 와 일치해야 한다(재현 검증). 그래서 inputs 는 가공하지 않고
+    픽스처 원본 그대로 반환한다 — 여기서 손대면 '재현'이라는 주장이 성립하지 않는다.
+
+    픽스처가 이미지에 없으면(=.dockerignore 로 빠졌으면) 해당 케이스는 조용히
+    빠지지 않고 available=false 로 드러난다.
+    """
+    out = []
+    for cid, meta in _DEMO_CASES.items():
+        d = _ROOT / "fixtures" / cid
+        try:
+            inputs = _json.loads((d / "inputs.json").read_text(encoding="utf-8"))
+            expected = _json.loads((d / "expected.json").read_text(encoding="utf-8"))
+        except (OSError, _json.JSONDecodeError) as e:
+            out.append({"id": cid, **meta, "available": False, "reason": str(e)})
+            continue
+        out.append({
+            "id": cid, **meta, "available": True,
+            "inputs": {k: v for k, v in inputs.items() if not k.startswith("_")},
+            "expected_per_share": expected.get("per_share"),
+        })
+    return {"cases": out}
+
+
 @app.post("/api/dcf")
 async def dcf_endpoint(request: Request) -> dict:
     """DcfSpineInput JSON → 주당가치·EV·TV비중·audit findings·민감도.
@@ -140,6 +255,89 @@ async def scenario_endpoint(request: Request) -> dict:
         raise HTTPException(422, str(e)) from e
     return {"rows": a.to_rows(), "spread": a.spread,
             "weighted_per_share": a.weighted_per_share}
+
+
+@app.post("/api/review/bias")
+async def bias_endpoint(request: Request) -> dict:
+    """편의 징후(기준서 540 문단 14·32, A5) — 소급 검토 + 판단 방향성 집계.
+
+    body: {"prior": [{label, estimated, actual}], "judgments": [{label, direction}]}
+    (direction: +1=가치 증가 쪽, -1=감소 쪽 — 유리/불리 판정은 감사인 입력).
+    """
+    from calc_core.bias import check_bias_directionality, check_retrospective
+
+    data = await request.json()
+    prior = data.get("prior") or []
+    judgments = data.get("judgments") or []
+    if not prior and not judgments:
+        raise HTTPException(422, "prior(소급 검토) 또는 judgments(판단 방향) 중 하나는 필요합니다")
+    try:
+        retro_f, rows = check_retrospective(prior) if prior else ([], [])
+        dir_f = check_bias_directionality(judgments) if judgments else []
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"입력 형식 오류: {e}") from e
+    fs = retro_f + dir_f
+    return {
+        "rows": [{"label": r.label, "estimated": r.estimated, "actual": r.actual,
+                  "error": r.error} for r in rows],
+        "findings": [{"rule": f.rule, "severity": f.severity.value,
+                      "message": f.message, "detail": f.detail} for f in fs],
+        "warn_count": sum(1 for f in fs if f.severity.value != "pass"),
+    }
+
+
+@app.post("/api/review/cross-estimate")
+async def cross_estimate_endpoint(request: Request) -> dict:
+    """추정치 간 교차 일관성(기준서 540 문단 24(c), A3).
+
+    body: {"estimates": {라벨: {가정키: 값}}} — 손상검사 g 3% vs 평가모델 g 1% 같은
+    공유 가정 불일치를 WARN 으로. 겹치는 키가 없으면 '비교 불가'도 WARN(통과 아님).
+    """
+    from calc_core.checks import check_cross_estimate_consistency
+
+    data = await request.json()
+    est = data.get("estimates") or {}
+    if not isinstance(est, dict) or len(est) < 2:
+        raise HTTPException(422, "estimates 에 추정치 2개 이상이 필요합니다")
+    fs = check_cross_estimate_consistency(est)
+    return {"findings": [{"rule": f.rule, "severity": f.severity.value,
+                          "message": f.message, "detail": f.detail} for f in fs]}
+
+
+@app.post("/api/range-estimate")
+async def range_estimate_endpoint(request: Request) -> dict:
+    """감사인 범위추정치(기준서 540 문단 28~29).
+
+    body: DcfSpineInput 필드(base 입력) + `range_assumptions`: [{field, low, high,
+    basis_low, basis_high}] + `claimed_per_share`?.
+    구간 양끝 근거가 없으면 **계산 자체를 차단**한다(29(a) — 근거 없는 범위 금지).
+    """
+    from calc_core.range_estimate import RangeAssumption, range_estimate
+
+    data = await request.json()
+    base = _parse_input(data)
+    raw = data.get("range_assumptions") or []
+    try:
+        assumptions = [RangeAssumption(
+            field=str(a.get("field", "")),
+            low=float(a.get("low")), high=float(a.get("high")),
+            basis_low=str(a.get("basis_low", "")), basis_high=str(a.get("basis_high", "")),
+        ) for a in raw]
+    except (TypeError, ValueError) as e:
+        raise HTTPException(422, f"range_assumptions 형식 오류: {e}") from e
+    claimed = data.get("claimed_per_share")
+    r = range_estimate(base, assumptions,
+                       claimed_per_share=float(claimed) if claimed not in (None, "") else None)
+    return {
+        "blocked": r.blocked,
+        "low": r.low, "high": r.high, "base_per_share": r.base_per_share,
+        "combo_low": r.combo_low, "combo_high": r.combo_high,
+        "claimed_per_share": r.claimed_per_share,
+        "claimed_within": r.claimed_within, "min_adjustment": r.min_adjustment,
+        "n_evaluations": r.n_evaluations,
+        "findings": [{"rule": f.rule, "severity": f.severity.value, "message": f.message}
+                     for f in r.findings],
+    }
 
 
 # ── xlsx 왕복 (export → 편집 → import/diff → 로컬 모델 반영) ──────────────────
@@ -206,24 +404,176 @@ async def xlsx_export(request: Request) -> Response:
 
 @app.post("/api/xlsx/import")
 async def xlsx_import(request: Request) -> dict:
-    """{"xlsx_b64": "..."} → import_dcf_model → 복원 입력 + 재계산 결과.
+    """{"xlsx_b64": "..."} → 레이아웃 판별 후 되읽기 → 복원 입력 + 재계산 결과.
 
-    표준 Val-Studio DCF 레이아웃 가정(scaffold/export 산출). 타 템플릿은 422.
+    풀모델 정본 템플릿(`valstudio-full-v1`, _VS_STATE layout 키 또는 라벨 지문)이면
+    fullmodel 셀맵으로, 아니면 기존 스파인(template_schema) 레이아웃으로 읽는다.
+    풀모델은 워크북 주장값(DCF!H49) vs 엔진 재계산 tie-out 까지 동봉 — 애드인이
+    getFileAsync 바이트를 그대로 보내는 경로의 정합성 게이트. 타 템플릿은 422.
+    """
+    data = await request.json()
+    if "xlsx_b64" not in data:
+        raise HTTPException(422, "xlsx_b64 필요")
+    path = _write_temp_xlsx(_decode_xlsx(data["xlsx_b64"]))
+    fm = None
+    try:
+        state = _skill_state_payload(path)          # 스킬 증적은 import 실패해도 살린다
+        try:
+            if detect_fullmodel(read_workbook(path)):
+                inp, fm = import_fullmodel(path)
+            else:
+                inp = import_dcf_model(path)
+        except (DcfModelImportError, FullModelImportError) as e:
+            raise HTTPException(422, f"DCF 모델 import 실패(표준 레이아웃 아님?): {e}") from e
+    finally:
+        os.unlink(path)
+    out = {"input": {f: getattr(inp, f) for f in _FIELDS},
+           "result": _result_payload(inp), "skill_state": state,
+           "layout": fm.layout if fm else "valstudio-spine"}
+    if fm is not None:
+        if fm.warnings:
+            out["warnings"] = fm.warnings
+        if fm.claimed_per_share is not None:
+            per_share = run(inp).per_share
+            out["workbook_per_share"] = round(fm.claimed_per_share, 4)
+            out["tie_out_workbook"] = isclose(
+                per_share, fm.claimed_per_share, rel_tol=1e-6)
+    return out
+
+
+@app.post("/api/xlsx/audit")
+async def xlsx_audit(request: Request) -> dict:
+    """{"xlsx_b64"} → 수식 정적 감사(패턴 린트·하드코딩 스캔·중심셀 검산).
+
+    재계산 없는(COM 불요) 정적 분석 — 외부 편집본·임의 모델에도 작동. 표준
+    Val-Studio 레이아웃이면 import→엔진 재계산으로 Sens 그리드 중심셀(F7)까지
+    검산한다(축 순환·stale 4유형). 비표준 레이아웃은 린트 2종만 수행.
     """
     data = await request.json()
     if "xlsx_b64" not in data:
         raise HTTPException(422, "xlsx_b64 필요")
     path = _write_temp_xlsx(_decode_xlsx(data["xlsx_b64"]))
     try:
-        state = _skill_state_payload(path)          # 스킬 증적은 import 실패해도 살린다
+        wb = read_workbook(path)
+        rep = audit_workbook(wb)
+        center_checked = False
         try:
             inp = import_dcf_model(path)
-        except DcfModelImportError as e:
-            raise HTTPException(422, f"DCF 모델 import 실패(표준 레이아웃 아님?): {e}") from e
+            center = wb.get("Sens", {}).get("F7")
+            if center is not None and center.number is not None:
+                check_sensitivity_center(center.number, run(inp).per_share, report=rep)
+                center_checked = True
+        except DcfModelImportError:
+            pass                                    # 비표준 레이아웃 — 린트만
     finally:
         os.unlink(path)
-    return {"input": {f: getattr(inp, f) for f in _FIELDS},
-            "result": _result_payload(inp), "skill_state": state}
+    return {
+        "findings": [{"rule": f.rule, "severity": f.severity.value,
+                      "message": f.message, "detail": f.detail}
+                     for f in rep.findings],
+        "warn_count": len(rep.warns),
+        "sheets": list(wb),
+        "center_checked": center_checked,
+    }
+
+
+@app.post("/api/xlsx/connectivity")
+async def xlsx_connectivity(request: Request) -> dict:
+    """모델 연결성 진단(P1) — "이 가정이 결과에 도달하는가"를 그래프로 판정.
+
+    body: {xlsx_b64, target?} — target 미지정 시 표준 레이아웃(DCF!C33)을 시도하고,
+    아니면 422 로 목표 셀 지정을 요구한다(임의 모델은 주당가치 위치를 알 수 없다).
+    실측 근거: 비올 진본에서 WACC 시트 전체·스파인 중간 상수 재시작(EBIT·WC·매출추정
+    미도달)을 이 진단이 검출했다 — 셀 단위 리뷰로는 '연결의 부재'가 보이지 않는다.
+    """
+    from excel.dependency_graph import (build_graph, find_breaks, formula_ratio,
+                                        propose_reconnections)
+    from excel.dependency_graph import cycles as graph_cycles
+    from excel.template_schema import RESULT
+
+    data = await request.json()
+    path = _write_temp_xlsx(_decode_xlsx(data.get("xlsx_b64") or ""))
+    g = build_graph(read_workbook(path))
+
+    target = str(data.get("target") or "").strip()
+    if not target:
+        std = f"DCF!{RESULT['per_share']}"
+        if std in g.nodes and g.nodes[std].kind == "formula":
+            target = std
+        else:
+            raise HTTPException(
+                422, "목표 셀을 지정하세요(예: DCF!H49) — Val-Studio 표준 레이아웃"
+                     f"({std})이 아니라 주당가치 위치를 추정할 수 없습니다.")
+    if target not in g.nodes:
+        raise HTTPException(422, f"목표 셀 '{target}' 이 워크북에 없습니다.")
+
+    b = find_breaks(g, target)
+    fr = formula_ratio(g)
+    # 순환: 3표 시트(Model)의 이자 순환은 정상 규약(R14) — 그 외만 보고.
+    cyc = graph_cycles(g, whitelist_sheets=frozenset({"Model"}))
+
+    orphan_by_sheet: dict[str, int] = {}
+    for k in b.orphan_formulas:
+        s = k.split("!")[0]
+        orphan_by_sheet[s] = orphan_by_sheet.get(s, 0) + 1
+
+    n_formulas = sum(1 for n in g.nodes.values() if n.kind == "formula")
+    return {
+        "target": target,
+        "n_nodes": len(g.nodes), "n_formulas": n_formulas,
+        "formula_ratio": round(fr, 4),
+        # 값-only 판정(감사인 복원 모드 신호) — 임계는 UI 안내용, 판단은 사람.
+        "values_only_suspect": fr < 0.03,
+        "sheet_summary": b.sheet_summary,
+        "dead_sheets": b.dead_sheets,
+        "reach_size": len(b.reach),
+        "constant_inputs_in_path": [
+            {"cell": k, "value": g.nodes[k].value}
+            for k in b.constant_inputs_in_path[:100]],
+        "constant_inputs_total": len(b.constant_inputs_in_path),
+        "orphan_by_sheet": orphan_by_sheet,
+        "orphan_total": len(b.orphan_formulas),
+        "unknown_cells": b.unknown_cells[:50],
+        "external_cells": b.external_cells[:50],
+        "cycles": cyc[:20],
+        # 재연결 제안(P1 후반): 상수 잎 ↔ 미도달 수식의 캐시값 매칭 + tie-out.
+        # value_change 는 자동 적용 금지 대상(원래 상수가 낡았다는 뜻) — 사람이 판단.
+        "reconnect_proposals": [{
+            "constant_cell": p.constant_cell, "constant_value": p.constant_value,
+            "candidate_cell": p.candidate_cell, "candidate_value": p.candidate_value,
+            "diff_ratio": p.diff_ratio, "tie_out": p.tie_out,
+            "suggested_formula": p.suggested_formula,
+        } for p in propose_reconnections(g, b)],
+    }
+
+
+@app.post("/api/xlsx/recover")
+async def xlsx_recover(request: Request) -> dict:
+    """값-only 워크북 복원(P2) — 기준서 540 문단 22~25(경영진 방법 테스트)의 입구.
+
+    표준 레이아웃이면 스파인 전체를 복원해 재계산 대조(캐시 불일치는 그 자체가 발견),
+    임의 레이아웃이면 FCFF↔PV 행 쌍에서 **암묵 할인율**을 역산한다. 산출물은 복원된
+    모델이 아니라 **후보 + 미해결(질의) 목록**이다 — 감사증거인 척하지 않는다.
+    """
+    from excel.value_recovery import recover
+
+    data = await request.json()
+    path = _write_temp_xlsx(_decode_xlsx(data.get("xlsx_b64") or ""))
+    r = recover(read_workbook(path))
+    out = {
+        "mode": r.mode,
+        "findings": [{"rule": f.rule, "severity": f.severity.value,
+                      "message": f.message, "detail": f.detail} for f in r.findings],
+        "unresolved": r.unresolved,
+        "recomputed_per_share": r.recomputed_per_share,
+        "cached_per_share": r.cached_per_share,
+        "implied": r.implied,
+        "candidates": r.candidates[:10],
+    }
+    if r.input is not None:
+        from dataclasses import asdict
+        out["input"] = asdict(r.input)
+    return out
 
 
 @app.post("/api/xlsx/diff")
@@ -573,6 +923,11 @@ async def dcf_assemble_endpoint(request: Request) -> dict:
         "tv_weight": (r.terminal_value_pv / r.enterprise_value
                       if r and r.enterprise_value else None),
         "wacc": s.wacc if s else None,
+        # 조립된 스파인 시계열 — 프론트가 DCF 시트 입력(dcf_input)으로 반영해
+        # export·리뷰·시나리오가 같은 숫자를 쓰는 왕복 루프를 닫는 재료.
+        "spine": ({f: getattr(s, f) for f in
+                   ("revenue", "cogs", "sga", "dep_amort", "capex",
+                    "delta_nwc_cash_adj")} if s else None),
         "provenance": a.provenance,
         "findings": _findings(a.report),
     }
@@ -732,8 +1087,11 @@ async def assumptions_build(request: Request) -> dict:
                 {k: [float(x) for x in v]
                  for k, v in (d.get("wc_driver_by_item") or {}).items()},
                 float(d.get("base_net_working_capital", 0.0)))
+            _dso, _dio = _wc.dso_dio(wc_res.turnover_days_by_item)
             out["wc"] = {"net_working_capital": wc_res.net_working_capital,
-                         "delta_nwc_cash_adj": wc_res.delta_nwc_cash_adj}
+                         "delta_nwc_cash_adj": wc_res.delta_nwc_cash_adj,
+                         "turnover_days_by_item": wc_res.turnover_days_by_item,
+                         "dso": _dso, "dio": _dio}
     except (KeyError, TypeError, ValueError, ZeroDivisionError) as e:
         raise HTTPException(422, f"가정 계산 오류: {e}") from e
     return out
@@ -921,7 +1279,8 @@ async def brief_from_xbrl(request: Request) -> dict:
     있으면(형제 *_lab-ko.xml) 세그먼트 한글명까지, 없으면 축코드로 degrade.
     """
     from ingest.parsers.xbrl import XbrlParser
-    from ingest.profiles.research_brief import extract_research_brief, render_brief_md
+    from ingest.profiles.research_brief import (
+        extract_research_brief, render_brief_md, segment_allocation)
     d = await request.json()
     if "xbrl_b64" not in d:
         raise HTTPException(422, "xbrl_b64 필요")
@@ -946,10 +1305,32 @@ async def brief_from_xbrl(request: Request) -> dict:
         "financials": pre.financials,
         "segments": [_seg(s) for s in pre.segments],
         "regions": [_seg(s) for s in pre.regions],
+        "segment_allocation": segment_allocation(pre.segments),   # 부문 트리 배분율 자동
         "issued_shares": pre.issued_shares, "treasury_shares": pre.treasury_shares,
         "floating_ratio": pre.floating_ratio(),
         "periods": sorted(pre.financials), "markdown": md,
     }
+
+
+@app.post("/api/backlog")
+async def backlog_endpoint(request: Request) -> dict:
+    """수주산업 매출 모델: {opening_backlog, conversion_rate, new_orders:[...],
+    normalized_margin, years} → 연도별 매출·EBIT·연말잔고 + 스파인 라인(revenue/cogs/sga).
+    조선·건설·플랜트·방산 등 수주잔고→매출 전환 산업의 DCF 출발점."""
+    from calc_core.backlog import BacklogInputs, project_backlog, to_spine_lines
+    d = await request.json()
+    try:
+        inp = BacklogInputs(
+            opening_backlog=float(d["opening_backlog"]),
+            conversion_rate=float(d["conversion_rate"]),
+            new_orders=[float(x) for x in (d.get("new_orders") or [])],
+            normalized_margin=float(d["normalized_margin"]),
+            years=int(d["years"]))
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"입력 형식 오류: {e}") from e
+    r = project_backlog(inp)
+    return {"revenue": r.revenue, "ebit": r.ebit, "closing_backlog": r.closing_backlog,
+            "spine_lines": to_spine_lines(r), "warnings": r.warnings}
 
 
 # ── DART API 재무제표 (BYOK: X-Dart-Key 헤더 통과, 서버 미저장) ───────────────
@@ -1531,7 +1912,8 @@ async def relative_value(request: Request) -> dict:
     d = await request.json()
     try:
         peers = [PeerMultiple(name=p.get("name", "?"),
-                              per=p.get("per"), pbr=p.get("pbr"), ev_ebitda=p.get("ev_ebitda"))
+                              per=p.get("per"), pbr=p.get("pbr"),
+                              ev_ebitda=p.get("ev_ebitda"), psr=p.get("psr"))
                  for p in (d.get("peers") or [])]
     except (TypeError, AttributeError) as e:
         raise HTTPException(422, f"peers 형식 오류: {e}") from e
@@ -1539,9 +1921,63 @@ async def relative_value(request: Request) -> dict:
         raise HTTPException(422, "peers 필요")
     r = relative_valuation(
         peers, target_eps=d.get("target_eps"), target_bps=d.get("target_bps"),
-        target_ebitda=d.get("target_ebitda"), net_debt=float(d.get("net_debt", 0.0)),
+        target_ebitda=d.get("target_ebitda"), target_sps=d.get("target_sps"),
+        net_debt=float(d.get("net_debt", 0.0)),
         shares_outstanding=d.get("shares_outstanding"), use=str(d.get("use", "median")))
-    return {"per": r.per, "pbr": r.pbr, "ev_ebitda": r.ev_ebitda, "warnings": r.warnings}
+    return {"per": r.per, "pbr": r.pbr, "ev_ebitda": r.ev_ebitda, "psr": r.psr,
+            "warnings": r.warnings}
+
+
+@app.post("/api/viu")
+async def viu_endpoint(request: Request) -> dict:
+    """IAS 36 사용가치(VIU) 제약모드: {post_tax_cashflows:[...], post_tax_rate, tax_rate,
+    fvlcd?, carrying_amount?, mid_year?, provision_carrying?} → VIU(세전/세후)·유효세전율·
+    회수가능액·손상액. TV 없는 유한현가 + 유효세전율 역산(234)."""
+    from calc_core.viu import ViuInputs, compute_viu
+    d = await request.json()
+    cfs = d.get("post_tax_cashflows") or []
+    if not cfs:
+        raise HTTPException(422, "post_tax_cashflows 필요")
+    try:
+        inp = ViuInputs(
+            post_tax_cashflows=[float(x) for x in cfs],
+            post_tax_rate=float(d["post_tax_rate"]),
+            tax_rate=float(d.get("tax_rate", 0.0)),
+            fvlcd=(float(d["fvlcd"]) if d.get("fvlcd") is not None else None),
+            carrying_amount=(float(d["carrying_amount"])
+                             if d.get("carrying_amount") is not None else None),
+            mid_year=bool(d.get("mid_year", True)),
+            provision_carrying=float(d.get("provision_carrying", 0.0)))
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"입력 형식 오류: {e}") from e
+    r = compute_viu(inp)
+    return {"viu_post_tax": r.viu_post_tax, "viu_pre_tax": r.viu_pre_tax,
+            "effective_pre_tax_rate": r.effective_pre_tax_rate,
+            "recoverable_amount": r.recoverable_amount,
+            "impairment_loss": r.impairment_loss, "warnings": r.warnings}
+
+
+@app.post("/api/rcps")
+async def rcps_endpoint(request: Request) -> dict:
+    """RCPS/CPS 노드변동 격자(411): {enterprise_value, liquidation_preference,
+    conversion_fraction, term_years, volatility, risk_free, dividend_yield?, steps?,
+    american?} → 우선주/보통주 가치 + 전환경계. 각 노드 max(청산,전환) backward induction."""
+    from calc_core.backsolve import OpmParams, PreferredClass, price_rcps
+    d = await request.json()
+    try:
+        params = OpmParams(
+            term_years=float(d["term_years"]), volatility=float(d["volatility"]),
+            risk_free=float(d["risk_free"]), dividend_yield=float(d.get("dividend_yield", 0.0)))
+        pref = PreferredClass(
+            name=str(d.get("name", "Preferred")),
+            liquidation_preference=float(d["liquidation_preference"]),
+            conversion_fraction=float(d["conversion_fraction"]))
+        r = price_rcps(float(d["enterprise_value"]), pref, params,
+                       steps=int(d.get("steps", 300)), american=bool(d.get("american", False)))
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"입력 형식 오류: {e}") from e
+    return {"preferred_value": r.preferred_value, "common_value": r.common_value,
+            "conversion_boundary": r.conversion_boundary}
 
 
 @app.post("/api/price/multiples")
@@ -1573,11 +2009,18 @@ def method_options() -> dict:
     return {"purposes": PURPOSES, "deal_types": DEAL_TYPES}
 
 
-@app.post("/api/method/recommend")
-async def method_recommend(request: Request) -> dict:
+@app.post("/api/method/recommend-legal")
+async def method_recommend_legal(request: Request) -> dict:
     """{purpose, deal_type?, target_listed?, counterparty_listed?} → 방법론 추천.
 
     결정론 법제 매핑(북 정본) — 추천이지 강제 아님. 규칙 없는 조합은 uncertain.
+    반환: {primary, secondary, legal_basis, notes, uncertain} — Home.jsx 온보딩이 소비.
+
+    경로 주의: 이전엔 /api/method/recommend 였는데 line 118 의 사업성격 추천과
+    **같은 경로에 중복 등록**돼 있었다. Starlette 은 먼저 등록된 라우트를 매칭하므로
+    이 핸들러는 도달 불가능한 죽은 코드였고, Home 은 형태가 다른 응답(primary·notes
+    없음)을 받아 렌더 중 TypeError 로 흰 화면이 됐다. 두 추천은 입력축이 다르므로
+    (사업성격 vs 법제목적) 경로를 분리해 유지한다.
     """
     d = await request.json()
     if d.get("purpose") not in PURPOSES:
@@ -1617,6 +2060,10 @@ import uuid  # noqa: E402
 from datetime import datetime, timezone  # noqa: E402
 
 _PROJECTS_DIR = _ROOT / "var" / "projects"
+# 영속화: PROJECTS_GCS_BUCKET 설정 시 GCS 원본 + 로컬 캐시(Cloud Run 재시작 생존),
+# 미설정이면 순수 로컬(기존 동작·테스트 무영향). 상세: project_store.py 도입부.
+from .project_store import ProjectStore, StoreError  # noqa: E402
+_STORE = ProjectStore(_PROJECTS_DIR, os.environ.get("PROJECTS_GCS_BUCKET"))
 _MODES = {"appraiser", "auditor"}
 _ID_RE = _re.compile(r"^[0-9a-f]{12}$")
 
@@ -1625,10 +2072,10 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _proj_path(pid: str) -> Path:
+def _check_pid(pid: str) -> str:
     if not _ID_RE.fullmatch(pid):                       # 경로 탈출 방지
         raise HTTPException(400, f"잘못된 프로젝트 id: {pid}")
-    return _PROJECTS_DIR / f"{pid}.json"
+    return pid
 
 
 # 구용어 마이그레이션: ERP(주식위험프리미엄) → MRP(시장위험프리미엄) 개명 이전에
@@ -1654,30 +2101,41 @@ def _migrate(obj):
 
 
 def _load_project(pid: str) -> dict:
-    p = _proj_path(pid)
-    if not p.exists():
+    try:
+        text = _STORE.load(_check_pid(pid))
+    except StoreError as e:
+        raise HTTPException(502, str(e)) from e
+    if text is None:
         raise HTTPException(404, f"프로젝트 없음: {pid}")
-    return _migrate(_json.loads(p.read_text(encoding="utf-8")))
+    return _migrate(_json.loads(text))
 
 
 def _save_project(proj: dict) -> None:
-    _PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
-    _proj_path(proj["id"]).write_text(
-        _json.dumps(proj, ensure_ascii=False, indent=1), encoding="utf-8")
+    try:
+        _STORE.save(_check_pid(proj["id"]),
+                    _json.dumps(proj, ensure_ascii=False, indent=1))
+    except StoreError as e:
+        raise HTTPException(502, str(e)) from e
 
 
 @app.get("/api/projects")
 def list_projects() -> list[dict]:
-    """목록(메타만) — 홈 화면. 수정시각 내림차순."""
+    """목록(메타만) — 홈 화면. 수정시각 내림차순. 재시작 직후에도 GCS 목록이 살아있다."""
     out = []
-    if _PROJECTS_DIR.is_dir():
-        for f in _PROJECTS_DIR.glob("*.json"):
-            try:
-                p = _json.loads(f.read_text(encoding="utf-8"))
-                out.append({k: p.get(k) for k in
-                            ("id", "name", "mode", "company", "created_at", "updated_at")})
-            except (_json.JSONDecodeError, OSError):
+    try:
+        ids = _STORE.list_ids()
+    except StoreError as e:
+        raise HTTPException(502, str(e)) from e
+    for pid in ids:
+        try:
+            text = _STORE.load(pid)
+            if text is None:
                 continue
+            p = _json.loads(text)
+            out.append({k: p.get(k) for k in
+                        ("id", "name", "mode", "company", "created_at", "updated_at")})
+        except (_json.JSONDecodeError, OSError, StoreError):
+            continue
     return sorted(out, key=lambda p: p.get("updated_at") or "", reverse=True)
 
 
@@ -1727,10 +2185,116 @@ async def update_project(pid: str, request: Request) -> dict:
 
 @app.delete("/api/projects/{pid}", status_code=204)
 def delete_project(pid: str) -> None:
-    p = _proj_path(pid)
-    if not p.exists():
-        raise HTTPException(404, f"프로젝트 없음: {pid}")
-    p.unlink()
+    try:
+        if not _STORE.delete(_check_pid(pid)):
+            raise HTTPException(404, f"프로젝트 없음: {pid}")
+    except StoreError as e:
+        raise HTTPException(502, str(e)) from e
+
+
+# ── L3 분석적 절차 리뷰 (탑다운 모델 리뷰 워크플로우) ─────────────────────────
+def _seg_list(raw) -> list[SegmentSeries] | None:
+    if not raw:
+        return None
+    try:
+        return [SegmentSeries(name=str(s["name"]),
+                              revenue=[float(x) for x in s["revenue"]],
+                              cogs=[float(x) for x in s["cogs"]],
+                              provenance=s.get("provenance"))
+                for s in raw]
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"segments 입력 오류: {e}") from e
+
+
+def _flist(v) -> list[float] | None:
+    return [float(x) for x in v] if v else None
+
+
+def _history_from_body(d: dict) -> tuple[FinancialHistory, list[str]]:
+    """history(직접 입력) 또는 dart_years(커넥터 응답) → FinancialHistory."""
+    try:
+        if d.get("dart_years"):
+            return history_from_dart(d["dart_years"], d.get("employee_years"))
+        h = d.get("history")
+        if not isinstance(h, dict) or not h.get("years"):
+            raise ValueError("history.years 또는 dart_years 필요")
+        return FinancialHistory(
+            years=[int(y) for y in h["years"]],
+            revenue=_flist(h.get("revenue")), cogs=_flist(h.get("cogs")),
+            sga=_flist(h.get("sga")), headcount=_flist(h.get("headcount")),
+            labor_cost=_flist(h.get("labor_cost")), nwc=_flist(h.get("nwc")),
+            segments=_seg_list(h.get("segments"))), []
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"history 입력 오류: {e}") from e
+
+
+@app.post("/api/review/ledger")
+async def review_ledger_endpoint(request: Request) -> dict:
+    """{spine, patches:[{label, fields}]} → 오류 영향 분리 원장(결함별 Δ주당가치).
+
+    수정을 한 건씩 누적 적용·재계산 — 반대 방향 오류의 상쇄 은폐를 분리 측정으로
+    해소한다(리뷰 수정 실무의 표준 산출물 표). 적용 순서 = 원장 순서(상류→하류 권장).
+    """
+    d = await request.json()
+    if "spine" not in d:
+        raise HTTPException(422, "spine 필요")
+    inp = _parse_input(dict(d["spine"]))
+    try:
+        rows = impact_ledger(inp, d.get("patches") or [])
+    except (TypeError, ValueError) as e:
+        raise HTTPException(422, f"patches 입력 오류: {e}") from e
+    return {"ledger": rows,
+            "net_delta": rows[-1]["cum_delta"] if rows else 0.0}
+
+
+@app.post("/api/review/analytical")
+async def review_analytical_endpoint(request: Request) -> dict:
+    """L3 분석적 절차 — 실적×추정 탑다운 리뷰(접합부·V자·믹스·단위경제·컨센서스).
+
+    body:
+      history: FinancialHistory 필드 직접 입력(segments 포함) — dart_years 와 택1
+      dart_years: /api/dart/financials 연도별 응답 배열 → 서버가 어셈블(notes 동봉)
+      employee_years: [{year, headcount, total_salary}] (/api/dart/employee 발췌)
+      spine: DcfSpineInput 필드(추정) — 있으면 접합부·성장-운전자본 검사 가동
+      forecast_segments: [{name, revenue, cogs}] 부문 추정
+      consensus: [{metric, own, consensus, source}] 회사별 앵커 대조
+
+    findings 는 detail 포함(시계열 스파크라인·layer 태그 — 리뷰 패널 소재).
+    브리지 표(opm_bridge·mix_decomposition)는 검사가 아니라 설명 소재로 동봉.
+    """
+    d = await request.json()
+    history, notes = _history_from_body(d)
+    inp = _parse_input(dict(d["spine"])) if d.get("spine") else None
+    rep = analytical_review(history, inp,
+                            forecast_segments=_seg_list(d.get("forecast_segments")))
+    for c in d.get("consensus") or []:
+        try:
+            check_consensus_anchor(str(c.get("metric", "")), float(c["own"]),
+                                   float(c["consensus"]),
+                                   source=str(c.get("source", "")), report=rep)
+        except (KeyError, TypeError, ValueError) as e:
+            raise HTTPException(422, f"consensus 입력 오류: {e}") from e
+
+    bridges: dict = {}
+    if (history.revenue and history.cogs and history.sga
+            and len(history.years) >= 2 and all(r > 0 for r in history.revenue)):
+        gpm = [1.0 - c / r for c, r in zip(history.cogs, history.revenue)]
+        sga_ratio = [s / r for s, r in zip(history.sga, history.revenue)]
+        bridges["opm_bridge"] = opm_bridge(gpm, sga_ratio)
+    if history.segments and len(history.segments[0].revenue) >= 2:
+        try:
+            bridges["mix_decomposition"] = mix_decomposition(history.segments)
+        except ValueError as e:
+            notes = list(notes) + [f"mix_decomposition 생략: {e}"]
+    return {
+        "findings": [{"rule": f.rule, "severity": f.severity.value,
+                      "message": f.message, "detail": f.detail}
+                     for f in rep.findings],
+        "warn_count": len(rep.warns),
+        "years": history.years,
+        "assembly_notes": notes,
+        "bridges": bridges,
+    }
 
 
 # 프론트 빌드가 있으면 정적 서빙 (없으면 API 전용 — dev 는 Vite 5173 + 프록시)

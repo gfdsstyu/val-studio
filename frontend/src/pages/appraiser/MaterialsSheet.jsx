@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { api, fileToBase64 } from "../../api.js";
 import { loadKey } from "../Byok.jsx";
+import TableTransfer from "../../TableTransfer.jsx";
+import DisclosureSheet from "./DisclosureSheet.jsx";
 
 /* 0.자료·Brief — files(자료함)·brief(Company Brief).
    업로드/파싱 파이프라인·LLM 자동 브리프는 후속(백엔드 인제스트 미배선) — 지금은
@@ -101,9 +103,22 @@ function DartFetchPanel({ project, onSave }) {
             {["BS", "IS", "CIS", "CF"].filter((k) => byDiv[k]).map((div) => (
               <details key={div} style={{ marginTop: 6 }}>
                 <summary style={{ cursor: "pointer", fontSize: 13 }}>{div} ({byDiv[div].length})</summary>
+                {/* 워크북 원자료 시트(r_DART)로 옮기는 경로 — 화면 표는 30행만 보여주지만
+                    전송은 **전량**이다(눈에 보이는 것만 가는 함정 방지). 값은 number 로
+                    넘겨 엑셀에서 숫자 셀이 되게 한다. */}
+                <div style={{ margin: "4px 0" }}>
+                  <TableTransfer label={`${div} 계정`}
+                    hint="단위: 백만원 · account_id 는 결정론 분류 키"
+                    rows={[["계정명", "금액(백만원)", "account_id"],
+                      ...byDiv[div].map((a) => [a.name, a.value == null ? "" : Math.round(a.value), a.account_id || ""])]} />
+                </div>
                 <table><tbody>{byDiv[div].slice(0, 30).map((a, i) => (
                   <tr key={i}><td style={{ textAlign: "left" }}>{a.name}</td>
                     <td style={{ textAlign: "right" }}>{won2(a.value)}</td></tr>))}</tbody></table>
+                {byDiv[div].length > 30 && (
+                  <div className="muted" style={{ fontSize: 11 }}>
+                    …외 {byDiv[div].length - 30}건 (전송 버튼은 전량 {byDiv[div].length}행)</div>
+                )}
               </details>
             ))}
           </div>
@@ -219,7 +234,11 @@ function BriefSheet({ project, onSave }) {
               </div>
             )}
             {pre.segments.length > 0 && (
-              <><h2 style={{ fontSize: "0.9rem", marginTop: 12 }}>부문 매출</h2>
+              <><h2 style={{ fontSize: "0.9rem", marginTop: 12 }}>부문 매출{" "}
+                  <TableTransfer label="부문 매출"
+                    rows={[["부문", "매출(백만원)", "기간"],
+                      ...pre.segments.map((s) => [s.label, s.revenue == null ? "" : Math.round(s.revenue), s.period])]} />
+                </h2>
                 <table><thead><tr><th style={{ textAlign: "left" }}>부문</th><th>매출(백만)</th><th>기간</th></tr></thead>
                   <tbody>{pre.segments.map((s, i) => (
                     <tr key={i}><td style={{ textAlign: "left" }}>{s.label}</td>
@@ -251,7 +270,7 @@ function BriefSheet({ project, onSave }) {
 }
 
 export default function MaterialsSheet({ project, sheet, onSave }) {
-  return sheet === "brief"
-    ? <BriefSheet project={project} onSave={onSave} />
-    : <FilesSheet project={project} onSave={onSave} />;
+  if (sheet === "brief") return <BriefSheet project={project} onSave={onSave} />;
+  if (sheet === "disclosure") return <DisclosureSheet project={project} onSave={onSave} />;
+  return <FilesSheet project={project} onSave={onSave} />;
 }

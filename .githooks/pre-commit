@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# 지식자산 동기화 pre-commit 훅.
+#  ① 케이스 doc(smic/*.md)·산업 보충태그 스테이징 → 벤치마크·산업프로파일·엔진용
+#     industry_benchmarks.json 재생성(MD RAG ↔ 엔진 규칙 정합 보장).
+#  ② 루트 챕터(docs/reference/*.md) 스테이징 → 온톨로지 재컴파일(rag_index·graph·CONCEPTS).
+#     build.py 의 frontmatter 게이트가 여기서 발동하므로 **검색으로 도달 불가한 챕터는
+#     커밋되지 않는다**(전례: 모델감사_분석적절차 가 3일간 인덱스 밖에 있었음).
+#  ①의 산출물 자체가 루트 챕터이므로 ② 는 항상 ① 뒤에 실행한다.
+# 활성화(1회): git config core.hooksPath .githooks
+set -euo pipefail
+export PYTHONIOENCODING=utf-8   # 훅 콘솔이 cp949 여도 빌드 출력이 깨지지 않게
+
+# core.quotepath=false 필수 — 기본값이면 한글 경로가 "docs/reference/\353..." 로
+# 이스케이프되어 앵커(^docs/reference/...)가 영구히 매칭되지 않는다(챕터명이 전부 한글).
+CHANGED=$(git -c core.quotepath=false diff --cached --name-only || true)
+
+BENCH=0
+ONTO=0
+if echo "$CHANGED" | grep -qE 'docs/reference/smic/.*\.md|_wc_industry_supplement\.json'; then
+  BENCH=1
+fi
+if echo "$CHANGED" | grep -qE '^docs/reference/[^/]+\.md$'; then
+  ONTO=1
+fi
+if [ "$BENCH" = 0 ] && [ "$ONTO" = 0 ]; then
+  exit 0   # 관련 변경 없음 → 스킵
+fi
+
+PY=$(command -v python || command -v python3)
+
+if [ "$BENCH" = 1 ]; then
+  echo "[pre-commit] 케이스 doc/태그 변경 감지 → 벤치마크·프로파일·엔진 JSON 재생성"
+  for s in build_segment_map build_margin_benchmarks build_wc_benchmarks \
+           build_capex_benchmarks build_benchmarks build_industry_profiles \
+           export_benchmarks_json; do
+    "$PY" "scripts/$s.py" >/dev/null 2>&1 || {
+      echo "[pre-commit] $s 실패 — 커밋 중단(수동 확인)"; exit 1; }
+  done
+  git add docs/reference/벤치마크_*.md docs/reference/산업_프로파일.md \
+          docs/reference/smic/_제품군지도.md \
+          backend/calc_core/data/industry_benchmarks.json 2>/dev/null || true
+  echo "[pre-commit] 벤치마크 동기화 완료 — benchmarks.json 이 최신 케이스와 정합"
+fi
+
+# ② 온톨로지 — ①이 돌았으면 그 산출물(루트 챕터)까지 반영해야 하므로 무조건 실행.
+echo "[pre-commit] 온톨로지 재컴파일(frontmatter 게이트 포함)"
+"$PY" docs/reference/ontology/build.py || {
+  echo "[pre-commit] 온톨로지 컴파일 실패 — 커밋 중단(위에 표시된 누락 필드를 채우고 재시도)"
+  exit 1; }
+git add docs/reference/ontology/rag_index.json \
+        docs/reference/ontology/graph.json \
+        docs/reference/ontology/CONCEPTS.md 2>/dev/null || true
+echo "[pre-commit] 온톨로지 동기화 완료 — 검색 인덱스가 최신 챕터와 정합"

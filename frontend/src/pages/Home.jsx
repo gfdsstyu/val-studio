@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { MODE_LABEL } from "../nav.js";
+import { toDcfForm } from "../demoCase.js";
 
 /* 홈 = 프로젝트 목록 (SharePoint 벤치마크: 극미니멀 리스트). 랜딩 없음.
    새 프로젝트 = 2단계 위저드: ①기본(명칭·회사·모드) ②평가 설계(목적·거래유형·
@@ -23,8 +24,11 @@ function MethodCard({ m, picked, onPick }) {
   return (
     <button className={`method-card ${picked ? "picked" : ""}`} onClick={() => onPick(m.id)}>
       <b>{m.label}</b>
+      {/* 엔진·화면 2축 표기 — 엔진만 있는 방법(VIU 등)을 "가동"이라고만 하면
+          유저를 없는 화면으로 보낸다. 카탈로그의 available/ui 를 그대로 반영. */}
       <span className={m.available ? "avail" : "unavail"}>
-        {m.available ? "엔진 가동" : "미구현(정직 표기)"}
+        {!m.available ? "미구현(정직 표기)"
+          : m.ui ? "엔진 가동 · 전용 화면" : "엔진 가동 · 화면 준비중(API)"}
       </span>
       <span className="muted">{m.engine}</span>
     </button>
@@ -57,7 +61,7 @@ function NewProjectWizard({ onCreated, onCancel }) {
   const askRecommend = async () => {
     setBusy(true); setErr(null); setRec(null); setChosen(null);
     try {
-      const r = await fetch("/api/method/recommend", {
+      const r = await fetch("/api/method/recommend-legal", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           purpose, deal_type: dealType,
@@ -67,6 +71,13 @@ function NewProjectWizard({ onCreated, onCancel }) {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
+      // 형태 검증은 반드시 setRec **앞**에 온다. 뒤에 두면 형태가 어긋난 응답이 이미
+      // 상태에 들어간 뒤라, 렌더에서 rec.notes.length 가 터진다 — 그건 핸들러의
+      // catch 가 못 잡고 트리 전체가 언마운트되어 흰 화면이 된다. 여기서 걸러야
+      // err 배너로 보인다.
+      if (!Array.isArray(d.primary) || !Array.isArray(d.notes)) {
+        throw new Error("추천 응답 형태가 예상과 다릅니다 — primary·notes 누락.");
+      }
       setRec(d);
       if (!d.uncertain && d.primary.length === 1) setChosen(d.primary[0].id);
     } catch (e) {
@@ -210,10 +221,49 @@ export default function Home({ onOpen }) {
   const [projects, setProjects] = useState(null);
   const [creating, setCreating] = useState(false);
   const [err, setErr] = useState(null);
+  // 골든 케이스 — DART·거시 키가 없는 방문자도 엔진을 바로 볼 수 있는 진입점.
+  // 외부 의존이 0이라 키 없이 동작한다. 실패해도 화면은 그대로여야 하므로 무시한다.
+  const [cases, setCases] = useState([]);
+  const [sampleBusy, setSampleBusy] = useState(null);
 
   const load = () =>
     api.projects.list().then(setProjects).catch((e) => setErr(e.message));
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    fetch("/api/demo/cases")
+      .then((r) => r.json())
+      .then((d) => setCases((d.cases || []).filter((c) => c.available)))
+      .catch(() => setCases([]));
+  }, []);
+
+  /** 골든 케이스로 프로젝트를 만들고 DCF 시트 입력까지 채운 뒤 연다.
+   *
+   *  픽스처 입력을 폼 형태로 변환해 data.dcf_input 에 심는다 — DcfSheet 가
+   *  project.data.dcf_input 을 초기값으로 읽으므로, 열면 이미 채워진 상태가 된다.
+   *  기대 주당가치도 같이 넣어 "돌려서 대조" 가 한 화면에서 끝나게 한다. */
+  const openSample = async (c) => {
+    setSampleBusy(c.id); setErr(null);
+    try {
+      const p = await api.projects.create({
+        name: `${c.label} — 골든 케이스`, company: c.label, mode: "appraiser",
+        setup: { purpose: "transaction", method: "dcf", horizon_years: 5 },
+      });
+      await api.projects.patch(p.id, {
+        data: {
+          dcf_input: toDcfForm(c.inputs),
+          demo_case: {
+            id: c.id, label: c.label, note: c.note,
+            expected_per_share: c.expected_per_share, tolerance: c.tolerance,
+          },
+        },
+      });
+      onOpen(p.id);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSampleBusy(null);
+    }
+  };
 
   const remove = async (e, p) => {
     e.stopPropagation();
@@ -232,6 +282,34 @@ export default function Home({ onOpen }) {
       ) : (
         <div className="home-actions">
           <button className="primary" onClick={() => setCreating(true)}>새 평가 시작</button>
+        </div>
+      )}
+
+      {!creating && cases.length > 0 && (
+        <div className="card" style={{ maxWidth: 640, marginTop: 16 }}>
+          <h3 style={{ margin: "0 0 4px" }}>골든 케이스로 둘러보기</h3>
+          <div className="muted" style={{ fontSize: "0.85rem", marginBottom: 10 }}>
+            원본 엑셀 모델을 재현하는 회귀 케이스입니다. DART·거시 API 키 없이 동작하며,
+            입력이 채워진 DCF 시트가 바로 열립니다. 실행하면 아래 기대값과 대조하세요.
+          </div>
+          {cases.map((c) => (
+            <div key={c.id} className="row" style={{ marginBottom: 8 }}>
+              <button className="ghost" disabled={!!sampleBusy}
+                onClick={() => openSample(c)}>
+                {sampleBusy === c.id ? "여는 중…" : `${c.label} 열기`}
+              </button>
+              <div className="muted" style={{ fontSize: "0.8rem", marginTop: 4 }}>
+                {c.note}
+                {c.expected_per_share != null && (
+                  <> — 기대 주당가치{" "}
+                    <b>{c.expected_per_share.toLocaleString("ko-KR",
+                      { maximumFractionDigits: 2 })}</b>
+                    {c.tolerance?.label ? ` (${c.tolerance.label})` : ""}
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

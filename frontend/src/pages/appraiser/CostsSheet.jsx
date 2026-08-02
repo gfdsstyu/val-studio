@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { api } from "../../api.js";
 import { loadKey } from "../Byok.jsx";
+import IndustryProfileCard from "./IndustryProfileCard.jsx";
 
 /* 2.가정 > 원가·판관비 — /api/assumptions/costs-build 배선(비올/참고 모델 성격별 다중드라이버).
    단일 COGS%/SGA% 가 아니라 성격별 라인(원재료·노무비·외주비·감가상각·인건비·지급수수료…)을
@@ -35,6 +36,10 @@ export default function CostsSheet({ project, onSave }) {
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
+  // 산업 프로파일 대조용 — 모든 훅은 조건부 return 위, 컴포넌트 최상단에 모은다
+  // (rules of hooks: 아래에 early return 이 삽입돼도 호출 순서가 흔들리지 않게).
+  const [industry, setIndustry] = useState(
+    project?.setup?.industry || project?.setup?.sector || project?.data?.industry || "");
 
   const cpi = parseSeries(project?.data?.macro_cpi || "");           // 2.가정 › 거시에서 확정
   const cpiLines = lines.filter((l) => l.method === "cpi");          // CPI 부재 시 경고 대상
@@ -149,8 +154,39 @@ export default function CostsSheet({ project, onSave }) {
 
   const ebit = res ? rev.map((r, i) => r - (res.cogs[i] || 0) - (res.sga[i] || 0)) : null;
 
+  // 산업 프로파일 대조용 값 — OPM(원가빌드 결과)·DSO/DIO(WC 시트)·CAPEX(FA 시트).
+  const li = (arr) => (Array.isArray(arr) && arr.length ? arr[arr.length - 1] : null);
+  const lastRev = li(rev), lastEbit = li(ebit);
+  const wc = project?.data?.wc_built || {};
+  const fa = project?.data?.fa_built || {};
+  const profileValues = {
+    opm: lastRev ? Math.round((lastEbit / lastRev) * 1000) / 10 : null,
+    dso: wc.dso != null ? Math.round(wc.dso) : null,
+    dio: wc.dio != null ? Math.round(wc.dio) : null,
+    capex_sales: (li(fa.capex) && lastRev)
+      ? Math.round((li(fa.capex) / lastRev) * 1000) / 10 : null,
+  };
+
   return (
     <>
+      {ebit && (
+        <div className="card">
+          <h2>산업 프로파일 대조 <span className="muted">— 동종 분포 대비 이상치</span></h2>
+          <div className="pad">
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ fontSize: 13, marginRight: 8 }}>산업</label>
+              <input value={industry} onChange={(e) => setIndustry(e.target.value)}
+                placeholder="예: 조선 · 반도체 장비 · 미용의료"
+                style={{ padding: "4px 8px", width: 240 }} />
+              <span className="muted" style={{ fontSize: 11, marginLeft: 8 }}>
+                (산업_프로파일.md 라벨 · 부분일치)</span>
+            </div>
+            {industry
+              ? <IndustryProfileCard industry={industry} values={profileValues} />
+              : <div className="muted" style={{ fontSize: 13 }}>산업을 입력하면 동종 분포 대비 이상치를 표시합니다.</div>}
+          </div>
+        </div>
+      )}
       <div className="card">
         <h2>원가·판관비 <span className="muted">— 성격별 다중 드라이버(비올/참고 모델)</span></h2>
         <div className="pad">
