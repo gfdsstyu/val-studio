@@ -40,22 +40,43 @@ def test_pdfparser_with_ocr_extractor():
     assert any(v.value == Decimal(1100) for v in nums)
 
 
+def _garbled_sample() -> str | None:
+    """폴백 시나리오가 성립하는 실파일 경로 — **garble 여부를 실측**해서 판정한다.
+
+    과거엔 "다산 의견서 = garble"을 상수처럼 전제했는데, 그건 **로컬 파일 + poppler 버전**에
+    걸린 가정이었다(실측 2026-08-01: poppler 26.02 는 이 PDF 를 garble_ratio 0.0 으로
+    정상 추출 → 폴백이 일어나지 않아 테스트가 깨졌다). 환경이 좋아졌는데 테스트가 실패하는
+    상태를 남기지 않도록, 전제를 측정으로 바꾸고 성립 안 하면 **이유를 밝히며** 건너뛴다.
+    """
+    from ingest.parsers.pdf import garble_ratio, pdftotext_layout
+    for p in Path(r"D:/Valuation/외부평가의견서").glob("*.pdf"):
+        try:
+            pages = pdftotext_layout(str(p))
+        except Exception:
+            continue
+        text = "\n".join(getattr(pg, "text", str(pg)) for pg in pages[:3])
+        if text and garble_ratio(text) > 0.3:      # smart_extract 의 폴백 임계와 동류
+            return str(p)
+    return None
+
+
 def test_smart_extract_no_backend_keeps_pdftotext():
-    # 실 다산(garble)이 있으면 OCR 백엔드 없을 때 pdftotext 유지
-    hits = list(Path(r"D:/Valuation/외부평가의견서").glob("*다산*DCF.pdf"))
-    if not hits:
-        print("  (skip: 실파일 없음)"); return
-    pages, method = smart_extract(str(hits[0]))
-    assert method == "pdftotext(ocr없음)"       # garble 감지되나 백엔드 없음
+    """garble PDF + OCR 백엔드 없음 → pdftotext 유지(조용히 빈 결과를 내지 않는다)."""
+    sample = _garbled_sample()
+    if not sample:
+        print("  (skip: garble 되는 실파일 없음 — 이 환경의 추출기가 정상 인식)"); return
+    pages, method = smart_extract(sample)
+    assert method == "pdftotext(ocr없음)"
 
 
 def test_smart_extract_falls_back_to_ocr():
-    hits = list(Path(r"D:/Valuation/외부평가의견서").glob("*다산*DCF.pdf"))
-    if not hits:
-        print("  (skip)"); return
+    """garble PDF + 백엔드 있음 → OCR 폴백."""
+    sample = _garbled_sample()
+    if not sample:
+        print("  (skip: garble 되는 실파일 없음)"); return
     backend = MockOcrBackend(["OCR로 복원한 한글 텍스트 매출 영업이익 " * 5])
-    pages, method = smart_extract(str(hits[0]), ocr_backend=backend)
-    assert method == "ocr"                       # garble → OCR 폴백
+    pages, method = smart_extract(sample, ocr_backend=backend)
+    assert method == "ocr"
     assert "OCR로 복원" in pages[0].text
 
 

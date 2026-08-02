@@ -81,6 +81,22 @@ def test_real_files_smoke():
         print("  (skip: 실파일 없음)")
 
 
+def _is_garbled(path: str) -> bool:
+    """이 환경의 추출기가 해당 PDF 를 깨뜨리는가 — **전제를 측정으로 확인**한다.
+
+    "다산 의견서 = garble" 은 로컬 파일 + poppler 버전에 걸린 가정이었다(실측 2026-08-01:
+    poppler 26.02 는 garble_ratio 0.0 으로 정상 추출). 환경이 좋아졌는데 테스트가 깨지는
+    상태를 남기지 않도록, 폴백 시나리오는 garble 이 실제로 일어날 때만 단언한다.
+    """
+    from ingest.parsers.pdf import garble_ratio, pdftotext_layout
+    try:
+        pages = pdftotext_layout(path)
+    except Exception:
+        return False
+    text = "\n".join(getattr(p, "text", str(p)) for p in pages[:3])
+    return bool(text) and garble_ratio(text) > 0.3
+
+
 def test_ingest_applies_opinion_profile():
     """의견서 PDF ingest → 구조화 + 프로파일(OpinionExtract) 자동적용."""
     hits = list(Path(r"D:/Valuation/외부평가의견서").glob("*다산*DCF.pdf"))
@@ -92,16 +108,20 @@ def test_ingest_applies_opinion_profile():
     assert r.decision.doc_type is DocType.OPINION
     assert isinstance(r.profile, OpinionExtract)
     assert r.profile.entity_count >= 2 and r.profile.is_sotp   # 5개체 SOTP
-    assert r.extract_method == "pdftotext(ocr없음)"            # garble 감지·백엔드 없음
     assert len(r.structured.values) > 0                        # 표 셀도 추출
+    # 추출 경로는 garble 여부에 따라 갈린다 — 정상 추출이면 순수 pdftotext.
+    expected = "pdftotext(ocr없음)" if _is_garbled(str(hits[0])) else "pdftotext"
+    assert r.extract_method == expected
     print(f"  다산 ingest → 프로파일 entity={r.profile.entity_count} "
-          f"terminal={r.profile.terminal_growths}")
+          f"terminal={r.profile.terminal_growths} method={r.extract_method}")
 
 
 def test_ingest_ocr_fallback_applies_profile():
     hits = list(Path(r"D:/Valuation/외부평가의견서").glob("*다산*DCF.pdf"))
     if not hits:
         print("  (skip)"); return
+    if not _is_garbled(str(hits[0])):
+        print("  (skip: 이 환경에서 정상 추출됨 — OCR 폴백 시나리오 성립 안 함)"); return
     from ingest.router import ingest
     from ingest.parsers.ocr import MockOcrBackend
     backend = MockOcrBackend(["WACC = Ke E/V + Kd\n2028 (1+B) 1.00%\n매출 1,000\n"])
