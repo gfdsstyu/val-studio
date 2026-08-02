@@ -587,8 +587,9 @@ engagement 코퍼스와 **각 규칙에 달린 계보**(이 규칙은 어느 심
 > 본 프로젝트는 **포트폴리오용 MVP**이며, 표준 Val-Studio 양식 엑셀 시트
 > (`ValStudio_DCF_Template.xlsx`, 26시트) 위에서 최적으로 동작하도록 설계됐다. 이 워크북은
 > 실무 서식 파생물이라 `.gitignore` 대상이므로 clone에는 없다 — **엔진·API·스킬·애드인은
-> 템플릿 없이도 그대로 동작**하고(좌표 SSOT는 `backend/excel/fullmodel_layout.py`에 코드로
-> 남아 있다), 템플릿 위에서 돌아가는 실제 화면은 **스크린샷으로 별도 시연**한다.
+> 템플릿 없이도 그대로 동작**하고(좌표 SSOT는 `backend/excel/fullmodel_layout.py`,
+> 파생 절차는 `scripts/build_template.py`에 코드로 남아 있다), 템플릿 위에서 돌아가는
+> 실제 화면은 **스크린샷으로 별도 시연**한다.
 > 임의 워크북은 정적 감사(`/api/xlsx/audit`)가 레이아웃 무관하게 처리하고, 백지에서
 > 시작하려면 스킬 W0 스캐폴딩(`scaffold.py`)이 수식 살아있는 스파인을 찍는다.
 
@@ -692,7 +693,16 @@ python tests/golden/test_viol_spine.py           # 골든 재현(stdlib 러너)
 # 스킬 패키징
 python scripts/build_excel_skill.py --check      # 드리프트만 검사(CI 게이트)
 python scripts/build_excel_skill.py              # vendoring + zip
+
+# 정본 템플릿 재생성 (원본 서식 필요 — 산출물은 gitignore)
+python scripts/build_template.py                 # 빌드 + 검증(배선·순환·판별)
+python scripts/build_template.py --verify-only   # 기존 산출물만 재검증
 ```
+
+`build_template.py`는 워크북을 손으로 그리지 않고 **원본 서식 + 코드에서 파생**시킨다 —
+브랜딩 제거 → 죽은 시트 정리 → 퍼널·Comps 이관 → Research·RAW 신설 → **상향 배선 135건**
+→ WACC 빌드업 → 메타 시트. 산출물은 gitignore지만 **절차가 코드로 남아** 원본이 갱신돼도
+같은 템플릿을 재생성할 수 있고, 빌드 끝에 배선·순환(셀 단위 DFS)·레이아웃 판별을 자동 검증한다.
 
 ---
 
