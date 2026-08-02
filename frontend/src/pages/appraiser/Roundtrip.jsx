@@ -137,9 +137,19 @@ function ImportPanel({ project, onSave }) {
         <div className="pad">
           <div className="muted" style={{ marginBottom: 10 }}>
             내보낸 표준 레이아웃 xlsx 를 엑셀에서 편집했다면, 기준선 없이 바로 올려
-            입력을 역파싱·재계산합니다(비표준 템플릿은 거부). 무엇이 바뀌었는지
-            분류해서 보려면 <b>왕복 diff</b> 를 쓰세요.
+            입력을 역파싱·재계산합니다. 무엇이 바뀌었는지 분류해서 보려면
+            <b> 왕복 diff</b> 를 쓰세요.
           </div>
+          {/* 실측 피드백: 자체 템플릿(연수 모델 등)으로 되읽기를 시도해 좌표 오류가 났다.
+              어떤 기능이 어떤 파일에 되는지를 **시도 전에** 알려준다. */}
+          <table style={{ marginBottom: 10, fontSize: 12 }}>
+            <thead><tr><th style={{ textAlign: "left" }}>기능</th>
+              <th>Val-Studio export</th><th>자체·타사 모델</th></tr></thead>
+            <tbody>
+              <tr><td style={{ textAlign: "left" }}>모델 정적 감사</td><td>○</td><td>○</td></tr>
+              <tr><td style={{ textAlign: "left" }}>되읽기 · 왕복 diff</td><td>○</td><td>✕ (셀 좌표 고정 필요)</td></tr>
+            </tbody>
+          </table>
           <div className="row" style={{ gap: 16 }}>
             <label>편집본 xlsx <input type="file" accept=".xlsx"
               onChange={(e) => setFile(e.target.files[0])} /></label>

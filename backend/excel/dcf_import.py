@@ -23,12 +23,45 @@ class DcfModelImportError(RuntimeError):
     pass
 
 
+_NOT_STANDARD = (
+    "이 워크북은 Val-Studio 표준 레이아웃이 아닙니다({why}).\n"
+    "되읽기·왕복 diff 는 **Val-Studio 가 내보낸 xlsx** 에만 동작합니다"
+    "(셀 좌표가 template_schema 로 고정돼 있어야 역파싱이 가능).\n"
+    "임의 모델(자체 템플릿·타사 모델)은 → **모델 정적 감사**를 쓰세요. "
+    "재계산 없이 수식만 분석하므로 레이아웃과 무관하게 동작합니다."
+)
+
+
+def _assert_standard_layout(cells: dict) -> None:
+    """되읽기 가능한 표준 레이아웃인지 **먼저** 판정한다.
+
+    없으면 개별 셀에서 "셀 C22 숫자 아님/부재" 같은 좌표 오류가 튀어나오는데, 그 메시지는
+    사용자에게 **다음 행동을 알려주지 않는다**(실측 피드백: 임의 워크북으로 되읽기 시도).
+    무엇이 왜 안 되는지 + 대신 무엇을 쓰면 되는지를 한 번에 준다.
+    """
+    def _num(ref: str) -> bool:
+        c = cells.get(ref)
+        return c is not None and c.number is not None
+
+    missing = []
+    if not _num(ASSUMP["wacc"]):
+        missing.append(f"가정셀 {ASSUMP['wacc']}(WACC)")
+    if not _num(ASSUMP["shares_outstanding"]):
+        missing.append(f"가정셀 {ASSUMP['shares_outstanding']}(주식수)")
+    if not any(_num(f"{c}{_ROW['year']}") for c in YEAR_COLS):
+        missing.append(f"연도 행 {_ROW['year']}")
+    if missing:
+        raise DcfModelImportError(_NOT_STANDARD.format(why="비어 있음: " + ", ".join(missing)))
+
+
 def import_dcf_model(path: str, *, sheet: str = "DCF") -> DcfSpineInput:
     """DCF 모델 xlsx → DcfSpineInput. 표준 레이아웃 가정."""
     wb = read_workbook(path)
     if sheet not in wb:
-        raise DcfModelImportError(f"시트 '{sheet}' 없음: {list(wb)}")
+        raise DcfModelImportError(
+            _NOT_STANDARD.format(why=f"시트 '{sheet}' 가 없음 — 있는 시트: {', '.join(list(wb)[:8])}"))
     cells = wb[sheet]
+    _assert_standard_layout(cells)
 
     def num(ref: str) -> float:
         c = cells.get(ref)
