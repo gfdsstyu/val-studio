@@ -8,15 +8,15 @@ _Excel 애드인 + Claude 스킬 · 순수 결정론 평가 엔진 · [Anthropic
 
 | 규모 | |
 |---|---|
-| 결정론 엔진 | `calc_core` 25모듈 (순수 stdlib) |
+| 결정론 엔진 | `calc_core` 26모듈 (순수 stdlib) |
 | 평가기법 | DCF · 상대가치(PSR/PER/PBR) · VIU 손상(K-IFRS 1036) · 공정가치 backsolve(OPM 워터폴) · 전환증권(CB/RCPS) · SOTP · 합병 · 3표 완전연결 |
 | 인제스트·검증 | `ingest` 16모듈 (4종 tie-out + provenance) |
 | **정본 워크북** | **풀모델 26시트** `ValStudio_DCF_Template.xlsx` — 상향 배선(EBIT/FA/WC→DCF, WACC 빌드업) · 순환 0 · 서버 tie-out 왕복 |
 | **엑셀 통합** | 살아있는 수식 xlsx **4방향**(export⇄import⇄diff⇄정적감사) + **Excel Task Pane 애드인**(현재 워크북 직접 검증) |
 | Claude 스킬 | 실행 도구 17 + 지식문서 50 (자기완결 vendoring) |
 | 웹 스튜디오 | React+Vite, 평가인 21시트 + 감사인 9시트 (기법추천 위저드·산업 프로파일 대조) — 애드인 Task Pane과 **같은 앱** |
-| API | FastAPI 62 엔드포인트 |
-| 테스트 | **811 통과 / 97 파일** (골든 재현 3종 포함) |
+| API | FastAPI 64 엔드포인트 |
+| 테스트 | **839 통과 / 98 파일** (골든 재현 3종 포함) |
 
 ---
 
@@ -224,7 +224,7 @@ flowchart TB
     M[자료수집] --> MAP[계정분류] --> A[가정: 매출·원가·FA·WC·거시]
     A --> D[할인율 WACC] --> V[밸류에이션: DCF·상대가치·VIU·전환증권·SOTP] --> R[리포트]
   end
-  FE -->|BYOK 헤더| API[FastAPI 62 endpoints]
+  FE -->|BYOK 헤더| API[FastAPI 64 endpoints]
   API --> ASM[assemble<br/>게이트 fold]
   ASM --> CC[calc_core<br/>순수 결정론]
   ASM --> ING[ingest<br/>4종 tie-out + provenance]
@@ -329,7 +329,7 @@ ingest/          원천 → 값                    "이 숫자는 어디서 왔�
 assemble/        원천값 → 검증된 엔진입력       "쓸 수 있는 가정인가"
   └ 커넥터 리포트를 하나로 fold + 실행순서 게이트
         ↓
-calc_core/       순수 계산 (stdlib only, 네트워크·IO 없음) — 23모듈
+calc_core/       순수 계산 (stdlib only, 네트워크·IO 없음) — 26모듈
   ├ 코어 DCF     dcf·wacc·ebit·fa·wc·tax·revenue·cost_build·lease
   ├ 다중기법     multiples·relative(상대가치)·viu(손상)·backsolve(공정가치 OPM)·
   │              convertible(CB/RCPS)·sotp·merger·backlog(수주산업)
@@ -504,7 +504,7 @@ Phase 1~6이 **기능 축**이라면, L0~L3은 **조직 스케일 축**이다. �
 | Phase | 상태 | 내용 |
 |---|---|---|
 | **1. 한국형 DCF 스킬** | ✅ | W0~W9 워크플로우 · 결정론 도구 17 · 지식 31문서 · 자기완결 vendoring · 골든 재현 |
-| **2. 웹 플랫폼 + 엑셀 통합** | 🔄 진행 | 평가인 21시트·감사인 9시트 · API 59 · 커넥터(DART·ECOS·KRX) · xlsx 4방향 왕복 · **Task Pane 애드인** · **풀모델 정본 템플릿 + 레이아웃 2원 라우팅** · BYOK · 산업 프로파일 대조 |
+| **2. 웹 플랫폼 + 엑셀 통합** | 🔄 진행 | 평가인 21시트·감사인 9시트 · API 64 · 커넥터(DART·ECOS·KRX) · xlsx 4방향 왕복 · **Task Pane 애드인** · **풀모델 정본 템플릿 + 레이아웃 2원 라우팅** · BYOK · 산업 프로파일 대조 |
 | **3. 다중 평가기법** | 🔄 대부분 완료 | ✅ 상대가치(PSR/PER/PBR) · VIU 손상(K-IFRS 1036) · 공정가치 backsolve(OPM) · 전환증권(CB/RCPS) · SOTP · 합병 · 3표 완전연결 &nbsp;/&nbsp; ⬜ NAV 순자산법 · PPA/WARA 배분 |
 | **4. 감사인 트랙 심화** | ⬜ | 외부평가의견서 파싱 → 유의적 가정 자동 대조 · 독립적 점/범위 추정 · ISA 540 대응 |
 | **5. 지식 RAG 고도화** | ⬜ | 온톨로지 기반 검색 + 인용 검증(미지원 인용 제거) → 가정마다 근거 문단 링크 |
@@ -762,7 +762,7 @@ python -m uvicorn backend.api.main:app --port 8000
 cd frontend && npm install && npm run dev
 
 # 테스트
-python -m pytest -q                              # 전체 811
+python -m pytest -q                              # 전체 839
 python tests/golden/test_viol_spine.py           # 골든 재현(stdlib 러너)
 
 # 스킬 패키징
@@ -785,15 +785,15 @@ python scripts/build_template.py --verify-only   # 기존 산출물만 재검증
 
 ```
 backend/
-  calc_core/    순수 결정론 엔진 (25모듈, stdlib only) — DCF + 다중 평가기법 + 게이트
+  calc_core/    순수 결정론 엔진 (26모듈, stdlib only) — DCF + 다중 평가기법 + 게이트
   ingest/       커넥터 + 4종 검증 + provenance (16모듈)
   assemble/     커넥터→검증된 엔진입력 (게이트 fold·실행순서 강제)
   excel/        살아있는 수식 xlsx 4방향 (export·import·diff·정적감사)
-  api/          FastAPI (62 엔드포인트, BYOK)
+  api/          FastAPI (64 엔드포인트, BYOK)
 frontend/       React + Vite SPA (평가인 21시트 / 감사인 9시트, Task Pane embed 지원)
 add-in/         Excel Task Pane manifest (웹·데스크톱 공통, dev/staging/prod)
 .claude/skills/ Claude 스킬 (도구 17 + 지식 50 + vendor)
-tests/          811 통과 / 97 파일 (golden·skill·unit)
+tests/          839 통과 / 98 파일 (golden·skill·unit)
 docs/           방법론 지식 코퍼스 · 설계 문서 · 검증 리포트
 scripts/        스킬 빌드·골든 픽스처 추출·재계산 게이트
 (ValStudio_DCF_Template.xlsx)  풀모델 정본 템플릿 (26시트, valstudio-full-v1) — gitignore, 레포 미포함
