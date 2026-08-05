@@ -1,6 +1,6 @@
 # val.studio — Claude 스킬 + 밸류에이션 자동화 프로토타입
 
-_Claude 스킬 3종(DCF 수행 · 가정 감사 · Excel 워크플로우) + DART 공시 Excel 애드인 + 결정론 검증 엔진._
+_Claude 스킬(Excel 밸류에이션 워크플로우) + DART 공시 Excel 애드인 + 결정론 검증 엔진._
 _"AI 시대에 기업가치평가 실무는 어디까지 자동화되고, 어디부터 사람이 판단해야 하는가"를 실제로 돌려보며 확인하는 프로토타입이다._
 
 > **판단은 사람, 제안은 Claude, 계산·검증은 결정론 코드.**
@@ -22,7 +22,8 @@ _"AI 시대에 기업가치평가 실무는 어디까지 자동화되고, 어디
 둘은 다른 제품이 아니라 **같은 엔진의 두 방향**이다 — 모델을 만들 때 계산을 맡는 결정론
 엔진이, 방향을 뒤집으면 남의 모델을 채점하는 재계산기가 된다. 만들기는
 `excel-valuation-workbook`·`valuation-analysis` 스킬이, 감사는 `assumption-audit` 스킬이
-맡고, tie-out·정합성 게이트는 두 관점의 공용 인프라다.
+맡고, tie-out·정합성 게이트는 두 관점의 공용 인프라다. 다만 **이번에 실제로 한 바퀴 완주한
+것은 앞의 하나뿐**이고, 감사인 트랙은 아직 자리만 잡혀 있다.
 
 형태의 원칙도 하나 있었다: **엑셀에서 올인원으로 끝낸다.** 공시 수집(애드인) → 분류·추정
 제안(Claude 스킬) → 계산·검증(결정론 게이트) → 판단 기록(`Claude Log`·`_VS_STATE`)까지
@@ -43,7 +44,7 @@ _"AI 시대에 기업가치평가 실무는 어디까지 자동화되고, 어디
 
 | 구성요소 | 상태 | 한 줄 요약 |
 |---|---|---|
-| **Claude 커스텀 스킬** | ✅ 작동 — 실전 워크플로우 재현 1회전(리노공업·공개자료) | **이 레포의 중심.** 판단 보조 + 결정론 도구 호출. 1건의 재현이지 일반화 검증은 아직 아니다 |
+| **Claude 커스텀 스킬** | ✅ 작동 — 실전 워크플로우 재현 1회전(리노공업·공개자료) | **이 레포의 중심.** 완주한 것은 `excel-valuation-workbook` 하나이고, 나머지 둘은 전신·신설이다([상세](#claude-스킬--이-레포의-중심)). 1건의 재현이지 일반화 검증은 아직 아니다 |
 | **Excel 애드인** | 🔶 **공시자료 수집·적재까지 구현** | 검색→재무제표→주석→공시원문→주식수. 그 이후(추정·계산)는 애드인이 아니라 스킬의 몫 |
 | **검증 엔진 (calc_core)** | ✅ 골든 재현 | 실무 DCF 모델의 스파인·주요 라인 재현. 스킬의 계산 백엔드 |
 | **DCF 외 평가기법** | 📋 **미완성** | 상대가치·손상(VIU)·복합금융 등 일부 백엔드 모듈이 존재하나 **실전 테스트 미실시, 개발중** |
@@ -196,13 +197,26 @@ EBIT 시트의 매출 세분에는 `CHECK: Σ부문 = 공시 매출액` 검산 �
 
 ---
 
-## Claude 스킬 3종 — 이 레포의 중심
+## Claude 스킬 — 이 레포의 중심
 
-| 스킬 | 하는 일 | 핵심 설계 |
-|---|---|---|
-| [`excel-valuation-workbook`](.claude/skills/excel-valuation-workbook/SKILL.md) | Excel 워크북 위에서 DCF 한 바퀴 (템플릿 인식·FS 이관·재분류·추정·WACC·DCF·리포트) | **제안(Claude) → 판단(평가인) → 검증(결정론 코드)** 3분할. 백지면 수식 살아있는 스파인을 스캐폴딩 |
-| [`valuation-analysis`](.claude/skills/valuation-analysis/SKILL.md) | DCF 수행·검증·해석 (Claude Code / claude.ai) | 단계↔도구↔**지식 사전 바인딩** — 매출추정 아키타입 A~K, 마진 M, CAPEX X, 운전자본 W, 산업 프로파일 대조 |
-| [`assumption-audit`](.claude/skills/assumption-audit/SKILL.md) | **남이 만든** 모델·리포트의 가정 감사 | 가정 원장화 → 산문 논리가 자기 숫자를 재현하는지 검산 → 산업 분포 이상치 → EV→주당 브리지 누락 체크 |
+스킬은 셋인데 **성숙도가 전혀 다르다.** 리노공업 한 바퀴를 실제로 완주한 것은 첫 번째
+하나뿐이고, 나머지 둘은 각각 전신(前身)과 신설이다.
+
+| 스킬 | 트랙 | 상태 | 하는 일 |
+|---|---|---|---|
+| [`excel-valuation-workbook`](.claude/skills/excel-valuation-workbook/SKILL.md) | 평가인 | ✅ **실전 1회전 완주** — 도구 17종·지식 vendoring·업로드용 zip 빌드 | Excel 워크북 위에서 DCF 한 바퀴(템플릿 인식·FS 이관·재분류·추정·WACC·DCF·리포트). 백지면 수식 살아있는 스파인을 스캐폴딩 |
+| [`valuation-analysis`](.claude/skills/valuation-analysis/SKILL.md) | 평가인 | 🔶 **엑셀 스킬의 전신** — 이번 회전 미사용 | Claude Code·claude.ai에서 DCF 수행·검증. 단계↔도구↔**지식 사전 바인딩**(매출추정 아키타입 A~K·마진·CAPEX·운전자본·산업 프로파일 대조) 설계가 여기서 먼저 잡혔고, 그대로 Excel 스킬로 옮겨갔다 |
+| [`assumption-audit`](.claude/skills/assumption-audit/SKILL.md) | **감사인** | 📋 **신설, 스킬로는 미검증** | **남이 만든** 모델·리포트의 가정 감사 — 가정 원장화 → 산문 논리가 자기 숫자를 재현하는지 검산 → 산업 분포 이상치 → EV→주당 브리지 누락 |
+
+세 번째가 기획 의도에서 말한 **감사인 관점**의 자리다. 다만 지금은 SKILL.md 한 장이고,
+그것이 호출하는 도구(`assumption_check.py`·`audit_scan.py`)만 먼저 검증된 상태다 — 리포트
+코퍼스의 가정 원장으로 자기정합성 검산을 돌려 산문 논리가 리포트 숫자를 재현하는 것을 확인했고,
+배치 감사 리포트도 산출했다. **도구는 돌아갔지만 스킬 워크플로우로 한 바퀴 돌린 적은 없다.**
+
+두 번째는 시간순으로 보면 첫 번째보다 **먼저** 만들어졌다. 웹·CLI에서 시작했다가 엑셀로
+접점을 옮기면서 후속 스킬에 흡수된 것이라, 위 [여정](#제품-형태의-여정--로컬-웹에서-excel로)의
+스킬 버전이라고 보면 된다. 지금도 Claude Code에서는 돌지만 vendoring·zip 패키징은 엑셀
+스킬에만 되어 있다.
 
 셋이 공유하는 규약:
 
@@ -540,7 +554,7 @@ python -m pytest -q                                   # 테스트
 ## 레포 구조
 
 ```
-.claude/skills/  Claude 스킬 3종 (excel-valuation-workbook · valuation-analysis · assumption-audit)
+.claude/skills/  Claude 스킬 (excel-valuation-workbook=실전 완주 / valuation-analysis=전신 / assumption-audit=신설)
 add-in/          Excel Task Pane manifest (웹·데스크톱)
 backend/
   calc_core/     순수 결정론 엔진 (stdlib only) — DCF·게이트·다중기법 모듈
