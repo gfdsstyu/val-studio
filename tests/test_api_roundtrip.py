@@ -223,3 +223,36 @@ def test_current_keys_win_over_legacy():
         assert form["mrp_market"] == "KOSPI"
     finally:
         C.delete(f"/api/projects/{pid}")
+
+
+# ── 표준 DCF 시트 병설(정본 분기 회피) ───────────────────────────────────────
+_SPINE = {
+    "wacc": 0.11, "terminal_growth": 0.01,
+    "revenue": [1000, 1100, 1210, 1331, 1464], "cogs": [600, 660, 726, 799, 878],
+    "sga": [200, 220, 242, 266, 293], "dep_amort": [50] * 5, "capex": [60] * 5,
+    "delta_nwc_cash_adj": [10] * 5, "non_operating_assets": 0, "net_debt": 100,
+    "shares_outstanding": 1_000_000,
+}
+
+
+def test_sheet_plan_is_same_shape_as_fs_sheet_plan():
+    """프론트 writeSheetPlan 이 rFS·H_FS 와 같은 경로로 소비한다 — 형태가 같아야 한다."""
+    plan = C.post("/api/xlsx/sheet-plan", json=_SPINE).json()
+    assert [s["name"] for s in plan["sheets"]] == ["DCF"]
+    sheet = plan["sheets"][0]
+    assert set(sheet) >= {"name", "rows", "freeze", "widths", "bold_rows", "readonly_hint"}
+    assert plan["meta"]["per_share"] > 0
+
+
+def test_sheet_plan_keeps_formulas_live():
+    """export 와 같은 시트다 — 값이 아니라 **수식**이 들어가야 감사 추적이 산다."""
+    plan = C.post("/api/xlsx/sheet-plan", json=_SPINE).json()
+    flat = [c for row in plan["sheets"][0]["rows"] for c in row if isinstance(c, str)]
+    assert any(c.startswith("=SUM(") for c in flat)
+    assert any("IF(" in c for c in flat if c.startswith("="))   # 계단식 법인세
+
+
+def test_sheet_plan_grid_is_rectangular():
+    """Excel range 기입은 직사각이어야 한다(들쭉날쭉하면 거부)."""
+    rows = C.post("/api/xlsx/sheet-plan", json=_SPINE).json()["sheets"][0]["rows"]
+    assert len({len(r) for r in rows}) == 1

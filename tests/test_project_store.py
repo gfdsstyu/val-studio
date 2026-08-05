@@ -84,7 +84,11 @@ def test_gcs_save_uploads_with_token(tmp_path, monkeypatch):
 
 
 def test_gcs_load_restores_cache_after_restart(tmp_path, monkeypatch):
-    # 재시작 시나리오: 로컬 공백 → GCS 폴백 → 캐시 적재 → 2회차는 네트워크 0
+    """재시작 시나리오: 로컬 공백 → GCS 조회 → 로컬 미러 적재.
+
+    ⚠️ 종전 계약은 '2회차는 캐시 히트(네트워크 0)' 였다. 다중 인스턴스에서 그 캐시가
+    남의 최신 저장을 가려 유실을 만들기 때문에(test_gcs_load_ignores_stale_local_cache)
+    **매 조회가 GCS 를 본다**로 바꿨다. 로컬은 읽기 캐시가 아니라 쓰기 미러다.""" 
     calls = []
     _router(monkeypatch, [
         (("GET", "metadata.google.internal"), TOKEN_BODY),
@@ -94,8 +98,47 @@ def test_gcs_load_restores_cache_after_restart(tmp_path, monkeypatch):
     assert st.load(PID) == '{"id":"restored"}'
     assert (tmp_path / f"{PID}.json").exists()
     n = len(calls)
-    assert st.load(PID) == '{"id":"restored"}'          # 캐시 히트
-    assert len(calls) == n
+    assert st.load(PID) == '{"id":"restored"}'
+    assert len(calls) > n, "2회차가 GCS 를 안 봤다 — 낡은 로컬본을 돌려줄 위험"
+
+
+def test_gcs_load_ignores_stale_local_cache(tmp_path, monkeypatch):
+    """⚠️ 다중 인스턴스 유실 경로 — 로컬 캐시를 먼저 읽으면 남의 최신 저장을 덮어쓴다.
+
+    ① 인스턴스 A 저장 → GCS 갱신  ② 인스턴스 B 는 예전에 읽어둔 로컬본 보유
+    ③ B 가 로컬을 돌려주면 사용자는 낡은 상태에서 편집·저장 → A 의 작업이 사라진다.
+    버킷이 설정된 이상 GCS 가 읽기 정본이어야 한다.
+    """
+    calls = []
+    (tmp_path / f"{PID}.json").write_text('{"name":"낡은 로컬본"}', encoding="utf-8")
+    _router(monkeypatch, [
+        (("GET", "metadata.google.internal"), TOKEN_BODY),
+        (("GET", "alt=media"), '{"name":"GCS 최신본"}'),
+    ], calls)
+    got = ProjectStore(tmp_path, bucket="b").load(PID)
+    assert '"GCS 최신본"' in got, "낡은 로컬 캐시가 GCS 최신본을 가렸다"
+    assert any("alt=media" in c["url"] for c in calls), "GCS 를 조회하지 않았다"
+    # 조회 성공분은 로컬 미러로 갱신된다.
+    assert "GCS 최신본" in (tmp_path / f"{PID}.json").read_text(encoding="utf-8")
+
+
+def test_gcs_list_excludes_stale_local_only_ids(tmp_path, monkeypatch):
+    """다른 인스턴스가 지운 프로젝트가 낡은 로컬 캐시로 되살아나면 안 된다."""
+    calls = []
+    (tmp_path / "deadbeef0000.json").write_text("{}", encoding="utf-8")   # GCS 엔 없음
+    _router(monkeypatch, [
+        (("GET", "metadata.google.internal"), TOKEN_BODY),
+        (("GET", "/o?prefix="), json.dumps({"items": [{"name": f"projects/{PID}.json"}]})),
+    ], calls)
+    ids = ProjectStore(tmp_path, bucket="b").list_ids()
+    assert ids == [PID], f"로컬 잔여물이 목록에 샜다: {ids}"
+
+
+def test_local_mode_still_reads_local(tmp_path):
+    """버킷 미설정(로컬 dev·테스트)은 종전 동작 그대로 — 회귀 방지."""
+    (tmp_path / f"{PID}.json").write_text('{"name":"로컬"}', encoding="utf-8")
+    s = ProjectStore(tmp_path)
+    assert '"로컬"' in s.load(PID) and s.list_ids() == [PID]
 
 
 def test_gcs_load_404_is_absence(tmp_path, monkeypatch):
@@ -122,7 +165,11 @@ def test_gcs_failures_raise_store_error(tmp_path, monkeypatch):
         ProjectStore(tmp_path, "bkt2").save(PID, "{}")
 
 
-def test_gcs_list_merges_local_and_paginates(tmp_path, monkeypatch):
+def test_gcs_list_is_authoritative_and_paginates(tmp_path, monkeypatch):
+    """버킷 설정 시 목록은 **GCS 만** — 합집합은 지워진 프로젝트를 되살린다.
+
+    로컬 전용 id('aaaa…')는 업로드 실패 잔여물이거나 다른 인스턴스가 지운 것이다.
+    목록에 남기면 열었을 때 404 가 나고, '저장된 것처럼' 보인다."""
     (tmp_path / "aaaaaaaaaaaa.json").write_text("{}", encoding="utf-8")
     calls = []
     page1 = json.dumps({"items": [{"name": "projects/bbbbbbbbbbbb.json"}],
@@ -134,7 +181,7 @@ def test_gcs_list_merges_local_and_paginates(tmp_path, monkeypatch):
         (("GET", "prefix="), page1),
     ], calls)
     ids = ProjectStore(tmp_path, "bkt").list_ids()
-    assert ids == ["aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc"]
+    assert ids == ["bbbbbbbbbbbb", "cccccccccccc"]   # 로컬 전용 aaaa 는 제외
     assert any("pageToken=t2" in c["url"] for c in calls)
 
 

@@ -23,3 +23,9 @@ msoffcrypto-tool>=5.4,<6.0          # 암호화 xlsx 해제(ingest/parsers/xlsx.
 # --- [선택] 시세·배수 커넥터 — pandas/numpy 를 함께 끌어온다(이미지 ~250MB 증가) ---
 finance-datareader>=0.9.90,<1.0     # 주가 시계열 → β·시총 (ingest/price_client.py)
 pykrx>=1.0.45,<2.0                  # PER/PBR/EPS/BPS/DIV 배수 (상대가치)
+
+# --- [선택] 판정 계층(agent/) — 구조화 출력 LLM 호출 ---
+# 순수 파이썬(수 MB). 빼도 프로세스는 뜨고 /api/peer/judge 만 503 "미설치"로 실패한다.
+# 원시 HTTP 가 아니라 공식 SDK 를 쓰는 이유: 스키마 강제·검증·재시도가 SDK 몫이고,
+# 그걸 손으로 3벌 짜는 자리가 정확히 버그가 사는 곳이다(agent/providers/ 주석 참조).
+anthropic>=0.40,<1.0                # Claude 판정 어댑터 (agent/providers/anthropic_client.py)

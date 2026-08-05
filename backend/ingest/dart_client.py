@@ -88,6 +88,26 @@ class DartClient:
         parser = DartFsParser(source_id=f"DART:{corp_code}:{bsns_year}")
         return parser.extract(data.get("list", []))
 
+    def financial_statement_rows(
+        self,
+        corp_code: str,
+        bsns_year: str | int,
+        *,
+        reprt_code: str = REPRT_ANNUAL,
+        fs_div: str = FS_CONSOLIDATED,
+    ) -> list[dict]:
+        """fnlttSinglAcntAll 응답의 list[] 원행을 **가공 없이** 반환.
+
+        `financial_statements()` 는 당기금액 한 열만 남기고 ord·sj_nm·전기열을 버린다.
+        다년도 수집(`dart_fs`)은 그것들이 전부 필요하므로 원행을 그대로 받아 간다.
+        """
+        data = self._get(
+            "fnlttSinglAcntAll.json",
+            corp_code=corp_code, bsns_year=str(bsns_year),
+            reprt_code=reprt_code, fs_div=fs_div,
+        )
+        return list(data.get("list") or [])
+
     # ── 직원현황 ──────────────────────────────────────────────────────────────
     def employee_status(
         self,

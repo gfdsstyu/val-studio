@@ -22,6 +22,9 @@ export const NAV = {
       { id: "wc", label: "WC" },
     ]},
     { id: "discount", label: "3. 할인율", sheets: [
+      // 스크리너는 4-step 퍼널의 **앞단**(모집단 탐색) — 후보를 여기서 고르고
+      // Step2(사업 유사성 판정)로 넘긴다. 그래서 peer 시트보다 앞에 둔다.
+      { id: "screener", label: "스크리너" },
       { id: "peer", label: "유사회사 4-step" },
       { id: "wacc", label: "WACC 빌드업" },
     ]},
@@ -31,6 +34,11 @@ export const NAV = {
       { id: "model", label: "3표 정합성" },
       { id: "review", label: "분석적 리뷰" },
       { id: "scenario", label: "시나리오" },
+      // 엔진(convertible.py)·API(/api/convertible)·화면은 완성돼 있으나 MVP 범위를
+      // 기업공시·스크리너로 좁히면서 **의도적으로 준비중**으로 둔다(코드는 살아 있다).
+      // 여는 방법: soon 제거. 부수 산출물인 DCF 의 '희석 청구권 FV' 입력은 CB 와 무관하게
+      // 필요한 값이라 그대로 남긴다(엔진 필드인데 화면이 없어 항상 0 으로 나가던 것).
+      { id: "convertible", label: "전환사채·RCPS", soon: true },
       { id: "relative", label: "상대가치" },
     ]},
     { id: "output", label: "5. 산출물", sheets: [

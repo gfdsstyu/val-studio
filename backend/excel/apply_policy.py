@@ -32,6 +32,7 @@ class ApplyPlan:
     blocked: list[dict] = field(default_factory=list)        # ③ 차단(구조)
     state: list[dict] = field(default_factory=list)          # ④ 상태·로그(증적)
     row_warnings: list[str] = field(default_factory=list)    # 외딴 편집 감지
+    warnings: list[str] = field(default_factory=list)        # 미등록 원장 등
     summary_markdown: str = ""
 
     def to_dict(self) -> dict:
@@ -42,6 +43,7 @@ class ApplyPlan:
             "blocked": self.blocked,
             "state": self.state,
             "row_warnings": self.row_warnings,
+            "warnings": self.warnings,
             "counts": {"auto_apply": len(self.auto_apply),
                        "review_queue": len(self.review_queue),
                        "blocked": len(self.blocked),
@@ -66,5 +68,6 @@ def build_apply_plan(diff: WorkbookDiff) -> ApplyPlan:
         blocked=blocked,
         state=[_ser(ch) for ch in diff.state_changes],
         row_warnings=list(diff.row_uniformity_warnings),
+        warnings=list(diff.warnings),
         summary_markdown=diff.to_markdown(),
     )

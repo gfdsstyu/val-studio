@@ -20,7 +20,10 @@ description: 기업가치평가(DCF) 수행·검증·해석. 재무제표/사업
 | **0 기업·산업 이해** ⭐ | `brief.py`(XBRL 프리필) + LLM 고투자 | **기업리서치_양식**(Brief 10섹션 정본) + 참고보고서_활용 |
 | 1 인제스트 | `ingest.py` | 파서_아키텍처_매트릭스 (XBRL우선·CID) |
 | 2 계정분류 | (LLM) | **계정분류_모델아키텍처** (유형·방법 taxonomy) |
-| 3a 매출·원가 가정 | (LLM) | **모델링_실무_2강4강** (4방식·P×Q·원가4요소) + 모델링_워크플로우_기초 (프로세스 8단계·driver isolation) |
+| 3a 매출·원가 가정 | (LLM) + `calc_core.revenue.route_archetype(코드)` (A~K→필요입력) | **매출추정_논리_타이폴로지**(A~K) + **마진_원가_드라이버_타이폴로지**(M) + 모델링_실무_2강4강 |
+| 3a-2 CAPEX·WC 가정 | `calc_core.revenue`/`fa`/`wc` | **CAPEX_드라이버_타이폴로지**(X) + **운전자본_드라이버_타이폴로지**(W) |
+| 3a-3 산업 대조(이상치) ⭐ | `calc_core.checks.check_metric_vs_industry(산업, opm/dso/dio/capex_sales, 값)` | **산업_프로파일** + 벤치마크_{마진,운전자본,CAPEX} |
+| 3d 기법 선택 | `calc_core.method_selector.recommend_by_business_nature` (사업성격) + `recommend`(법제) | **밸류에이션_기법선택_로직** |
 | 3b-pre 유사회사 선정 | (LLM=Step2만) | **리포트예시 §E**(4-step 정본) + wacc_할인율서식 §1 |
 | 3b WACC | `wacc.py` | **베타_Bloomberg_vs_KICPA** + 감사인검토 (size premium·kd) |
 | 3c 영구성장률 | (LLM) | **영구성장률_PGR_적합성** (0~1% 관행·PGR≤GDP) |

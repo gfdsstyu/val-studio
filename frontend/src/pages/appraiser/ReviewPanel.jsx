@@ -265,7 +265,7 @@ export default function ReviewPanel({ project, onSave }) {
               : "추정 저장본 없음 — 실적 구간 검사만 수행합니다. 접합부 검사는 4.밸류에이션 › DCF 저장 후."}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginTop: 8 }}>
-            <div className="row" style={{ margin: 0 }}><label>corp_code</label>
+            <div className="row" style={{ margin: 0 }}><label>고유번호</label>
               <input type="text" value={corp} onChange={(e) => setCorp(e.target.value)}
                 placeholder="0.자료·Brief에서 검색" style={{ width: 110 }} /></div>
             <div className="row" style={{ margin: 0 }}><label>실적 시작연도</label>

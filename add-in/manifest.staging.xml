@@ -27,5 +27,8 @@
   <DefaultSettings>
     <SourceLocation DefaultValue="https://localhost:5173/?embed=1"/>
   </DefaultSettings>
-  <Permissions>ReadDocument</Permissions>
+  <!-- prod/dev 와 동일하게 ReadWriteDocument. 시트 생성(H_FS·r_DART)·Range 쓰기·
+       getFileAsync 가 전부 쓰기 권한을 요구하는데, 여기만 ReadDocument 로 두면
+       staging 등록에서만 그 기능이 조용히 막힌다(권한 부족은 예외가 아니라 무반응). -->
+  <Permissions>ReadWriteDocument</Permissions>
 </OfficeApp>

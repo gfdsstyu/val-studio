@@ -58,9 +58,12 @@ export default function DcfSheet({ project, onSave }) {
   // 3.할인율 > WACC 빌드업에서 조립·저장된 WACC 를 이어받는다(front-back 배선).
   const assembledWacc = project?.data?.wacc_result?.wacc;
   const [form, setForm] = useState(() => {
-    const init = saved || DEMO;
+    const init = { dilutive_claims_value: "0", ...(saved || DEMO) };
     return assembledWacc != null ? { ...init, wacc: String(assembledWacc) } : init;
   });
+  /* 전환사채 평가 결과 → 희석 청구권 FV. 주당가치 = (지분 − 희석FV) ÷ 주식수 이므로
+     CB 를 평가해 놓고 여기 반영하지 않으면 주당가치가 과대계상된다. */
+  const cbValue = project?.data?.convertible_result?.result?.value ?? null;
   // 시리즈는 연도=열 그리드로 편집(콤마 문자열 → 셀 배열). 저장 시 다시 조인해 하류 호환.
   const [grid, setGrid] = useState(() => {
     const src = saved || DEMO;
@@ -108,6 +111,9 @@ export default function DcfSheet({ project, onSave }) {
       non_operating_assets: Number(form.non_operating_assets),
       net_debt: Number(form.net_debt),
       non_controlling_interest: Number(form.non_controlling_interest || 0),
+      // 희석 청구권 FV — 엔진 필드였는데 화면에 없어 항상 0으로 나가던 값.
+      // 전환증권이 있는데 0 이면 check_dilution_bridge 가 WARN 한다.
+      dilutive_claims_value: Number(form.dilutive_claims_value || 0),
       shares_outstanding: Number(form.shares_outstanding),
     };
     for (const [k] of FIELD_LABELS) body[k] = grid[k].map(Number);
@@ -286,6 +292,17 @@ export default function DcfSheet({ project, onSave }) {
               <input type="text" value={form.net_debt} onChange={set("net_debt")} /></div>
             <div className="row"><label>비지배지분 NCI (연결, 백만원)</label>
               <input type="text" value={form.non_controlling_interest} onChange={set("non_controlling_interest")} /></div>
+            <div className="row"><label>희석 청구권 FV (백만원)</label>
+              <input type="text" value={form.dilutive_claims_value} onChange={set("dilutive_claims_value")}
+                placeholder="0" />
+              {cbValue != null && (
+                <button className="ghost xs" style={{ marginTop: 4 }}
+                  onClick={() => setForm({ ...form, dilutive_claims_value: String(Math.round(cbValue)) })}
+                  title="4.밸류에이션 > 전환사채·RCPS 에서 평가한 공정가치를 희석 FV 로 반영">
+                  CB 평가값 {Math.round(cbValue).toLocaleString("ko-KR")} 반영
+                </button>
+              )}
+            </div>
             <div className="row"><label>발행주식수 (주)</label>
               <input type="text" value={form.shares_outstanding} onChange={set("shares_outstanding")} /></div>
             <div className="row"><label>주장 주당가치 (선택 — 감사인 괴리 진단)</label>

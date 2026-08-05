@@ -27,12 +27,34 @@ _REF = re.compile(r"(\$?)([A-Z]{1,3})(\$?)([0-9]{1,7})")
 # 이 시트들이 구조변경으로 잡히면 병용 시 자동반영이 영구 차단된다(마찰 1호).
 #   _VS_STATE  : excel-valuation-workbook 스킬의 워크북=상태 규약(SKILL.md 1.7)
 #   Claude Log : Claude for Excel 세션 로깅이 턴별 작업을 기록하는 탭
-STATE_SHEETS = ("vsstate", "claudelog")
+#
+# ⚠️ 판정은 **열거가 아니라 술어**다. 상태 시트가 늘 때마다 이 튜플을 고쳐야 한다면,
+# 그 코드는 Claude for Excel 쪽에 배포되지 않으므로 **새 원장이 생기는 순간 왕복이
+# 죽는다**(열린 세계에 닫힌 가정). 규약: `_VS_` 접두 = 도구가 소유하는 원장.
+#   · 접두 판정은 **원본 이름**으로 한다 — 정규화(언더스코어 제거) 후 startswith("vs")
+#     로 하면 'VS 분석' 같은 업무 시트가 오탐된다.
+#   · 다만 술어만 두면 게이트가 약해진다(`_VS_` 만 붙이면 구조변경 차단을 우회) →
+#     **알려진 원장 레지스트리**를 함께 두고, 미등록 `_VS_*` 는 차단하지 않되 경고한다.
+#     차단하지도 침묵하지도 않는 중간값.
+#   _VS_FACTS  : val-studio 소유 사실 원장(append-only) — excel/facts_sheet.py
+KNOWN_STATE_SHEETS = ("vsstate", "claudelog", "vsfacts")   # **해석할 수 있는** 원장
+STATE_PREFIX = "_VS_"                            # 도구 소유 원장 접두 규약
+
+
+def _norm_sheet(name: str) -> str:
+    return (name or "").replace("_", "").replace(" ", "").lower()
+
+
+def is_known_state_sheet(name: str) -> bool:
+    """이 빌드가 내용을 해석할 수 있는 원장인가(파서가 존재하는가)."""
+    return _norm_sheet(name) in KNOWN_STATE_SHEETS
 
 
 def is_state_sheet(name: str) -> bool:
-    """상태·로그 시트인가(공백·언더스코어·대소문자 무시 비교)."""
-    return name.replace("_", "").replace(" ", "").lower() in STATE_SHEETS
+    """상태·로그 시트인가 — 레지스트리 등재 또는 `_VS_` 접두(대소문자 무시)."""
+    if is_known_state_sheet(name):
+        return True
+    return (name or "").strip().upper().startswith(STATE_PREFIX)
 
 
 def _col_num(col: str) -> int:
@@ -85,6 +107,7 @@ class WorkbookDiff:
     structure_changes: list[CellChange] = field(default_factory=list) # ③ 위험
     state_changes: list[CellChange] = field(default_factory=list)     # ④ 상태·로그(증적)
     row_uniformity_warnings: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)                 # 미등록 원장 등
 
     @property
     def safe(self) -> bool:
@@ -114,6 +137,9 @@ class WorkbookDiff:
         if self.row_uniformity_warnings:
             lines.append("### ⚠️ 행 수식 균일성(외딴 편집 감지)")
             lines.extend(f"- {w}" for w in self.row_uniformity_warnings)
+        if self.warnings:
+            lines.append("### ⚠️ 경고")
+            lines.extend(f"- {w}" for w in self.warnings)
         return "\n".join(lines)
 
 
@@ -137,6 +163,13 @@ def diff_workbooks(
     파일에서 그 자리에 그대로 있는지 검사(이동/삭제 = 구조 변경, 최우선 경고).
     """
     d = WorkbookDiff()
+    # 미등록 원장: 차단하지는 않되(왕복 유지) 해석 불가를 표면화한다 — 침묵하면
+    # "읽었는데 아무것도 없었다"와 "읽을 줄 몰랐다"가 구분되지 않는다.
+    for s in sorted(set(old) | set(new)):
+        if is_state_sheet(s) and not is_known_state_sheet(s):
+            d.warnings.append(
+                f"'{s}': 미등록 상태 시트 — 이 빌드는 내용을 해석하지 못한다"
+                f"(왕복은 차단하지 않음). 새 원장이면 KNOWN_STATE_SHEETS 등재 + 파서 필요")
     # 상태·로그 시트는 시트 추가/삭제조차 구조변경이 아니다 — ④로 뺀다.
     for s in sorted(set(new) - set(old)):
         if is_state_sheet(s):

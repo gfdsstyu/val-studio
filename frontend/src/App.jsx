@@ -11,6 +11,8 @@ import RelativeSheet from "./pages/appraiser/RelativeSheet.jsx";
 import MacroSheet from "./pages/appraiser/MacroSheet.jsx";
 import RevenueSheet from "./pages/appraiser/RevenueSheet.jsx";
 import PeerSheet from "./pages/appraiser/PeerSheet.jsx";
+import ScreenerSheet from "./pages/appraiser/ScreenerSheet.jsx";
+import ConvertibleSheet from "./pages/appraiser/ConvertibleSheet.jsx";
 import ReportSheet from "./pages/appraiser/ReportSheet.jsx";
 import CostsSheet from "./pages/appraiser/CostsSheet.jsx";
 import FaSheet from "./pages/appraiser/FaSheet.jsx";
@@ -165,18 +167,55 @@ function ContextPanel({ project }) {
 /** Task Pane 임베드 모드(?embed=1) — 좁은 폭(~350px) 대응. FR-M2.7. */
 const EMBED = new URLSearchParams(window.location.search).has("embed");
 
-function Workspace({ projectId, onHome }) {
+/* 세션 복원 — Task Pane 은 닫으면 웹뷰가 통째로 파기되고, 다시 열 때 manifest 의
+   고정 SourceLocation(`?embed=1`)으로만 진입한다. 즉 `?project=` 가 없어 **항상 홈**
+   으로 떨어졌다("껐다 켜면 처음부터"의 실제 원인). 마지막으로 연 프로젝트와 위치를
+   localStorage 에 남겨 복원한다. 서버 상태가 아니라 '어디를 보고 있었나'만 저장한다. */
+const LAST_PROJECT = "valstudio_last_project";
+const LAST_POS = "valstudio_last_pos";
+
+function Workspace({ projectId, onHome, onMissing }) {
   const [project, setProject] = useState(null);
   const [err, setErr] = useState(null);
+  const [saveErr, setSaveErr] = useState(null);
   const [pos, setPos] = useState(null);            // {stage, sheet}
   const [panelOpen, setPanelOpen] = useState(false);
   const [showByok, setShowByok] = useState(false);
+  const [ephemeral, setEphemeral] = useState(false);
 
   useEffect(() => {
     api.projects.get(projectId)
-      .then((p) => { setProject(p); setPos(firstAvailable(p.mode, EMBED)); })
-      .catch((e) => setErr(e.message));
-  }, [projectId]);
+      .then((p) => {
+        setProject(p);
+        // 마지막 위치 복원(같은 프로젝트일 때만) — 아니면 모드별 첫 화면.
+        let restored = null;
+        try {
+          const s = JSON.parse(localStorage.getItem(LAST_POS) || "null");
+          if (s && s.id === p.id && s.stage && s.sheet) restored = { stage: s.stage, sheet: s.sheet };
+        } catch { /* 저장 형식이 깨졌으면 그냥 기본 위치 */ }
+        setPos(restored || firstAvailable(p.mode, EMBED));
+      })
+      .catch((e) => {
+        // 서버 재시작으로 프로젝트가 증발했으면 오류 화면이 아니라 홈으로 되돌린다
+        // (복원 대상이 사라진 것은 막다른 골목이 아니다). 판별은 status 로 — 메시지
+        // 문자열("프로젝트 없음")은 서버 문구가 바뀌면 조용히 어긋난다.
+        if (e.status === 404) onMissing?.(e.message);
+        else setErr(e.message);
+      });
+  }, [projectId, onMissing]);
+
+  // 영속화 모드 — ephemeral 이면 서버 재시작 시 프로젝트가 사라진다는 걸 미리 알린다.
+  useEffect(() => {
+    api.health().then((h) => setEphemeral(h?.persistence === "ephemeral")).catch(() => {});
+  }, []);
+
+  // 위치를 바꿀 때마다 기억(다음 애드인 실행에서 그 자리로 복귀).
+  const goPos = (next) => {
+    setPos(next);
+    try {
+      localStorage.setItem(LAST_POS, JSON.stringify({ id: projectId, ...next }));
+    } catch { /* 사파리 프라이빗 등 저장 불가 — 복원만 포기하고 동작은 유지 */ }
+  };
 
   if (err) return <div className="err" style={{ padding: 20 }}>{err}</div>;
   if (!project || !pos) return <div className="placeholder">불러오는 중…</div>;
@@ -188,12 +227,16 @@ function Workspace({ projectId, onHome }) {
 
   const gotoStage = (st) => {
     const first = st.sheets.find((s) => !s.soon) ?? st.sheets[0];
-    setPos({ stage: st.id, sheet: first.id });
+    goPos({ stage: st.id, sheet: first.id });
   };
 
+  /* 저장 실패를 **삼키지 않는다**. 종전 `.catch(() => {})` 는 서버가 5xx 를 줘도 화면이
+     아무 말을 안 해서, '저장했다고 믿는' 최악의 형태로 작업이 날아갔다 —
+     project_store.py 가 스스로 경계한 실패 의미론을 정작 프론트가 어기고 있었다. */
   const saveData = (patch) =>
     api.projects.patch(project.id, { data: patch })
-      .then(setProject).catch(() => {});
+      .then((p) => { setProject(p); setSaveErr(null); })
+      .catch((e) => { setSaveErr(e.message || "저장 실패"); });
 
   const body = (() => {
     if (showByok) return <ByokPanel />;
@@ -216,6 +259,8 @@ function Workspace({ projectId, onHome }) {
       return <FaSheet project={project} onSave={saveData} />;
     if (stage.id === "assumptions" && sheet.id === "wc")
       return <WcSheet project={project} onSave={saveData} />;
+    if (stage.id === "discount" && sheet.id === "screener")
+      return <ScreenerSheet project={project} onSave={saveData} />;
     if (stage.id === "discount" && sheet.id === "peer")
       return <PeerSheet project={project} onSave={saveData} />;
     if (stage.id === "discount" && sheet.id === "wacc")
@@ -232,6 +277,8 @@ function Workspace({ projectId, onHome }) {
       return <AssembleSheet project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "scenario")
       return <ScenarioSheet project={project} onSave={saveData} />;
+    if (stage.id === "valuation" && sheet.id === "convertible")
+      return <ConvertibleSheet project={project} onSave={saveData} />;
     if (stage.id === "valuation" && sheet.id === "relative")
       return <RelativeSheet project={project} onSave={saveData} />;
     if (stage.id === "output"
@@ -291,7 +338,22 @@ function Workspace({ projectId, onHome }) {
         </nav>
 
         <main className="main">
-          <div className="main-inner">{body}</div>
+          <div className="main-inner">
+            {saveErr && (
+              <div className="finding err" style={{ marginBottom: 10 }}>
+                <b>저장 실패</b> — {saveErr}. 이 화면의 입력은 아직 서버에 반영되지 않았습니다.
+                {" "}<button className="ghost xs" onClick={() => setSaveErr(null)}>닫기</button>
+              </div>
+            )}
+            {ephemeral && (
+              <div className="finding warn" style={{ marginBottom: 10 }}>
+                <b>임시 저장 모드</b> — 서버에 영속 스토리지(<code>PROJECTS_GCS_BUCKET</code>)가
+                설정되지 않아, 서버가 재시작되면 프로젝트가 사라집니다. 중요한 작업은
+                <b> 엑셀로 내보내</b> 보관하세요.
+              </div>
+            )}
+            {body}
+          </div>
         </main>
 
         {panelOpen && <ContextPanel project={project} />}
@@ -305,7 +367,7 @@ function Workspace({ projectId, onHome }) {
         {!showByok && stage.sheets.map((sh) => (
           <button key={sh.id} disabled={sh.soon}
             className={sheet.id === sh.id ? "active" : ""}
-            onClick={() => setPos({ stage: stage.id, sheet: sh.id })}>
+            onClick={() => goPos({ stage: stage.id, sheet: sh.id })}>
             {sh.label}
           </button>
         ))}
@@ -323,12 +385,34 @@ function Workspace({ projectId, onHome }) {
 }
 
 export default function App() {
-  // 딥링크 `?project=<id>` — Task Pane 에서 "탭에서 이어서" 이동, 북마크 진입에 쓴다.
-  // (라우터를 도입하지 않고 초기 진입만 URL 에서 읽는다 — 이후 이동은 종전대로 상태.)
-  const initial = new URLSearchParams(window.location.search).get("project");
-  const [view, setView] = useState(
-    initial ? { page: "project", id: initial } : { page: "home" });
-  if (view.page === "home")
-    return <Home onOpen={(id) => setView({ page: "project", id })} />;
-  return <Workspace projectId={view.id} onHome={() => setView({ page: "home" })} />;
+  // 진입 우선순위: ①딥링크 `?project=<id>`(탭에서 이어서·북마크) → ②마지막으로 연
+  // 프로젝트(localStorage) → ③홈. ②가 Task Pane 재실행 시 "처음부터"를 없앤다.
+  // (라우터를 도입하지 않고 초기 진입만 결정한다 — 이후 이동은 종전대로 상태.)
+  const [view, setView] = useState(() => {
+    const deep = new URLSearchParams(window.location.search).get("project");
+    let last = null;
+    try { last = localStorage.getItem(LAST_PROJECT); } catch { /* 저장 불가 환경 */ }
+    const id = deep || last;
+    return id ? { page: "project", id } : { page: "home" };
+  });
+  const [notice, setNotice] = useState(null);
+
+  const open = (id) => {
+    try { localStorage.setItem(LAST_PROJECT, id); } catch { /* 무시 */ }
+    setNotice(null);
+    setView({ page: "project", id });
+  };
+  const home = (msg) => {
+    try { localStorage.removeItem(LAST_PROJECT); localStorage.removeItem(LAST_POS); }
+    catch { /* 무시 */ }
+    setNotice(msg || null);
+    setView({ page: "home" });
+  };
+
+  if (view.page === "home") return <Home onOpen={open} notice={notice} />;
+  return (
+    <Workspace projectId={view.id} onHome={() => home()}
+      onMissing={() => home("이전에 열어둔 프로젝트를 서버에서 찾지 못했습니다 — "
+        + "서버 재시작으로 사라졌을 수 있습니다(임시 저장 모드).")} />
+  );
 }

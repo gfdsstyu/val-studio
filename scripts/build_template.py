@@ -12,14 +12,16 @@
   ⑦ **상향 배선**(세부→요약→DCF 스파인, WACC 빌드업) ⑧ Format·_DART_MAP·_VS_STATE
 
 사용:
-  python scripts/build_template.py                 # 빌드 + 검증
+  python scripts/build_template.py                      # 빌드 + 검증
+  python scripts/build_template.py --base-date 2025-12-31
   python scripts/build_template.py --out other.xlsx
-  python scripts/build_template.py --verify-only   # 기존 산출물만 재검증
+  python scripts/build_template.py --verify-only        # 기존 산출물만 재검증
 
 원본 3종이 없으면 **명시 에러**로 중단한다(조용히 반쪽 템플릿을 만들지 않는다).
 """
 from __future__ import annotations
 
+import datetime as dt
 import re
 import sys
 from copy import copy
@@ -42,6 +44,13 @@ OUT_DEFAULT = ROOT / "ValStudio_DCF_Template.xlsx"
 
 LAYOUT_ID = "valstudio-full-v1"
 TITLE = "Val-Studio | DCF Valuation Template v1"
+
+# 평가기준일 = **유일 앵커**(DCF!H36). 원본 서식은 2023-12-31 이 3곳에 하드코딩되고 다른
+# 시트들이 각자 연도를 박아뒀는데, DCF 시트만은 이미 완결돼 있다 —
+#   L4 = H36(기준일 = 마지막 실적연도말) → K4=EOMONTH(L4,-12) … 로 실적 H:L,
+#   M4 = EOMONTH(L4,12) … 로 추정 M:Q, 행3 = YEAR(행4).
+# 따라서 나머지 시트를 이 체인의 **참조로 전환**하면 기준일 변경이 셀 1칸이 된다.
+DEFAULT_BASE_DATE = dt.date(2025, 12, 31)
 
 # ── 디자인 토큰(독자 서식) ──────────────────────────────────────────────────
 HEAD, BAND, GREY = "FF1E293B", "FFF1F5F9", "FF64748B"
@@ -205,6 +214,28 @@ def copy_sheet(src, dst) -> int:
     return n
 
 
+def rewrite_sheet_refs(ws, mapping: dict[str, str]) -> int:
+    """수식 안의 시트명 참조를 재작성한다.
+
+    openpyxl 은 시트 복사 시 수식 문자열을 **그대로** 옮긴다 — 시트명을 바꾸면 원본이
+    자기 자신을 명시 참조하던 수식(`Trading!$N14`)이 전부 끊긴다. Excel 은 이를 외부
+    통합문서 링크로 오인해 "새로 고칠 수 없음"을 띄운다(실측).
+
+    ⚠️ 부분일치 금지 — `rTrading!` 안의 `Trading!` 을 건드리면 원자료 참조가 깨진다.
+    앞에 단어문자가 오지 않을 때만 치환한다.
+    """
+    n = 0
+    for old, new in mapping.items():
+        pat = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(old)}!")
+        for row in ws.iter_rows():
+            for c in row:
+                v = c.value
+                if isinstance(v, str) and v.startswith("=") and pat.search(v):
+                    c.value = pat.sub(f"{new}!", v)
+                    n += 1
+    return n
+
+
 def blank_values(ws, ranges: list[str]) -> int:
     """수식은 남기고 하드값(원본 회사 데이터)만 제거 — 구조·계산은 보존."""
     n = 0
@@ -302,6 +333,9 @@ def phase_comps(wb) -> None:
     comps = wb.create_sheet("Comps")
     n1 = copy_sheet(ref["Trading"], comps)
     comps.sheet_properties.tabColor = "1D4ED8"
+    # 시트명 변경(Trading→Comps)으로 끊긴 자기참조 복구 — 안 하면 Excel 이 이를
+    # 외부 링크로 오인해 "새로 고칠 수 없음"을 띄운다(실측 230건).
+    r1 = rewrite_sheet_refs(comps, {"Trading": "Comps"})
     b1 = blank_values(comps, ["D3", "N14:AP18", "Q6:Q7", "L5:L7"])
     comps["D3"] = "[평가대상회사]"
     comps["D3"].font = Font(bold=True, size=12, color=HEAD)
@@ -310,7 +344,8 @@ def phase_comps(wb) -> None:
     n2 = copy_sheet(ref["rTrading"], rt)
     rt.sheet_properties.tabColor = "CBD5E1"
     b2 = blank_values(rt, ["A3:Y13"])
-    say(f"Comps ← Trading {n1:,}셀(하드값 {b1} 제거) / rTrading {n2:,}셀({b2} 제거)")
+    say(f"Comps ← Trading {n1:,}셀(하드값 {b1} 제거·자기참조 {r1}수식 재작성) / "
+        f"rTrading {n2:,}셀({b2} 제거)")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -645,6 +680,72 @@ def build_dart_map(wb) -> None:
     say(f"_DART_MAP {len(DART_MAP)}건 (A {cnt['A']}/B {cnt['B']}/C {cnt['C']})")
 
 
+def phase_base_date(wb, base: dt.date) -> None:
+    """평가기준일 앵커 단일화 — DCF!H36 하나에서 전 시트 연도가 파생되게 배선.
+
+    원본은 기준일이 3곳(DCF!H36·Assumption!C7·WACC!AC8)에 각각 하드코딩되고, 연도축도
+    시트마다 박혀 있었다(Assumption 라벨·H_FS 실적 4블록·FA 세부·상각비계산 스케줄·r*).
+    값을 바꾸는 게 아니라 **참조로 전환**한다 — 이후 기준일 변경은 H36 한 칸.
+
+    ⚠️ 데이터 시트(Peer_S1_모집단 상장일 2,585건·rTrading 시세일)는 실데이터라 건드리지
+    않는다. 연도처럼 보인다고 일괄 치환하면 원자료가 파괴된다.
+    """
+    hist, fcst = list("HIJKL"), list("MNOPQ")     # 실적 5개년 / 추정 5개년
+    n = 0
+
+    def setf(sheet: str, ref: str, formula: str, fmt: str, color: str = GREEN):
+        nonlocal n
+        c = wb[sheet][ref]
+        c.value = formula
+        c.font = Font(color=color)
+        c.number_format = fmt
+        n += 1
+
+    # 앵커 — 유일한 파랑 입력
+    d = wb["DCF"]
+    d["H36"] = base
+    d["H36"].font = Font(color=BLUE, bold=True)
+    d["H36"].number_format = "yyyy-mm-dd"
+    d["G36"] = "[Date] ← 이 셀 하나만 고치면 전 시트 연도가 따라온다"
+    d["G36"].font = Font(size=9, color=GREY)
+
+    # Assumption — 기준일 + 거시 연도축(EIU 표기: 기준연도 A / 전망 b)
+    setf("Assumption", "C7", "=DCF!$H$36", "yyyy-mm-dd")
+    setf("Assumption", "E8", '=YEAR(DCF!L$4)&"A"', "General")
+    for col, fc in zip("FGHIJ", fcst):
+        setf("Assumption", f"{col}8", f'=YEAR(DCF!{fc}$4)&"b"', "General")
+    for row in (17, 21):                           # 성장률 전망 블록 2개
+        setf("Assumption", f"E{row}", "=YEAR(DCF!L$4)", "0")
+        for col, fc in zip("FGHIJ", fcst):
+            setf("Assumption", f"{col}{row}", f"=YEAR(DCF!{fc}$4)", "0")
+
+    # H_FS — 실적 5개년(BS·IS·원가·판관비 4블록)
+    for row in (3, 15):
+        for col, hc in zip("EFGHI", hist):
+            setf("H_FS", f"{col}{row}", f"=YEAR(DCF!{hc}$4)", "0")
+    for row in (15, 23, 37):
+        for col, hc in zip("NOPQR", hist):
+            setf("H_FS", f"{col}{row}", f"=YEAR(DCF!{hc}$4)", "0")
+
+    # FA 세부 추정 / 상각비계산 스케줄(날짜 + 기초 장부가 라벨)
+    for i, fc in enumerate(fcst):
+        setf("FA", f"G{47+i}", f"=YEAR(DCF!{fc}$4)", "0")
+    for row in (4, 21):
+        for col, fc in zip("HIJKL", fcst):
+            setf("상각비계산", f"{col}{row}", f"=DCF!{fc}$4", "yyyy-mm-dd")
+        setf("상각비계산", f"F{row}", '=TEXT(DCF!L$4,"yy")&"년말 장부가액"',
+             "General", BLACK)
+
+    # WACC MRP·베타 기준일 / 거시 RAW 연도축
+    setf("WACC", "AC8", "=DCF!$H$36", "yyyy-mm-dd")
+    for name in MACRO:
+        setf(name, "C7", "=YEAR(DCF!L$4)", "0")
+        for col, fc in zip("DEFGH", fcst):
+            setf(name, f"{col}7", f"=YEAR(DCF!{fc}$4)", "0")
+
+    say(f"기준일 앵커 {base:%Y-%m-%d} (DCF!H36) + 파생 전환 {n}칸")
+
+
 def build_vs_state(wb, n_years: int = 5) -> None:
     """워크북=상태 규약. `layout` 키가 되읽기 라우팅(fullmodel_layout)의 1순위 판별 근거."""
     ws = wb.create_sheet("_VS_STATE")
@@ -676,12 +777,20 @@ def verify(path: Path) -> bool:
 
     checks = [("DCF", "M7", "=EBIT!M13"), ("DCF", "M22", "=FA!M7"), ("DCF", "M24", "=-WC!M14"),
               ("DCF", "H37", "=WACC!D43"), ("WACC", "D43", "=D33*D41+D38*D40"),
-              ("Assumption", "E9", "=rGDP!C8"), ("EBIT", "M13", "=M34")]
+              ("Assumption", "E9", "=rGDP!C8"), ("EBIT", "M13", "=M34"),
+              # 기준일 앵커 체인 — 하드코딩이 남으면 여기서 걸린다
+              ("Assumption", "C7", "=DCF!$H$36"), ("WACC", "AC8", "=DCF!$H$36"),
+              ("H_FS", "I3", "=YEAR(DCF!L$4)"), ("FA", "G47", "=YEAR(DCF!M$4)"),
+              ("상각비계산", "H4", "=DCF!M$4"), ("rGDP", "C7", "=YEAR(DCF!L$4)")]
     for s, ref, want in checks:
         got = wb[s][ref].value
         good = got == want
         ok &= good
         print(f"  {s}!{ref:<5} {str(got):<26} {'OK' if good else f'!= {want}'}")
+
+    anchor = wb["DCF"]["H36"].value
+    print(f"  기준일 앵커 DCF!H36 = {anchor}")
+    ok &= isinstance(anchor, (dt.date, dt.datetime))
 
     # 셀 단위 순환(Excel 은 시트가 아니라 셀 단위로 판정 — 시트 간 상호참조 자체는 무해)
     sheets = set(wb.sheetnames)
@@ -727,6 +836,24 @@ def verify(path: Path) -> bool:
     except ImportError:
         print("  detect_fullmodel = (백엔드 미로드 — 건너뜀)")
 
+    # 끊어진 시트 참조 — 이관 시 시트명을 바꾸면 자기참조가 죽는다(Excel 은 이를 외부
+    # 링크로 오인해 "새로 고칠 수 없음"을 띄운다). 에러 없이 틀리는 형태라 게이트가 필요.
+    sheets = set(wb.sheetnames)
+    ref_re = re.compile(r"(?:'([^']+)'|([A-Za-z_가-힣][\w가-힣 .>]*))!")
+    dangling: dict[str, int] = {}
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for c in row:
+                v = c.value
+                if isinstance(v, str) and v.startswith("="):
+                    for q, plain in ref_re.findall(v):
+                        s = (q or plain).strip()
+                        if s not in sheets:
+                            dangling[s] = dangling.get(s, 0) + 1
+    ok &= not dangling
+    print(f"  끊어진 시트 참조 {sum(dangling.values())}건"
+          + (f"  → {dangling}" if dangling else ""))
+
     leftover = sum(len(BRAND.findall(str(c.value)))
                    for ws in wb.worksheets for row in ws.iter_rows()
                    for c in row if isinstance(c.value, str))
@@ -737,7 +864,7 @@ def verify(path: Path) -> bool:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-def build(out: Path) -> None:
+def build(out: Path, base_date: dt.date = DEFAULT_BASE_DATE) -> None:
     missing = [p for p in (SRC_BASE, SRC_PEER, SRC_COMPS) if not p.exists()]
     if missing:
         raise SystemExit("원본 서식 없음 — 조용히 반쪽 템플릿을 만들지 않는다:\n  "
@@ -758,6 +885,7 @@ def build(out: Path) -> None:
     phase_wire(wb)
     phase_wire_labels(wb)
     phase_wacc(wb)
+    phase_base_date(wb, base_date)     # 배선 뒤 — r*·Assumption 이 생성된 다음이어야 한다
     build_dart_map(wb)
     build_vs_state(wb)
 
@@ -775,10 +903,17 @@ def main() -> None:
         pass
     args = sys.argv[1:]
     out = OUT_DEFAULT
+    base = DEFAULT_BASE_DATE
     if "--out" in args:
         out = Path(args[args.index("--out") + 1])
+    if "--base-date" in args:
+        raw = args[args.index("--base-date") + 1]
+        try:
+            base = dt.date.fromisoformat(raw)
+        except ValueError:
+            raise SystemExit(f"--base-date 형식 오류(YYYY-MM-DD): {raw}")
     if "--verify-only" not in args:
-        build(out)
+        build(out, base)
     if not verify(out):
         raise SystemExit(1)
 

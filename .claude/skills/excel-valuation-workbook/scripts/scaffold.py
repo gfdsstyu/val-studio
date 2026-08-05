@@ -27,6 +27,7 @@ import _bootstrap  # noqa: F401
 import stage_sheets  # noqa: E402
 from calc_core import DcfSpineInput, run  # noqa: E402
 from excel.dcf_export import build_dcf_sheet  # noqa: E402
+from excel.vs_state import STATE_SCHEMA_VERSION  # noqa: E402
 from excel.xlsx_writer import Workbook  # noqa: E402
 
 _FIELDS = {f.name for f in dataclasses.fields(DcfSpineInput)}
@@ -38,6 +39,10 @@ def _add_state_sheet(wb, inp: DcfSpineInput) -> None:
     s = wb.add_sheet("_VS_STATE")
     kv = [
         ("skill_version", SKILL_VERSION),
+        # 상태 시트 스키마 버전 — 리더(스킬·웹)가 독립 갱신되므로 하위 리더가 상위
+        # 워크북을 만나는 일이 정상이다. 파서는 이 값을 보고 "모르는 항목이 있을 수
+        # 있다"를 경고할 뿐 읽기를 멈추지 않는다(excel/vs_state.py `_check_schema`).
+        ("state_schema", STATE_SCHEMA_VERSION),
         ("mode", "B"),                 # 백지 스캐폴딩
         ("stage", "W0"),
         ("last_gate_passed", "W0:scaffold"),

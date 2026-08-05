@@ -80,7 +80,9 @@ tests/ 89파일 (root 71 + golden 4 + skill 13 + xlsx 1), fixtures/ viol·classy
 
 **파서**: `xbrl.py`(fact⋈context, 연결/별도·세그먼트, 한글라벨) · `pdf.py`(pdftotext -layout→garble 감지→숫자 우측끝 클러스터링 표 복원+LLM용 text_chunks) · `ocr.py`(Tesseract 폴백, smart_extract) · `xlsx.py`(**openpyxl 유일 사용처**, msoffcrypto 복호화+파일명 두벌식 자모 비번 자동복원 ㅁ→a) · `footnote_extractor.py`((주N) 위치규칙 POINTER/DEFINITION) · `router.py`(방식×유형 자동 라우팅→프로파일 적용).
 
-**커넥터**: `dart_client.py`(재무제표·직원현황) · `dart_corp.py`(corpCode 인덱스·공시목록·원문 zip) · `dart_reports.py`(개황·감사의견/KAM·주식총수 발행vs유통 D7·최대주주·타법인출자 NOA·배당) · `dart_employee.py`(headcount 드라이버+급여 tie-out) · `macro_client.py`(ECOS + EIU 복붙 + **vintage 이중가드**: 기준일 후 실적/개정치 FAIL·staleness 180d WARN; `suggest_pgr_from_inflation` PGR 앵커) · `price_client.py`(FDR/pykrx, β 회귀 look-ahead 절단, 조정β=0.67raw+0.33) · `manual_paste.py`(**복붙 1급 경로**, confidence 0.9, range sanity: β 0~3/rate 0~30%/MRP 2~15%, Kd 등급×만기 매트릭스) · `damodaran.py`(CRP **정적 내장** vintage 2024-07) · `peer_selection.py`(4-step 퍼널, Step2만 LLM 판단·사유 필수) · `fs_mapper.py`(계정→버킷: 1단 taxonomy_store 표준요소명→2단 키워드 첫매칭 승리, 무매칭=uncertain·판단계정=judgment) · `taxonomy_store.py` · `ksic.py` · `footnote_costs.py`(성격별 비용+드라이버 제안).
+**커넥터**: `dart_client.py`(재무제표·직원현황 + `financial_statement_rows` 원행 반환) · **`dart_fs.py`(다년도 공시 재무제표 — 한 응답의 당기/전기/전전기 3열을 연도로 귀속해 요청 사업연도를 열로 병합. 공시 표시순서(`ord`)·계층(depth, 근거 `depth_basis`) 보존, 구 보고서 전용 폐지계정은 이웃 사이 소수 순번으로 삽입. 기본 제표=BS·IS·CIS·CF(SCE 는 멤버 반복으로 표를 압도해 옵트인). 분·반기는 3열 확장 금지, KRW 아니면 FAIL. **연도 중복관측 = 무료 검증**: 불일치를 3종으로 분리 — `fs_restated`(진짜 금액 재작성, 최신 공시 채택) / `fs_sign_convention`(크기 같고 부호만 반대 = 비교열 표시규약) / `fs_duplicate_suspect`(같은 계정이 두 줄). **병합키 = id 우선·이름 폴백 alias 해소** — 단일 키는 반드시 깨진다: id 만 쓰면 표준코드 교체가(삼성전자 BS 7건) 계정을 쪼개고, 이름만 쓰면 재명명이 쪼개 **자산 22.9조 이중계상**된다(관계기업투자 8.93조 + 기타포괄손익 금융자산 13.97조). 둘 다 바뀐 건 기계가 못 이으므로 병합 대신 짝 지목)** · **`fs_integrity.py`(3표 항등식 10종 SSOT `IDENTITIES` — 대차만 FAIL·나머지 WARN·앵커 부재는 skip. `excel/fs_sheet.py` 가 같은 표를 엑셀 체크행으로 재현)** · `dart_corp.py`(corpCode 인덱스·공시목록·원문 zip) · `dart_reports.py`(개황·감사의견/KAM·주식총수 발행vs유통 D7·최대주주·타법인출자 NOA·배당) · `dart_employee.py`(headcount 드라이버+급여 tie-out) · `macro_client.py`(ECOS + EIU 복붙 + **vintage 이중가드**: 기준일 후 실적/개정치 FAIL·staleness 180d WARN; `suggest_pgr_from_inflation` PGR 앵커) · `price_client.py`(FDR/pykrx, β 회귀 look-ahead 절단, 조정β=0.67raw+0.33) · `manual_paste.py`(**복붙 1급 경로**, confidence 0.9, range sanity: β 0~3/rate 0~30%/MRP 2~15%, Kd 등급×만기 매트릭스) · `damodaran.py`(CRP **정적 내장** vintage 2024-07) · `peer_selection.py`(4-step 퍼널, Step2만 LLM 판단·사유 필수) · `fs_mapper.py`(계정→버킷: 1단 taxonomy_store 표준요소명→2단 키워드 첫매칭 승리, 무매칭=uncertain·판단계정=judgment) · `taxonomy_store.py` · `ksic.py` · `footnote_costs.py`(성격별 비용+드라이버 제안).
+
+**`dart_document.py`(신규) = 공시서류 원문 파서 — 주석 공백 해소.** OpenDART 에 주석 API 가 없어 `fnlttSinglAcntAll` 로는 **주석 본문·계정↔주석번호 매핑**을 못 얻는다. `/api/dart/document` 가 이미 받아오던 원본 zip 을 여기서 파싱한다. **실측 해부(삼성 20250311001085)로 계획 문서 2건 정정**: ①인코딩은 **UTF-8**(EUC-KR 우선 아님 — cp949 선행 시 예외 없이 조용한 모지바케) ②SGML 이 아니라 **정상 XHTML 유사 표 마크업**(COLGROUP 폭까지). zip = 본보고서 + 첨부, `<DOCUMENT-NAME ACODE>` 로 종류 판별(11011 사업보고서 / **00760 감사보고서 · 00761 연결감사보고서에만 본표+주석**). ⚠️**핵심 함정: 들여쓰기가 열 오프셋으로 표현된다** — 헤더가 COLSPAN=2 로 기수를 덮고 같은 기수 안에서 개별계정은 앞 서브칼럼·소계는 뒤 서브칼럼에 금액을 쓴다. 'N번째 칸=당기'로 읽으면 소계가 통째로 어긋난다 → 기수를 열 **구간**으로 잡고 비어있지 않은 셀을 취한다. 표제·기간·단위는 본표 **직전 표** 안에 있다(표 사이 마크업 2자). 제표 판정은 표제가 아니라 **내용 기반**(`classify_statement`). **`to_multiyear`→`fs_integrity` 로 같은 항등식 SSOT 를 태운다** — 대차·손익체인·CF 롤포워드 통과가 곧 파서 자기검증(열 오프셋 오독 시 즉시 FAIL). ⚠️기수→연도는 **문서 순서(당기→전기)** 로 짝지어야 한다: 오름차순 축에 그냥 zip 하면 당기 금액이 전기로 가는데 **항등식은 열이 통째로 바뀌어도 성립해 이 오류를 못 잡는다**(별도 회귀 필요). 실측: 삼성 연결/별도 FAIL 0, 남은 WARN(2023 CF 14,153)은 **API 경로와 같은 값** = 공시 자체 잔차로 교차확인.
 
 **profiles/ = 문서 유형별**(산업별 아님): `business_report.py`(XBRL→핵심 10계정) · `opinion_template.py`(의견서 앵커 추출 — CID 깨져도 생존) · `research_brief.py`(Brief ②④⑩ 프리필).
 
@@ -116,7 +118,7 @@ CORS=Vite dev 전용. 전역 BadZipFile→422. 응답·요청 전부 수제 dict
 | 어셈블리 | POST /api/wacc/assemble · POST /api/dcf/assemble · POST /api/three-statement | assemble.* · three_statement |
 | 가정 상류 | POST /api/revenue/build · /api/assumptions/build(ebit·fa·wc) · /api/assumptions/costs-build · /api/assumptions/lease · /api/footnote/costs · /api/backlog · /api/fs/classify · /api/brief/from_xbrl | calc_core·ingest |
 | xlsx 4방향 | POST /api/xlsx/export·import·diff(project_id 기준선 재생성)·audit · POST /api/upload/sheet | excel.* |
-| DART 11종 | validate·financials·employee·corp-search(서버 캐시 var/dart_corpcode.json)·filings·document(zip)·company·audit-opinion·shares(D7)·investments·dividends | ingest.dart_* |
+| DART 13종 | **document/parse(원문 zip → 재무제표 본표 + 주석 전문 + 계정↔주석번호 + 같은 항등식 checks)**·validate·financials·**financials/multi(다년도 공시 원형 + 항등식 판정 + H_FS `sheet_plan` 동봉, 최대 10개년·2015↑ 가드)**·employee·corp-search(서버 캐시 var/dart_corpcode.json)·filings·document(zip)·company·audit-opinion·shares(D7)·investments·dividends | ingest.dart_* · dart_fs · fs_integrity · excel.fs_sheet |
 | 시세·거시 | POST /api/price/beta·marketcap·fx·multiples(pykrx 503 폴백) · POST /api/macro/series·pgr-suggest · GET /api/damodaran/crp(정적) · GET /api/ksic/search · GET /api/benchmarks/industry | ingest.* |
 | 기법·peer·상대 | POST /api/method/recommend · GET /api/method/options · POST /api/method/recommend-legal · POST /api/peer/select(Step2 무근거 422) · POST /api/relative/value · POST /api/bridge/check | method_selector·peer_selection·multiples·checks |
 | VIU·RCPS | POST /api/viu · POST /api/rcps | viu·backsolve |
@@ -145,6 +147,9 @@ LLM 호출은 Gemini뿐. Bloomberg β·한공회 MRP·KOFIABOND Kd는 **복붙 1
 ## 8. 프론트 — React 18, 계산 0줄
 
 - 의존성 react+react-dom 뿐. 라우팅=App.jsx 자체 상태(Home↔Workspace). nav.js가 모드별 stage×sheet 2축 SSOT. `?embed=1`=Excel Task Pane 모드.
+- **`DocumentPanel.jsx`(신규) = 공시자료 '원문·주석' 탭.** 공시목록 행의 `파싱` 버튼이 접수번호를 넘기면 자동 실행(ref 로 중복 콜 차단) → `/api/dart/document/parse`. 본표는 depth 들여쓰기로 렌더하고 **주석 열의 번호가 버튼**이라 누르면 근거 주석이 펼쳐진다(이 화면의 존재 이유 = 계정↔주석 연결). 항등식 매트릭스는 자료함과 같은 표현(같은 SSOT). 주석 표는 원문 격자 그대로 TableTransfer 로 전송. 저장 키 `document_parse`.
+- **`CompanyPicker.jsx`(신규) = DART 대상회사 단일 진입점.** corp_code 입력이 자료함(다년도·단년)·공시자료·원가(직원현황) **4곳에 흩어지고 검색이 3벌 중복**이라, 한 화면에서 찾아도 다른 화면에서 또 입력해야 했다(각자 로컬 state, 조회 성공해야만 `dart_query` 저장). 이제 고르는 즉시 `project.data.dart_target`(corp_code·corp_name·stock_code)에 저장 → 전 화면 공유 + 재실행 후 유지. 구 키(`dart_query`·`disclosure.corp_code`) 폴백 읽기로 하위호환. **⚠️ 종전 세 화면 모두 `listed_only=true` 하드코딩이라 비상장 평가대상이 검색에서 증발했다** — 실측: '비올' 검색이 엉뚱한 '비올메디컬(335890)'만 남기고 평가대상 '비올(01124398)'을 지웠다. 기본은 전체 검색(정렬이 이미 정확일치·상장사를 위로 올림), 상장사 필터는 체크박스 선택.
+- 자료 시트에 **`MultiYearFsPanel.jsx`(신규)** — 다년도 조회 → 항등식 [규칙×연도] 매트릭스 → `officeBridge.writeSheetPlan()` 으로 rFS·H_FS 시트 생성(동명 시트는 삭제 후 재생성, 확인 문구 필수). 브라우저 폴백은 값 전용 TSV. 저장 키 `dart_fs_multi`.
 - **평가인 7stage/21sheet**: cover(Dashboard) → materials(files·disclosure·brief) → mapping(pl·bs) → assumptions(macro·revenue·costs·fa·wc) → discount(peer·wacc) → valuation(dcf·assemble·model·review·scenario·relative) → output(report·export·diff·audit). 보조: MethodWizard·IndustryProfileCard.
 - **감사인 5stage/9sheet**: cover(CoverSheet) → ingest(OpinionIngest) → recalc(IndependentRecalc — 같은 /api/dcf, audit_* 키로 데이터 격리) → diagnosis(GapDiagnosis — API 0, 저장본 소비) → findings(Findings+LintPanel).
 - 모드는 생성 시 1회 확정·변경 불가(감사인 독립성). ReportSheet는 API 0(클라 순수 조합).
@@ -163,7 +168,10 @@ LLM 호출은 Gemini뿐. Bloomberg β·한공회 MRP·KOFIABOND Kd는 **복붙 1
 - 방향③diff·반영: workbook_diff 4버킷(입력/수식/구조/상태) → apply_policy.build_apply_plan(auto_apply/review_queue/blocked/state).
 - 방향④정적감사: model_audit(formula_pattern_lint·hardcode_scan·sensitivity_center·audit_workbook) — 비올 리뷰 결함 귀납.
 - **fade 왕복(2026-08-01 수정)**: export가 엔진의 입력확장(`expand_fade_input`)을 재사용해 **페이드 열을 실체화**(YEAR_COLS 12열, 모델러스 원본 관행)하고 META C40/C41(fade_years·해석 fade_growth)을 기록 → import가 뒤쪽 k열을 잘라 3단 파라메트릭 복원. 수정 전엔 왕복 시 주당 −23.1% 조용한 소실 + recalc 시 값 바뀌는 워크북이었음(test_fade_model_roundtrip). 3표 Excel 표현은 스킬 stage_sheets.build_model_3s(Circuit Switch 셀 C5). 셀 DAG는 자료구조가 아니라 규약(SKILL.md)+diff/audit이 집행.
-- add-in/: manifest 3종(prod/dev/staging)만, 본체=웹앱 embed. Permissions ReadDocument(MVP L1).
+- **`fs_sheet.py`(신규) = H_FS 2시트 배치도**: `rFS`(공시 원문·원 단위, 수정금지 — 모델러스 `r*` 원자료 격리 규약) + `H_FS`(전 셀 `=rFS!G7/10^6` **참조만 — key-in 금지**, 전각공백 들여쓰기로 계층 복원, A열 버킷태그 → 상단 `Σ SUMIF(자산 연속구간)−Σ SUMIF(부채 연속구간)` 요약 → 자본총계 대사). 체크행 2계열: 블록별 `원본자료 Refer Check(전 계정)`=`SUMPRODUCT(--(ROUND(값*10^6,0)<>원문))=0` + `ingest.fs_integrity.IDENTITIES` 를 그대로 옮긴 항등식 행. 산출 `WorkbookPlan` 은 ①Office.js `range.formulas` ②`write_xlsx()` 두 소비처. **MS가치평가 비올 최종모델 H_FS 탭 실측 역분석 기반**.
+  - **⚠️ BS 구간(자산/부채/자본) 판정에 표시순서를 가정하지 말 것** — DART 는 연도마다 배치를 바꿔 싣는다(삼성전자 2025 보고서는 `자산 → 자본 → 부채`, 2021 은 `자산 → 부채 → 자본`). 단방향 상태기계로 짜면 자본이 자산측에 섞인다. 현행=**앵커 상속 + 표준코드 규칙**(순서 무관). 코드 규칙에서 일반 토큰 `Equity` 금지 — `InvestmentAccountedForUsingEquityMethod`·`InvestmentsInEquityInstruments`(둘 다 **자산**)를 자본으로 오판한다.
+  - **총계 행 무태그**(SUMIF 이중계상 방지, 비올 규약) + **미분류는 빈칸이 아니라 `?` 태그** — 무태그로 두면 SUMIF 에서 증발해 대사가 조용히 깨지고 원인이 '누락'인지 '오분류'인지 알 수 없다. `?` 잔액→0 이 곧 계정분류 작업. 실측 검산: 삼성전자 2021~2025 **5개년 전부 `Σ버킷 = 자본총계` 차이 0**.
+- add-in/: manifest 3종(prod/dev/staging)만, 본체=웹앱 embed. Permissions **ReadWriteDocument 3종 통일**(시트 생성·Range 쓰기·getFileAsync. 권한 부족은 예외가 아니라 무반응이라 staging 누락이 조용한 실패였음).
 
 ## 10. 스킬 3종 — 결합 방식이 전부 다름
 
@@ -182,7 +190,7 @@ LLM 호출은 Gemini뿐. Bloomberg β·한공회 MRP·KOFIABOND Kd는 **복붙 1
 - **동기화 체인**: smic 케이스 md 수정 → .githooks/pre-commit → 빌드 스크립트 7종(build_segment_map→벤치마크 4종→산업프로파일→export_benchmarks_json) → 공개 MD + calc_core/data/industry_benchmarks.json 재생성·동반 커밋 → build_excel_skill.py로 스킬 vendoring.
 - **rigor 2단**: 권위 골든(비올·클래시스·모델러스)=FAIL/WARN 규칙 승격 가능 / 학회리포트(SMIC)=분포 prior(WARN 참고)만.
 - 매출 아키타입 A~K 11종(모든 매출=P×Q, Q를 뭘로): A 전방Capex연동 / B 전방생산량 / C 직접P×Q / D ARPU×유저 / E 점유율침투 / F 수주잔고 / G TAM탑다운 / H 구독ARR / I 캐파가동률 / J Take rate / K 규제요금.
-- 공개원칙 3중 방어: .gitignore(코퍼스 원문 제외) + scripts/mask_names.py(fail-closed 마스킹, 규칙표는 로컬 전용) + public-main 브랜치.
+- 공개원칙 3중 방어: .gitignore(코퍼스 원문 제외) + scripts/mask_names.py(fail-closed 마스킹, 규칙표는 로컬 전용) + **공개 스냅샷 분리**(`origin/main` — §13 참조. `public-main` 브랜치는 실재하지 않는다).
 
 ## 12. 골든·테스트
 
@@ -194,18 +202,27 @@ LLM 호출은 Gemini뿐. Bloomberg β·한공회 MRP·KOFIABOND Kd는 **복붙 1
 | TF 워크북 3종 | 채록 상수 | CB 콜캡/풋 캐스케이드 교정 |
 | E2E(scripts/) | 삼성(DART 라이브→간이 DCF) · 알테오젠(PSR 75,000~95,000) | 커넥터 실전 |
 
-tests/ 89파일: root 71(엔진·API TestClient·인제스트·커넥터 mock·excel·인프라 — conftest가 skill vendor 오염 purge) + golden 4(stdlib 단독 실행 가능) + skill 13(vendored 사본 검증, test_skill_dcf_golden=격리 재현) + xlsx 1. `test_frontend_wiring`=죽은 참조 탐지, `test_benchmarks_shared`=3표면 단일 정본, `test_vendor_sync`=드리프트 6종.
+tests/ 89파일: root 71(엔진·API TestClient·인제스트·커넥터 mock·excel·인프라 — conftest가 skill vendor 오염 purge) + golden 4(stdlib 단독 실행 가능) + skill 13(vendored 사본 검증, test_skill_dcf_golden=격리 재현) + xlsx 1. `test_frontend_wiring`=죽은 참조 탐지, `test_benchmarks_shared`=3표면 단일 정본, `test_vendor_sync`=드리프트 6종, **`test_dart_fs`=다년도 수집·병합·항등식·H_FS 플랜 24건(canned 응답, 네트워크 0)**.
 
 ## 13. 배포
 
 - Dockerfile 2-stage: node:20 빌드(dist) → python:3.12-slim + poppler-utils + requirements → backend/ + dist + **fixtures/**(데모용 COPY 필수) 복사, 비root, PORT=8080, keep-alive 75s(>Cloud Run LB 60s).
 - Cloud Run: `gcloud run deploy val-studio --source . --region asia-northeast3 --allow-unauthenticated --memory 1Gi`. cloudbuild.yaml/GH Actions 없음(deploy.md 수동/GitHub 연동 Cloud Build). 라이브: val-studio-789315789234.asia-northeast3.run.app.
-- 브랜치: main(기본) / feat/excel-valuation-skill(작업) / public-main(공개 스냅샷). origin=gfdsstyu/val-studio.
+- **브랜치 구조가 일반과 반대다**(2026-08-04 실측 정정 — 종전 서술 "main(기본)/feat(작업)/public-main(공개 스냅샷)"은 **틀렸다**):
+  | 브랜치 | 정체 | 뿌리 |
+  |---|---|---|
+  | `origin/main` | **포트폴리오 공개 스냅샷**(4커밋). 개발 이력을 쌓는 곳이 아니라 보여줄 상태를 통째로 새로 찍어 올리는 곳 | `037cfc1` |
+  | `origin/feat/excel-valuation-skill` | **실제 개발 본줄기**. 145커밋, 제품 전체 | `8e3b358` |
+  | `public-main` | **원격에 없음** | — |
+  두 이력은 **공통 조상이 없다** — GitHub 이 `feat…→main` 비교를 거부한다("entirely different commit histories"). 개발 PR 의 base 는 `main` 이 아니라 **`feat/excel-valuation-skill`** 이다(예: PR #1).
+  ⚠️ 로컬 `main`(99a6952)은 개발 이력 안의 한 지점이며 `origin/main` 과 **이름만 같고 완전히 다른 것**이다. `git log main..HEAD` 같은 계산이 원격 기준과 어긋나는 원인.
+  origin=gfdsstyu/val-studio(public).
 - env: PORT(주입)·PROJECTS_GCS_BUCKET(영속화)·GEMINI_API_KEY(RAG CLI만). .env의 DART_API_KEY는 로컬 e2e 스크립트 전용 — 서버는 안 읽음.
 
 ## 14. 알려진 미해결·주의 지점
 
-- 프로젝트 저장 비영속(GCS 버킷 미설정 시), corpCode 캐시 휘발.
+- 프로젝트 저장 비영속(GCS 버킷 미설정 시) — **근본 해결은 여전히 배포 설정**(`PROJECTS_GCS_BUCKET`). 다만 침묵은 걷어냈다: `/api/health` 가 `persistence: gcs|ephemeral` 을 선언하고 UI 가 '임시 저장 모드' 경고를 띄운다. corpCache 휘발.
+- **Task Pane 세션 복원(해결)** — 애드인을 닫으면 웹뷰가 파기되고 재실행은 manifest 의 고정 `?embed=1` 로만 진입해 `?project=` 가 없어 **항상 홈**으로 떨어졌다(= "껐다 켜면 처음부터"의 실제 원인, 서버 휘발과 별개). 진입 우선순위 `?project=` → localStorage(`valstudio_last_project`/`_last_pos`) → 홈. 404 면 오류 화면 대신 홈+사유. `saveData` 의 `.catch(()=>{})` 도 제거 — 저장 실패를 삼키면 '저장했다고 믿는' 최악이 된다(project_store 가 스스로 경계한 실패 의미론을 프론트가 어기고 있었다). `api.js` 는 status 를 Error 에 실어 보낸다(메시지 문자열 판별 금지 — "프로젝트 없음"에는 404가 없다).
 - Anthropic 키 UI만 존재(미배선). /api/price/marketcap·fx 예비 배선(프론트 미소비).
 - 벤치마크 prior n≥3 산업이 7개뿐(저신뢰 라벨로 표면화).
 - 로드맵 잔여: NAV 순자산법·PPA/WARA · 감사인 트랙 심화(ISA 540) · RAG 고도화(웹 미노출) · Supabase/멀티유저.
@@ -218,7 +235,9 @@ tests/ 89파일: root 71(엔진·API TestClient·인제스트·커넥터 mock·e
 | DCF 계산 순서·페이드 | backend/calc_core/dcf.py |
 | 게이트 전체 | backend/calc_core/checks.py (+ §5 이 문서) |
 | 실행 차단 로직 | backend/assemble/dcf_inputs.py |
-| 셀 레이아웃 | backend/excel/template_schema.py |
+| 셀 레이아웃 | backend/excel/template_schema.py (DCF) · backend/excel/fs_sheet.py (H_FS 다년도 FS) |
+| 다년도 DART 수집·재작성 검출 | backend/ingest/dart_fs.py |
+| 3표 항등식 SSOT | backend/ingest/fs_integrity.py (`IDENTITIES`) |
 | API 전체 | backend/api/main.py (단일 파일) |
 | 화면·시트 구조 | frontend/src/nav.js + App.jsx |
 | 시트별 API 소비 | frontend/src/pages/appraiser/*.jsx |

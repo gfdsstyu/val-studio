@@ -7,8 +7,8 @@
 """
 from __future__ import annotations
 
-from excel.vs_state import parse_vs_state
-from excel.workbook_diff import diff_workbooks, is_state_sheet
+from excel.vs_state import STATE_SCHEMA_VERSION, parse_vs_state
+from excel.workbook_diff import diff_workbooks, is_known_state_sheet, is_state_sheet
 from excel.xlsx_writer import Workbook
 from excel.xlsx_reader import read_workbook
 from excel.apply_policy import build_apply_plan
@@ -111,3 +111,110 @@ def test_no_state_sheet_is_absent(tmp_path):
     """웹 단독 워크북 — 상태 없음이 정상 경로(에러 아님)."""
     st = parse_vs_state(_read(_model_wb(), tmp_path, "plain.xlsx"))
     assert not st.present and st.to_dict()["stage"] is None
+
+
+# ── 술어 판정 + 미등록 원장 (P3-F) ───────────────────────────────────────────
+def test_state_predicate_covers_unregistered_vs_ledgers():
+    """열거가 아니라 술어 — 새 원장이 생겨도 왕복이 죽지 않아야 한다."""
+    # `_VS_NOTES` = 아직 파서가 없는 가상의 원장(등재는 파서와 함께 온다)
+    assert is_state_sheet("_VS_NOTES") and is_state_sheet("_vs_anything")
+    assert not is_known_state_sheet("_VS_NOTES")
+    assert is_known_state_sheet("_VS_STATE") and is_known_state_sheet("_VS_FACTS")
+    # 정규화 후 startswith 로 짰다면 오탐될 업무 시트들
+    assert not is_state_sheet("VS 분석") and not is_state_sheet("DCF")
+
+
+def test_unregistered_ledger_warns_but_never_blocks(tmp_path):
+    """미등록 `_VS_*` 는 차단하지 않되 '해석 못 함'을 표면화한다.
+
+    차단하면 마찰 1호(자동반영 영구 차단)가 재발하고, 침묵하면 "읽었는데 없었다"와
+    "읽을 줄 몰랐다"가 구분되지 않는다.
+    """
+    before = _read(_model_wb(), tmp_path, "b.xlsx")
+    wb = _model_wb()
+    s = wb.add_sheet("_VS_NOTES")
+    s.text("A1", "seq"); s.text("B1", "key")
+    after = _read(wb, tmp_path, "a.xlsx")
+
+    d = diff_workbooks(before, after)
+    assert d.safe and not d.sheets_added and not d.structure_changes
+    assert any("미등록 상태 시트" in w for w in d.warnings)
+
+    plan = build_apply_plan(d).to_dict()
+    assert plan["counts"]["blocked"] == 0
+    assert any("_VS_NOTES" in w for w in plan["warnings"])
+
+
+def test_unknown_ledger_is_not_parsed_as_state(tmp_path):
+    """파서는 해석 가능한 원장만 읽는다 — 모르는 시트를 _VS_STATE 로 착각하면 안 된다."""
+    wb = _model_wb()
+    s = wb.add_sheet("_VS_NOTES")
+    s.text("A1", "seq"); s.text("B1", "17")
+    st = parse_vs_state(_read(wb, tmp_path, "f.xlsx"))
+    assert not st.present and "seq" not in st.keys
+
+
+# ── 열이름 기반 파싱 (P2-D) ──────────────────────────────────────────────────
+def _with_ledger(wb: Workbook, headers: list[str], row: list[object]) -> Workbook:
+    """임의 열 구성의 가정 대장을 가진 `_VS_STATE`."""
+    s = wb.add_sheet("_VS_STATE")
+    s.text("A1", "stage"); s.text("B1", "W5")
+    s.text("A3", "── 가정 대장(provenance) ──")
+    cols = "ABCDEFGH"
+    for c, label in zip(cols, headers):
+        s.text(f"{c}4", label)
+    for c, v in zip(cols, row):
+        if isinstance(v, (int, float)):
+            s.num(f"{c}5", v)
+        else:
+            s.text(f"{c}5", str(v))
+    return wb
+
+
+def test_ledger_parsed_by_header_not_position(tmp_path):
+    """열을 중간에 끼워도 필드가 밀리지 않는다 — 위치 결합의 조용한 오독 회귀."""
+    wb = _with_ledger(
+        _model_wb(),
+        ["가정명", "값", "비고", "출처유형", "근거", "승인상태"],   # '비고'가 C에 끼어듦
+        ["영구성장률", 0.01, "메모", "research", "한은 장기전망", "승인"])
+    st = parse_vs_state(_read(wb, tmp_path, "h.xlsx"))
+
+    a = st.assumptions[0]
+    assert a["source_type"] == "research"      # 위치로 읽었다면 '메모'가 들어온다
+    assert a["basis"] == "한은 장기전망" and a["approval"] == "승인"
+    assert a["x_비고"] == "메모"                # 모르는 열은 버리지 않고 보존
+    assert not any("위치(A~E)" in w for w in st.warnings)
+
+
+def test_ledger_falls_back_to_position_with_warning(tmp_path):
+    """열이름 행이 깨진 구버전 워크북 — 폴백하되 침묵하지 않는다."""
+    wb = _model_wb()
+    s = wb.add_sheet("_VS_STATE")
+    s.text("A1", "stage"); s.text("B1", "W5")
+    s.text("A3", "── 가정 대장(provenance) ──")
+    # 열이름 행(4행) 없음 — 곧바로 데이터
+    s.text("A5", "COGS율"); s.num("B5", 0.29)
+    s.text("C5", "suggested"); s.text("D5", "peer 중위값"); s.text("E5", "")
+    st = parse_vs_state(_read(wb, tmp_path, "old.xlsx"))
+
+    assert [a["name"] for a in st.assumptions] == ["COGS율"]
+    assert any("위치(A~E)" in w for w in st.warnings)
+
+
+def test_higher_schema_version_warns_but_still_parses(tmp_path):
+    """하위 리더가 상위 워크북을 만나는 건 정상 — 죽지 말고 알리기만."""
+    wb = _with_ledger(_model_wb(), ["가정명", "값"], ["PGR", 0.01])
+    wb.sheets[-1].text("A2", "state_schema")
+    wb.sheets[-1].num("B2", STATE_SCHEMA_VERSION + 1)
+    st = parse_vs_state(_read(wb, tmp_path, "v2.xlsx"))
+
+    assert [a["name"] for a in st.assumptions] == ["PGR"]     # 계속 읽는다
+    assert any("스키마 v" in w for w in st.warnings)
+
+
+def test_current_schema_version_is_silent(tmp_path):
+    wb = _with_ledger(_model_wb(), ["가정명", "값"], ["PGR", 0.01])
+    wb.sheets[-1].text("A2", "state_schema")
+    wb.sheets[-1].num("B2", STATE_SCHEMA_VERSION)
+    st = parse_vs_state(_read(wb, tmp_path, "v1.xlsx"))
+    assert not any("스키마 v" in w for w in st.warnings)

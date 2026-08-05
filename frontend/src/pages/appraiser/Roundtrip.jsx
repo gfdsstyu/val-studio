@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { api, fileToBase64 } from "../../api.js";
-import { officeAvailable, currentWorkbookB64, excelWriteAvailable, writeFormula }
+import { officeAvailable, currentWorkbookB64, excelWriteAvailable, writeFormula, writeSheetPlan }
   from "../../officeBridge.js";
 
 /* 엑셀 ⇄ 웹 왕복 루프 — 5. 산출물 단계.
@@ -69,6 +69,7 @@ function SkillStatePanel({ state }) {
 function ReexportButton({ input, company, label = "새 버전 xlsx 내보내기" }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [msg, setMsg] = useState(null);
 
   const download = async () => {
     setBusy(true); setErr(null);
@@ -83,11 +84,37 @@ function ReexportButton({ input, company, label = "새 버전 xlsx 내보내기"
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
+  /** 같은 시트를 **열린 워크북에 병설**한다 — 새 파일을 만들지 않아 정본이 갈라지지 않는다.
+   *
+   *  export 는 매번 새 .xlsx 를 만들고, 그걸 열면 어느 파일이 진짜인지 사람이 관리해야
+   *  한다(addin_two_panel_ux §7-1 정본 분기). 시트로 붙이면 그 문제가 애초에 없다 —
+   *  스킬 W0 모드 C(타 템플릿 옆에 표준 시트 병설)와 같은 그림이다.
+   */
+  const makeSheet = async () => {
+    if (!window.confirm(
+      "열린 워크북에 표준 [DCF] 시트를 만듭니다.\n"
+      + "같은 이름의 시트가 있으면 교체합니다. 계속할까요?")) return;
+    setBusy(true); setErr(null); setMsg(null);
+    try {
+      const plan = await api.xlsx.sheetPlan(input);
+      const w = await writeSheetPlan(plan);
+      setMsg(`[${w.map((x) => x.name).join(", ")}] 생성 — 주당 ${plan.meta?.per_share ?? "?"}`);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
   return (
     <>
       <button style={{ marginTop: 8, marginLeft: 8 }} disabled={busy} onClick={download}>
         {busy ? "생성 중…" : `↻ ${label}`}
       </button>
+      {excelWriteAvailable() && (
+        <button className="ghost" style={{ marginTop: 8, marginLeft: 8 }}
+          disabled={busy} onClick={makeSheet}
+          title="새 파일 대신 열린 워크북에 시트로 — 정본이 갈라지지 않는다">
+          {busy ? "생성 중…" : "＋ 열린 워크북에 DCF 시트"}
+        </button>
+      )}
+      {msg && <div className="finding pass" style={{ marginTop: 8 }}>{msg}</div>}
       {err && <div className="err" style={{ marginTop: 8 }}>{err}</div>}
     </>
   );

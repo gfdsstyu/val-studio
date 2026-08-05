@@ -67,8 +67,13 @@ gcloud run deploy val-studio \
 (Task Pane 의 "현재 워크북으로 비교" 포함), 기준선이 날아가면 그 기능 자체가 못 쓰게 된다.
 
 코드는 이미 준비되어 있다(`backend/api/project_store.py` — stdlib urllib + 메타데이터 서버
-토큰, google-cloud-storage 의존 0). `PROJECTS_GCS_BUCKET` 만 주입하면 GCS 가 SSOT 가 되고
-로컬 디렉터리는 읽기 캐시가 된다. **미설정 시 동작은 종전과 완전히 동일**(로컬 전용).
+토큰, google-cloud-storage 의존 0). `PROJECTS_GCS_BUCKET` 만 주입하면 GCS 가 **읽기·쓰기·
+목록 모두의 SSOT** 가 되고 로컬 디렉터리는 **쓰기 미러**가 된다(읽기 캐시가 아니다).
+**미설정 시 동작은 종전과 완전히 동일**(로컬 전용).
+
+> 로컬을 읽기 캐시로 쓰면 스케일아웃 시 조용한 유실이 난다: 인스턴스 A 가 저장한 뒤
+> 인스턴스 B 가 예전 로컬본을 돌려주면, 사용자가 낡은 상태에서 편집·저장해 A 의 작업을
+> 덮는다. 그래서 매 조회가 GCS 를 본다(회귀: `test_gcs_load_ignores_stale_local_cache`).
 
 ```bash
 PROJECT=<gcp-project-id>

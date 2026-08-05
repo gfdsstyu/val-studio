@@ -5,6 +5,10 @@ Cloud Run 컨테이너 파일시스템은 휘발성이라 var/projects/*.json �
 원본(SSOT)으로 쓰고 로컬 디렉터리는 읽기 캐시가 된다. 미설정(로컬 dev·테스트)이면
 기존 로컬 동작 그대로 — 기존 호출부·테스트 무영향.
 
+⚠️ 버킷 설정 시 **GCS 가 읽기·목록의 정본**이고 로컬 디렉터리는 쓰기 미러다(읽기 캐시가
+아니다). 로컬을 먼저 읽으면 다중 인스턴스에서 남의 최신 저장을 가려 조용한 유실이 난다 —
+상세는 `load`/`list_ids` 도입부.
+
 의존 0 원칙(xlsx_reader 와 동일 철학): google-cloud-storage 대신 stdlib urllib +
 Cloud Run 메타데이터 서버 토큰(기본 서비스계정) + GCS JSON API. 필요 권한:
 서비스계정에 대상 버킷의 roles/storage.objectAdmin.
@@ -89,12 +93,22 @@ class ProjectStore:
             raise StoreError(f"GCS 업로드 실패({pid}): {e}") from e
 
     def load(self, pid: str) -> str | None:
-        """로컬 캐시 우선 → GCS 폴백(성공 시 캐시 적재). 부재=None."""
+        """버킷 설정 시 **GCS 가 읽기 정본**. 미설정이면 로컬 전용. 부재=None.
+
+        ⚠️ 종전에는 로컬 캐시를 먼저 보고 있으면 GCS 를 아예 조회하지 않았다.
+        단일 인스턴스에서는 무해하지만 Cloud Run 은 스케일아웃한다(`--max-instances 3`):
+            ① 인스턴스 A 에서 저장 → 로컬(A) + GCS 갱신
+            ② 인스턴스 B 가 그 프로젝트를 이전에 읽어 로컬 캐시를 갖고 있으면
+               → B 는 **낡은 로컬본**을 돌려준다
+            ③ 사용자가 그 상태에서 편집·저장 → A 의 최신 작업이 덮여 사라진다
+        영속화를 켜는 이유가 유실 방지인데 읽기 경로에 유실이 남으면 목적이 무너진다.
+        그래서 버킷이 있으면 GCS 를 먼저 읽고, 로컬은 **쓰기 미러**로만 둔다.
+        (조회 실패를 로컬로 조용히 폴백하지 않는 것도 같은 이유 — `save` 의 실패
+        의미론과 대칭이다. '영속된 줄 아는' 상태를 만들지 않는다.)
+        """
         p = self.local_dir / f"{pid}.json"
-        if p.exists():
-            return p.read_text(encoding="utf-8")
         if not self.bucket:
-            return None
+            return p.read_text(encoding="utf-8") if p.exists() else None
         url = f"{_GCS}/storage/v1/b/{self.bucket}/o/{self._obj(pid)}?alt=media"
         try:
             text = self._gcs("GET", url).read().decode("utf-8")
@@ -109,9 +123,17 @@ class ProjectStore:
         return text
 
     def list_ids(self) -> list[str]:
-        """로컬 ∪ GCS id 집합 — 재시작 직후(로컬 공백)에도 목록이 살아있어야 한다."""
-        ids = ({f.stem for f in self.local_dir.glob("*.json")}
-               if self.local_dir.is_dir() else set())
+        """버킷 설정 시 **GCS 만** 정본. 미설정이면 로컬 목록.
+
+        종전에는 로컬 ∪ GCS 였는데, 합집합은 낡은 로컬 항목을 되살린다 —
+        다른 인스턴스가 지운 프로젝트가 목록에 남고, 열면 404 가 난다.
+        업로드가 실패한 로컬 잔여물도 '저장된 것처럼' 보인다(save 는 실패 시 StoreError
+        를 올리므로 사용자는 이미 실패를 안다 — 목록까지 거짓말할 이유가 없다).
+        """
+        ids: set[str] = set()
+        if not self.bucket:
+            return sorted({f.stem for f in self.local_dir.glob("*.json")}
+                          if self.local_dir.is_dir() else set())
         if self.bucket:
             page = None
             while True:

@@ -3,6 +3,8 @@ import { api, fileToBase64 } from "../../api.js";
 import { loadKey } from "../Byok.jsx";
 import TableTransfer from "../../TableTransfer.jsx";
 import DisclosureSheet from "./DisclosureSheet.jsx";
+import MultiYearFsPanel from "./MultiYearFsPanel.jsx";
+import { dartTarget } from "./CompanyPicker.jsx";
 
 /* 0.자료·Brief — files(자료함)·brief(Company Brief).
    업로드/파싱 파이프라인·LLM 자동 브리프는 후속(백엔드 인제스트 미배선) — 지금은
@@ -12,34 +14,23 @@ const won2 = (v) => (v == null ? "-" : Math.round(v).toLocaleString("ko-KR"));
 
 /** DART API 재무제표 조회 → 계정을 매핑 시트로 전송(fs_mapper 자동분류 → NOA/IBD 브리지). */
 function DartFetchPanel({ project, onSave }) {
-  const [corp, setCorp] = useState(project?.data?.dart_query?.corp_code || "");
+  // 대상회사는 CompanyPicker 가 프로젝트에 확정한 단일값 — 여기서 또 찾지 않는다.
+  const corp = dartTarget(project)?.corp_code || "";
   const [year, setYear] = useState(project?.data?.dart_query?.year || "2023");
   const [fsDiv, setFsDiv] = useState("CFS");
   const [res, setRes] = useState(project?.data?.dart_financials || null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
-  const [q, setQ] = useState(project?.company || "");
-  const [hits, setHits] = useState(null);
   const key = loadKey("dart");
-
-  const searchCorp = async () => {
-    if (!key) { setErr("BYOK 탭에서 DART API 키를 먼저 저장하세요."); return; }
-    if (!q.trim()) return;
-    setBusy(true); setErr(null);
-    try {
-      const d = await api.dartCorpSearch(key, q.trim(), true);   // 상장사 우선
-      setHits(d.results);
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  };
 
   const fetch = async () => {
     if (!key) { setErr("BYOK 탭에서 DART API 키를 먼저 저장하세요."); return; }
-    if (!corp.trim()) { setErr("corp_code(8자리)를 입력하세요."); return; }
+    if (!corp) { setErr("위 '다년도 재무제표'에서 대상회사를 먼저 선택하세요."); return; }
     setBusy(true); setErr(null);
     try {
-      const d = await api.dartFinancials(key, { corp_code: corp.trim(), year: year.trim(), fs_div: fsDiv });
+      const d = await api.dartFinancials(key, { corp_code: corp, year: year.trim(), fs_div: fsDiv });
       setRes(d);
-      onSave?.({ dart_query: { corp_code: corp.trim(), year: year.trim() }, dart_financials: d });
+      onSave?.({ dart_query: { corp_code: corp, year: year.trim() }, dart_financials: d });
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
@@ -63,25 +54,11 @@ function DartFetchPanel({ project, onSave }) {
       <h2>DART 재무제표 조회 <span className="muted">— OpenDART fnlttSinglAcntAll(BYOK 키)</span></h2>
       <div className="pad">
         {!key && <div className="finding warn">BYOK 탭에서 OpenDART API 키를 저장해야 조회됩니다.</div>}
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 }}>
-          <div className="row" style={{ margin: 0, flex: 1, maxWidth: 260 }}><label>회사명으로 corp_code 찾기</label>
-            <input type="text" value={q} onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && searchCorp()} placeholder="예: 삼성전자" /></div>
-          <button className="ghost" onClick={searchCorp} disabled={busy}>검색</button>
+        <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+          대상회사는 위 '다년도 재무제표' 화면에서 한 번만 고르면 됩니다
+          {corp && <> — 현재 <code>{corp}</code></>}.
         </div>
-        {hits && (
-          <div className="muted" style={{ marginBottom: 8, fontSize: 12 }}>
-            {hits.length ? hits.slice(0, 8).map((h) => (
-              <button key={h.corp_code} className="ghost xs" style={{ margin: "2px 4px 2px 0" }}
-                onClick={() => { setCorp(h.corp_code); setHits(null); }}
-                title={`corp_code ${h.corp_code}`}>
-                {h.corp_name}{h.stock_code ? `(${h.stock_code})` : ""}</button>
-            )) : "검색 결과 없음"}
-          </div>
-        )}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <div className="row" style={{ margin: 0 }}><label>corp_code (8자리)</label>
-            <input type="text" value={corp} onChange={(e) => setCorp(e.target.value)} placeholder="00126380" style={{ width: 110 }} /></div>
           <div className="row" style={{ margin: 0 }}><label>사업연도</label>
             <input type="text" value={year} onChange={(e) => setYear(e.target.value)} style={{ width: 70 }} /></div>
           <div className="row" style={{ margin: 0 }}><label>연결/별도</label>
@@ -103,7 +80,7 @@ function DartFetchPanel({ project, onSave }) {
             {["BS", "IS", "CIS", "CF"].filter((k) => byDiv[k]).map((div) => (
               <details key={div} style={{ marginTop: 6 }}>
                 <summary style={{ cursor: "pointer", fontSize: 13 }}>{div} ({byDiv[div].length})</summary>
-                {/* 워크북 원자료 시트(r_DART)로 옮기는 경로 — 화면 표는 30행만 보여주지만
+                {/* 워크북 원자료 시트(rFS)로 옮기는 경로 — 화면 표는 30행만 보여주지만
                     전송은 **전량**이다(눈에 보이는 것만 가는 함정 방지). 값은 number 로
                     넘겨 엑셀에서 숫자 셀이 되게 한다. */}
                 <div style={{ margin: "4px 0" }}>
@@ -139,6 +116,8 @@ function FilesSheet({ project, onSave }) {
 
   return (
     <>
+    {/* 다년도(H_FS 만들기) → 단년(매핑 시트로 계정 넘기기) 순. 목적이 다른 두 경로다. */}
+    <MultiYearFsPanel project={project} onSave={onSave} />
     <DartFetchPanel project={project} onSave={onSave} />
     <div className="card">
       <h2>자료함 <span className="muted">— 자료 메타·메모</span></h2>

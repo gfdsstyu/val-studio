@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+import re
+
 from calc_core.dcf import expand_fade_input, resolve_fade_growth
 from calc_core.models import DcfResult, DcfSpineInput
 
@@ -33,6 +35,48 @@ def _tax_formula(ebit_ref: str) -> str:
         f"IF({e}<300000,(200*0.09+19800*0.19+({e}-20000)*0.21)*1.1,"
         f"(200*0.09+19800*0.19+280000*0.21+({e}-300000)*0.24)*1.1))))"
     )
+
+
+def workbook_to_plan(wb: Workbook) -> dict:
+    """stdlib 라이터 워크북 → **격자 시트 플랜**(`fs_sheet.plan_to_json` 과 같은 형태).
+
+    존재 이유: 지금까지 표준 DCF 시트를 얻는 길이 `.xlsx 다운로드` 뿐이었다. 그러면
+    **새 파일이 생겨 정본이 갈라진다**(addin_two_panel_ux §7-1 — 어느 파일이 진짜인지
+    사람이 관리해야 한다). 같은 워크북에 시트로 병설하면 분기가 애초에 생기지 않고,
+    스킬의 W0 모드 C(타 템플릿 옆에 표준 시트 병설)와도 같은 그림이 된다.
+
+    변환 규약: 수식은 `=` 를 붙인 문자열(Office.js `range.formulas` 가 수식으로 해석),
+    값은 그대로, 빈 칸은 `""`. 캐시값은 버린다 — 시트에 들어가는 순간 엑셀이 재계산한다.
+    """
+    sheets = []
+    for sh in wb.sheets:
+        if not sh.cells:
+            continue
+        max_r = max_c = 0
+        placed: dict[tuple[int, int], object] = {}
+        for ref, cell in sh.cells.items():
+            m = _REF.fullmatch(ref)
+            if not m:
+                continue
+            c, r = _col_index(m.group(1)), int(m.group(2))
+            max_r, max_c = max(max_r, r), max(max_c, c)
+            placed[(r, c)] = f"={cell.formula}" if cell.formula else (
+                "" if cell.value is None else cell.value)
+        rows = [[placed.get((r, c), "") for c in range(1, max_c + 1)]
+                for r in range(1, max_r + 1)]
+        sheets.append({"name": sh.name, "rows": rows, "freeze": None,
+                       "widths": [], "bold_rows": [], "readonly_hint": False})
+    return {"meta": {"source": "dcf_export"}, "sheets": sheets}
+
+
+def _col_index(letters: str) -> int:
+    n = 0
+    for ch in letters.upper():
+        n = n * 26 + (ord(ch) - 64)
+    return n
+
+
+_REF = re.compile(r"([A-Z]{1,3})([0-9]{1,7})")
 
 
 def build_dcf_sheet(inp: DcfSpineInput, res: DcfResult) -> Workbook:

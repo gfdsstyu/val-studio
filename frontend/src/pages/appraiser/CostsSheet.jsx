@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { api } from "../../api.js";
 import { loadKey } from "../Byok.jsx";
 import IndustryProfileCard from "./IndustryProfileCard.jsx";
+import { dartTarget } from "./CompanyPicker.jsx";
 
 /* 2.가정 > 원가·판관비 — /api/assumptions/costs-build 배선(비올/참고 모델 성격별 다중드라이버).
    단일 COGS%/SGA% 가 아니라 성격별 라인(원재료·노무비·외주비·감가상각·인건비·지급수수료…)을
@@ -54,7 +55,9 @@ export default function CostsSheet({ project, onSave }) {
   const setFn = (k) => (e) => setFnMeta({ ...fnMeta, [k]: e.target.value });
 
   // DART 직원현황 → 노무비 headcount 드라이버 실측 시드.
-  const [emp, setEmp] = useState({ corp_code: "", bsns_year: "", headcount_growth: "0",
+  // corp_code 는 프로젝트에 확정된 대상회사에서 프리필 — 화면마다 다시 찾아 치지 않는다.
+  const [emp, setEmp] = useState({ corp_code: dartTarget(project)?.corp_code || "",
+    bsns_year: "", headcount_growth: "0",
     wage_growth: "0", bonus_rate: "0.1", severance_rate: "0.08" });
   const [empRes, setEmpRes] = useState(null);
   const [empErr, setEmpErr] = useState(null);
@@ -87,7 +90,7 @@ export default function CostsSheet({ project, onSave }) {
   const fetchEmployee = async () => {
     setEmpErr(null); setEmpRes(null);
     if (!dartKey) { setEmpErr("BYOK 설정에서 DART 키를 먼저 입력하세요."); return; }
-    if (!emp.corp_code.trim() || !emp.bsns_year.trim()) { setEmpErr("corp_code, 사업연도 필요."); return; }
+    if (!emp.corp_code.trim() || !emp.bsns_year.trim()) { setEmpErr("고유번호(corp_code)와 사업연도가 필요합니다."); return; }
     try {
       setEmpRes(await api.dartEmployee(dartKey, {
         corp_code: emp.corp_code.trim(), bsns_year: emp.bsns_year.trim(), years,
@@ -291,7 +294,7 @@ export default function CostsSheet({ project, onSave }) {
             드라이버(노무비=인원×인당급여×(1+상여+퇴직))를 채웁니다. 성장률은 가정입니다.
             {!dartKey && <b style={{ color: "var(--err, #c00)" }}> BYOK 설정에서 DART 키 필요.</b>}</div>
           <div className="grid2">
-            <div className="row"><label>corp_code (8자리)</label>
+            <div className="row"><label>고유번호 (8자리)</label>
               <input type="text" value={emp.corp_code} onChange={setE("corp_code")} placeholder="예 00126380" /></div>
             <div className="row"><label>사업연도</label>
               <input type="text" value={emp.bsns_year} onChange={setE("bsns_year")} placeholder="예 2024" /></div>

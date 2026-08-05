@@ -62,13 +62,20 @@ def _rows(data: dict) -> list[dict]:
 
 
 # ── 기업개황 ──────────────────────────────────────────────────────────────────
-_COMPANY_FIELDS = {
-    "corp_name": "회사명", "corp_name_eng": "영문명", "stock_name": "종목명",
-    "stock_code": "종목코드", "ceo_nm": "대표이사", "corp_cls": "법인구분",
-    "jurir_no": "법인등록번호", "bizr_no": "사업자등록번호", "adres": "주소",
-    "hm_url": "홈페이지", "ir_url": "IR", "phn_no": "전화", "induty_code": "업종코드",
-    "est_dt": "설립일", "acc_mt": "결산월",
+#: 개황 필드 → 화면 라벨. **표시 순서까지 이 dict 의 순서를 정본으로 쓴다**(라벨을
+#: 프론트에 복제하면 드리프트가 난다 — API 응답에 그대로 실어 보낸다).
+#: 순서는 '무엇인가 → 어디인가 → 언제·어떻게' 순: 정체성 → 연락처 → 등록·회계.
+COMPANY_FIELDS = {
+    "corp_name": "회사이름", "corp_name_eng": "영문이름", "ceo_nm": "대표자",
+    "adres": "주소", "phn_no": "전화번호", "fax_no": "팩스번호",
+    "hm_url": "웹사이트", "ir_url": "IR사이트",
+    "induty_code": "업종코드", "est_dt": "설립일", "acc_mt": "결산월",
+    "jurir_no": "법인등록번호", "bizr_no": "사업자등록번호",
+    "corp_cls": "법인구분", "stock_name": "종목이름", "stock_code": "종목번호",
 }
+#: URL 로 렌더할 필드(프론트가 앵커로 감싼다) — 자료 수집 동선 직결.
+COMPANY_URL_FIELDS = ("hm_url", "ir_url")
+_COMPANY_FIELDS = COMPANY_FIELDS          # 하위호환(기존 참조 유지)
 _CORP_CLS = {"Y": "유가증권", "K": "코스닥", "N": "코넥스", "E": "기타"}
 
 

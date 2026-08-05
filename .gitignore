@@ -73,3 +73,10 @@ htmlcov/
 
 # 로컬 전용 설정(공개 대상 아님)
 scripts/mask_rules.json
+재무제표 및 주석 추출.xlsm
+
+# 스크리너 인덱스 캐시(시가총액이 시변 — 커밋하면 곧 거짓이 된다)
+var/screener_index.json
+
+# 로컬 전용 노트(경쟁 툴 벤치마크 등) — 공개 레포에 올리지 않는다
+docs/_local/

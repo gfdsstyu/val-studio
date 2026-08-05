@@ -12,6 +12,7 @@ import base64
 import binascii
 import dataclasses
 import os
+import re
 import sys
 import tempfile
 import urllib.error
@@ -129,7 +130,15 @@ def _result_payload(inp: DcfSpineInput, claimed: float | None = None,
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"ok": True, "engine": "calc_core", "mode": "local-byok"}
+    """헬스 + **영속화 모드 정직 표기**.
+
+    `PROJECTS_GCS_BUCKET` 미설정이면 프로젝트는 컨테이너 파일시스템에만 남는다 →
+    Cloud Run 인스턴스가 재활용되면 그대로 증발한다. 이 사실을 서버만 알고 UI 가
+    모르면, 유저는 '저장했는데 사라졌다'를 자기 실수로 오해한다(과소 주장도 부정직).
+    프론트가 이 값으로 경고를 띄운다.
+    """
+    return {"ok": True, "engine": "calc_core", "mode": "local-byok",
+            "persistence": "gcs" if _STORE.bucket else "ephemeral"}
 
 
 import json as _json
@@ -400,6 +409,26 @@ async def xlsx_export(request: Request) -> Response:
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": 'attachment; filename="valstudio_dcf.xlsx"'},
     )
+
+
+@app.post("/api/xlsx/sheet-plan")
+async def xlsx_sheet_plan(request: Request) -> dict:
+    """DcfSpineInput JSON → **열린 워크북에 병설할 표준 DCF 시트 플랜**.
+
+    `/api/xlsx/export` 와 같은 시트를 만들지만 파일이 아니라 격자 플랜으로 준다.
+    export 는 **새 파일**을 만들어 정본이 갈라지는데(addin_two_panel_ux §7-1 — 어느
+    파일이 진짜인지 사람이 관리해야 한다), 같은 워크북에 시트로 붙이면 분기가 애초에
+    생기지 않는다. 스킬 W0 모드 C(타 템플릿 옆에 표준 시트 병설)와 같은 그림이다.
+
+    응답 형태는 `excel/fs_sheet.plan_to_json` 과 동일 — 프론트의 `writeSheetPlan` 이
+    그대로 소비한다(rFS·H_FS 와 같은 경로).
+    """
+    from excel.dcf_export import workbook_to_plan
+    inp = _parse_input(await request.json())
+    res = run(inp)
+    plan = workbook_to_plan(build_dcf_sheet(inp, res))
+    plan["meta"]["per_share"] = round(res.per_share, 4)
+    return plan
 
 
 @app.post("/api/xlsx/import")
@@ -1040,6 +1069,134 @@ async def peer_select(request: Request) -> dict:
     }
 
 
+# ── 판정 초안 (BYOK: X-Anthropic-Key 통과, 서버 미저장) ──────────────────────
+# 원칙: 모델은 **초안**만 만든다. 산출물은 퍼널로 바로 흐르지 않고 화면의 판정 표를
+# 채울 뿐이며, 확정·실행은 사람이 /api/peer/select 로 한다(제안 → 판단 → 검증).
+@app.get("/api/agent/models")
+def agent_models() -> dict:
+    """선택 가능한 판정 모델 — 레지스트리 ∩ 구현된 어댑터(고를 수 있는데 실패 = 금지)."""
+    from agent.judge import available_models
+    from agent.registry import DEFAULT_MODEL_ID, PRICING_VINTAGE
+    return {"models": [m.to_dict() for m in available_models()],
+            "default": DEFAULT_MODEL_ID, "pricing_vintage": PRICING_VINTAGE}
+
+
+# ProviderError.kind → HTTP. 키·요청 문제는 4xx, 외부 장애는 5xx 로 갈라야
+# 프론트가 "내가 고칠 것"과 "기다릴 것"을 구분해 안내할 수 있다.
+_AGENT_STATUS = {"not_installed": 503, "auth": 400, "rate_limit": 429,
+                 "bad_request": 422, "refusal": 422, "truncated": 422,
+                 "schema": 422, "server": 502, "network": 502}
+
+
+@app.post("/api/peer/judge")
+async def peer_judge(request: Request,
+                     x_anthropic_key: str | None = Header(default=None)) -> dict:
+    """{target:{name,ticker?,business?}, candidates:[{ticker,name,business?}],
+    model?, effort?} + X-Anthropic-Key → Step2 판정 **초안** + 경고 + 증적.
+
+    4-step 중 판단이 필요한 Step2 만 모델이 채운다(나머지는 결정론). 사유 없는 판정은
+    여기서 버려지고, 버려진 자리는 사람이 채워야 퍼널이 실행된다 — 게이트는 그대로.
+    """
+    from ingest.peer_judge import JudgeCandidate, JudgeTarget, draft_step2
+    d = await request.json()
+    t = d.get("target") or {}
+    if not t.get("name"):
+        raise HTTPException(422, "target.name 필요 — 무엇과 비교할지가 판정의 기준점")
+    cands = [JudgeCandidate(ticker=str(c["ticker"]), name=str(c.get("name", c["ticker"])),
+                            business=str(c.get("business") or ""))
+             for c in (d.get("candidates") or []) if c.get("ticker")]
+    if not cands:
+        raise HTTPException(422, "candidates 가 비었습니다")
+    if not x_anthropic_key:
+        raise HTTPException(400, "X-Anthropic-Key 헤더 없음")
+    try:
+        judgments, warnings, res = draft_step2(
+            JudgeTarget(name=str(t["name"]), ticker=t.get("ticker"),
+                        business=str(t.get("business") or "")),
+            cands, api_key=x_anthropic_key, model_id=d.get("model"),
+            effort=d.get("effort"))
+    except ValueError as e:                       # 미등록 모델·미구현 프로바이더
+        raise HTTPException(422, str(e)) from e
+    if not res.ok:
+        raise HTTPException(_AGENT_STATUS.get(res.error_kind or "", 502),
+                            res.error or "판정 실패")
+    # 원장 키는 **서버가** 만든다 — 티커 정규화 규칙이 클라에 복제되면 드리프트한다.
+    from ingest.peer_selection import normalize_ticker
+    return {
+        "judgments": [{"ticker": j.ticker, "similar": j.similar,
+                       "uncertain": j.uncertain, "reason": j.reason,
+                       "key": f"peer.{normalize_ticker(j.ticker)}.step2"}
+                      for j in judgments],
+        "warnings": warnings,
+        "provenance": res.provenance(),
+        "usage": res.usage,
+        "estimated_usd": round(res.estimated_usd, 6),
+    }
+
+
+@app.post("/api/peer/prefill")
+async def peer_prefill(request: Request) -> dict:
+    """{target?:{ticker,name?}, candidates:[{ticker,name?}]} → 사업 설명 초안 + 출처.
+
+    Step2 판정의 **근거**를 원천에서 채운다. 원천 = 상장사 인덱스의 주요 제품
+    (FinanceDataReader 2콜) — **DART 키 불필요**. 못 찾은 종목은 채우지 않고 경고로
+    표면화한다(빈 값을 사실로 기록하면 '조회했는데 없음'과 '조회 안 함'이 섞인다).
+
+    반환 레코드는 그대로 워크북 공유 원장(`_VS_FACTS`) 한 행이 되는 모양이다
+    (`approval="suggested"` — 승인 전 초안).
+    """
+    from ingest.peer_prefill import prefill_business
+    d = await request.json()
+    tgt = d.get("target") or {}
+    items: list[dict] = []
+    if tgt.get("ticker"):
+        items.append(tgt)
+    cands = [c for c in (d.get("candidates") or []) if c.get("ticker")]
+    items.extend(cands)
+    if not items:
+        raise HTTPException(422, "종목코드가 있는 대상이 없습니다")
+    try:
+        idx = _load_screener()
+    except ImportError as e:
+        raise HTTPException(503, f"FinanceDataReader 미설치 — 프리필 사용 불가: {e}") from e
+    except Exception as e:                        # 네트워크·형식 변경 등
+        raise HTTPException(502, f"상장사 목록 조회 실패: {e}") from e
+
+    facts, warnings = prefill_business(idx, items)
+    tgt_key = str(tgt.get("ticker") or "").strip()
+    return {
+        "target": facts[tgt_key].to_dict() if tgt_key in facts else None,
+        # 입력 순서를 보존하고, 못 찾은 종목은 목록에서 빠진다(사유는 warnings).
+        "candidates": [facts[t].to_dict() for t in
+                       [str(c.get("ticker") or "").strip() for c in cands] if t in facts],
+        "warnings": warnings,
+        "as_of": idx.as_of,
+        "universe": len(idx.rows),
+    }
+
+
+@app.post("/api/facts/append-plan")
+async def facts_append_plan(request: Request) -> dict:
+    """{existing:[[셀…]], facts:[{key,value,…}]} → `_VS_FACTS` append 계획.
+
+    워크북 공유 원장은 **append-only** 다(docs/plan/workbook_shared_memory.md §2-2).
+    클라이언트가 시트 격자를 읽어 보내면 서버가 fold(키별 최대 seq)해서 **바뀐 것만**
+    새 행으로 만든다 — 같은 값 재기록은 멱등하게 건너뛴다.
+
+    시트에 내용이 있는데 원장 열이름이 없으면 `blocked` 로 돌려준다(덮어쓰지 않는다).
+    """
+    from excel.facts_sheet import build_append
+    d = await request.json()
+    facts = [f for f in (d.get("facts") or [])
+             if isinstance(f, dict) and str(f.get("key") or "").strip()]
+    if not facts:
+        raise HTTPException(422, "기록할 사실이 없습니다(key 필수)")
+    existing = d.get("existing") or []
+    if not isinstance(existing, list):
+        raise HTTPException(422, "existing 은 행 배열이어야 합니다")
+    return build_append([r if isinstance(r, list) else [r] for r in existing], facts)
+
+
 @app.get("/api/ksic/search")
 def ksic_search(q: str) -> dict:
     """KSIC 산업코드 검색(모집단 코드 조회 보조). q=키워드(공백=AND)."""
@@ -1386,6 +1543,152 @@ async def dart_financials(request: Request,
             "corp_code": corp, "year": year}
 
 
+@app.post("/api/dart/financials/multi")
+async def dart_financials_multi(request: Request,
+                                x_dart_key: str | None = Header(default=None)) -> dict:
+    """{corp_code, years|year_from·year_to, fs_div?, reprt_code?, company?} → 다년도 공시 재무제표.
+
+    단년 `/api/dart/financials` 와 달리 **공시 원형을 통째로** 살린다:
+    제표별(BS/IS/CIS/CF) 계정을 공시 표시순서·계층 그대로, 요청 사업연도를 열로 펼친다.
+
+    한 응답에 당기·전기·전전기가 실리므로 연도마다 관측이 중복된다 → 그 불일치가
+    전기 재작성·재분류의 실측 증거(WARN). 3표 항등식 판정은 `fs_integrity` 가 하고,
+    `sheet_plan` 은 같은 항등식을 엑셀 수식으로 심은 H_FS 2시트 배치도다.
+    """
+    if not x_dart_key:
+        raise HTTPException(400, "X-Dart-Key 헤더 없음")
+    from excel.fs_sheet import build_fs_sheets, plan_to_json
+    from ingest.dart_client import DartClient, DartError
+    from ingest.dart_fs import MultiYearFsError, fetch_multi_year
+    from ingest.fs_integrity import check_statements, summarize, to_dicts
+
+    d = await request.json()
+    corp = str(d.get("corp_code", "")).strip()
+    if not corp:
+        raise HTTPException(422, "corp_code 필요")
+    years = _requested_years(d)
+    client = DartClient(api_key=x_dart_key)
+    try:
+        fs = fetch_multi_year(client, corp, years,
+                              fs_div=d.get("fs_div", "CFS"),
+                              reprt_code=d.get("reprt_code", "11011"))
+    except MultiYearFsError as e:
+        raise HTTPException(422, str(e)) from e
+    except DartError as e:
+        raise HTTPException(422, f"DART 오류: {e.status} {e.message}") from e
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
+
+    checks = check_statements(fs)
+    company = str(d.get("company", "") or "").strip()
+    plan = build_fs_sheets(fs, company=company)
+    return {
+        "corp_code": corp, "fs_div": fs.fs_div, "reprt_code": fs.reprt_code,
+        "years": fs.years,
+        "statements": {sj: [_fs_account_json(a, fs.years) for a in accs]
+                       for sj, accs in fs.statements.items()},
+        "checks": to_dicts(checks),
+        "summary": summarize(checks),
+        # 수집 단계 소견(재작성·통화) — 정합성 체크와 층위가 달라 분리해 싣는다.
+        "ingest_findings": [{"rule": f.rule, "severity": f.severity.value,
+                             "message": f.message, "detail": f.detail}
+                            for f in fs.report.findings],
+        "ingest_ok": fs.ok,
+        "notes": fs.notes,
+        "sources": {str(k): v for k, v in fs.sources.items()},
+        "sheet_plan": plan_to_json(plan),
+    }
+
+
+@app.post("/api/dart/financials/xlsx")
+async def dart_financials_xlsx(request: Request,
+                               x_dart_key: str | None = Header(default=None)) -> Response:
+    """`/api/dart/financials/multi` 와 같은 입력 → **rFS + H_FS 2시트 .xlsx 다운로드**.
+
+    Excel Task Pane 이 아닌 브라우저에서도 다년도 3표를 **한 번에** 받기 위한 경로.
+    Task Pane 은 열려 있는 워크북에 시트를 직접 만들지만, 웹에서는 그럴 수 없어
+    제표별 값 복사만 가능했다(= 일일이 붙여넣기). 이 라우트가 그 간극을 메운다.
+    수식은 그대로 살아 있으므로 파일을 열어 시트를 통째로 자기 모델에 복사하면 된다.
+    """
+    if not x_dart_key:
+        raise HTTPException(400, "X-Dart-Key 헤더 없음")
+    from excel.fs_sheet import build_fs_sheets, write_xlsx
+    from ingest.dart_client import DartClient, DartError
+    from ingest.dart_fs import MultiYearFsError, fetch_multi_year
+
+    d = await request.json()
+    corp = str(d.get("corp_code", "")).strip()
+    if not corp:
+        raise HTTPException(422, "corp_code 필요")
+    years = _requested_years(d)
+    try:
+        fs = fetch_multi_year(DartClient(api_key=x_dart_key), corp, years,
+                              fs_div=d.get("fs_div", "CFS"),
+                              reprt_code=d.get("reprt_code", "11011"))
+    except MultiYearFsError as e:
+        raise HTTPException(422, str(e)) from e
+    except DartError as e:
+        raise HTTPException(422, f"DART 오류: {e.status} {e.message}") from e
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
+
+    company = str(d.get("company", "") or "").strip()
+    path = _write_temp_xlsx(b"")
+    try:
+        write_xlsx(build_fs_sheets(fs, company=company), path)
+        blob = Path(path).read_bytes()
+    finally:
+        os.unlink(path)
+    fname = f"FS_{corp}_{fs.years[0]}_{fs.years[-1]}_{fs.fs_div}.xlsx"
+    return Response(
+        content=blob,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+def _requested_years(d: dict) -> list[int]:
+    """years 배열 또는 year_from~year_to → 정수 연도 목록(최대 10년).
+
+    상한은 쿼터 방어다(연도당 1콜). 하한 1년이면 단년 조회와 같은 비용이므로 허용.
+    """
+    raw = d.get("years")
+    if raw is None:
+        try:
+            lo, hi = int(d.get("year_from")), int(d.get("year_to"))
+        except (TypeError, ValueError) as e:
+            raise HTTPException(422, "years 배열 또는 year_from·year_to 필요") from e
+        if hi < lo:
+            lo, hi = hi, lo
+        raw = list(range(lo, hi + 1))
+    try:
+        years = sorted({int(y) for y in raw})
+    except (TypeError, ValueError) as e:
+        raise HTTPException(422, "years 는 정수 목록이어야 합니다") from e
+    if not years:
+        raise HTTPException(422, "years 가 비어 있음")
+    if len(years) > 10:
+        raise HTTPException(422, f"연도 {len(years)}개 — 한 번에 최대 10개년(DART 쿼터 방어)")
+    if years[0] < 2015:
+        raise HTTPException(
+            422, f"{years[0]}년 — DART 재무정보 API 는 2015 사업보고서부터 제공됩니다")
+    return years
+
+
+def _fs_account_json(acc, years: list[int]) -> dict:
+    """FsAccount → 화면·전송용 dict. label 은 계층 들여쓰기가 들어간 표시명."""
+    vals, restated = {}, []
+    for y in years:
+        o = acc.adopted(y)
+        vals[str(y)] = None if (o is None or o.value is None) else float(o.value)
+        if len({ob.value for ob in acc.obs.get(y, []) if ob.value is not None}) > 1:
+            restated.append(y)
+    return {"sj_div": acc.sj_div, "sj_nm": acc.sj_nm, "account_id": acc.account_id,
+            "name": acc.account_nm, "label": acc.label(), "depth": acc.depth,
+            "depth_basis": acc.depth_basis, "order": acc.order,
+            "is_standard": acc.is_standard, "values": vals, "restated_years": restated}
+
+
 # ── DART 기업코드 검색(캐시) · 공시목록 · 원본 zip ───────────────────────────
 # corpCode.xml(~10만사)은 최초 1회 다운로드해 서버 캐시(var/), 이후 인메모리 검색.
 _CORP_CACHE = _ROOT / "var" / "dart_corpcode.json"
@@ -1411,20 +1714,35 @@ def _load_corp_index(api_key: str) -> list[dict]:
 @app.post("/api/dart/corp-search")
 async def dart_corp_search(request: Request,
                            x_dart_key: str | None = Header(default=None)) -> dict:
-    """{q, listed_only?} + X-Dart-Key → 회사명 → corp_code 후보. 최초 1회만 키로 다운로드."""
-    from ingest.dart_corp import search_corp_index
+    """{q, listed_only?, by?, limit?} + X-Dart-Key → 회사 후보. 최초 1회만 키로 다운로드.
+
+    `by`: `auto`(기본) · `name` · `stock`(종목코드) · `corp`(고유번호).
+    auto 는 입력 모양으로 판정한다 — 실무자는 회사명·종목코드·고유번호를 한 칸에 친다.
+
+    ⚠️ `total` 은 **매칭 건수**다(전체 인덱스 크기가 아니라). 종전에는 `len(idx)`
+    (약 10만)를 total 로 실어 보내, 화면이 이걸 '검색 결과 N건'으로 쓰는 순간
+    거짓이 되는 상태였다. 인덱스 크기는 `index_size` 로 분리한다.
+    """
+    from ingest.dart_corp import SEARCH_BY, search_corp
     d = await request.json()
     q = str(d.get("q", "")).strip()
     if not q:
-        raise HTTPException(422, "q(회사명) 필요")
+        raise HTTPException(422, "q(회사명·종목코드·고유번호) 필요")
+    by = str(d.get("by", "auto")).strip() or "auto"
+    if by not in SEARCH_BY:
+        raise HTTPException(422, f"by 는 {list(SEARCH_BY)} 중 하나여야 합니다")
+    limit = max(1, min(int(d.get("limit", 30) or 30), 200))
     if _corp_index is None and not _CORP_CACHE.exists() and not x_dart_key:
         raise HTTPException(400, "최초 기업코드 다운로드에 X-Dart-Key 필요(이후 캐시)")
     try:
         idx = _load_corp_index(x_dart_key or "")
     except urllib.error.URLError as e:
         raise HTTPException(502, f"corpCode 다운로드 실패: {e.reason}") from e
-    hits = search_corp_index(idx, q, listed_only=bool(d.get("listed_only")))
-    return {"results": hits, "cached": _CORP_CACHE.exists(), "total": len(idx)}
+    hits, total, axis = search_corp(idx, q, limit=limit,
+                                    listed_only=bool(d.get("listed_only")), by=by)
+    return {"results": hits, "total": total, "truncated": total > len(hits),
+            "by": axis, "limit": limit,
+            "cached": _CORP_CACHE.exists(), "index_size": len(idx)}
 
 
 @app.post("/api/dart/filings")
@@ -1469,6 +1787,314 @@ async def dart_document(request: Request,
         headers={"Content-Disposition": f'attachment; filename="dart_{rcept}.zip"'})
 
 
+# ── 기업 스크리너 — peer 모집단 탐색 ─────────────────────────────────────────
+# 인덱스는 var/ 에 캐시한다(corpCode 캐시와 같은 패턴). **커밋하지 않는다** —
+# 시가총액이 시변이라 저장소에 박으면 곧 거짓이 된다. as_of 로 신선도를 표면화한다.
+_SCREENER_CACHE = _ROOT / "var" / "screener_index.json"
+_screener_index = None
+
+
+def _today_iso() -> str:
+    from datetime import date as _date
+    return _date.today().isoformat()
+
+
+def _load_screener(force: bool = False):
+    """캐시 있으면 로드, 없거나 force 면 FDR 2콜로 빌드 후 캐시."""
+    global _screener_index
+    from ingest.screener import ScreenerIndex, build_index, fetch_listing_rows
+    if _screener_index is not None and not force:
+        return _screener_index
+    corp = _corp_index if _corp_index is not None else (
+        _json.loads(_CORP_CACHE.read_text(encoding="utf-8")) if _CORP_CACHE.exists() else [])
+    if _SCREENER_CACHE.exists() and not force:
+        cached = ScreenerIndex.from_json(
+            _json.loads(_SCREENER_CACHE.read_text(encoding="utf-8")))
+        # ⚠️ 고유번호 연결은 **빌드 시점에 굳는다**. 스크리너를 corpCode 캐시보다 먼저
+        # 쓰면(=DART 키를 한 번도 안 쓴 새 배포) 연결 0 으로 캐시돼 영구히 '미연결'이
+        # 되고, 스크리너→DART 인계가 원인 불명으로 끊긴다. 이제 연결할 수 있으면 재빌드.
+        if corp and not any(r.corp_code for r in cached.rows):
+            force = True
+        else:
+            _screener_index = cached
+            return _screener_index
+    desc, cap = fetch_listing_rows()
+    _screener_index = build_index(desc, cap, as_of=_today_iso(), corp_index=corp)
+    _SCREENER_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    _SCREENER_CACHE.write_text(
+        _json.dumps(_screener_index.to_json(), ensure_ascii=False), encoding="utf-8")
+    return _screener_index
+
+
+@app.post("/api/screener")
+async def screener(request: Request) -> dict:
+    """{q?, markets?, mcap_min?, mcap_max?, sector?, sort?, limit?} → peer 모집단 후보.
+
+    검색 대상 = 명칭 · 종목코드 · 세부업종 · **주요 제품**. 같은 업종코드라도 제품이
+    다르면 peer 가 아니라는 실무 교정(`peer_selection` 도입부)을 제품 문자열로 푼다.
+    DART 키 불필요(FinanceDataReader 2콜로 빌드한 로컬 인덱스).
+
+    `stale_days` 가 임계를 넘으면 시가총액 비교가 낡았다는 뜻 — `/api/screener/refresh`.
+    """
+    from ingest.screener import STALE_DAYS, industries, search, staleness_days
+    d = await request.json()
+    try:
+        idx = _load_screener()
+    except ImportError as e:
+        raise HTTPException(503, f"FinanceDataReader 미설치 — 스크리너 사용 불가: {e}") from e
+    except Exception as e:                       # 네트워크·형식 변경 등
+        raise HTTPException(502, f"상장사 목록 조회 실패: {e}") from e
+
+    markets = tuple(str(m) for m in (d.get("markets") or []))
+    rows, total = search(
+        idx, q=str(d.get("q", "") or ""), markets=markets,
+        mcap_min=_num_or_none(d.get("mcap_min")), mcap_max=_num_or_none(d.get("mcap_max")),
+        industry=str(d.get("industry", "") or ""),
+        limit=max(1, min(int(d.get("limit", 100) or 100), 500)),
+        sort=str(d.get("sort", "marcap_desc") or "marcap_desc"))
+    stale = staleness_days(idx.as_of, _today_iso())
+    return {
+        "rows": [dataclasses.asdict(r) for r in rows],
+        "total": total, "truncated": total > len(rows),
+        "as_of": idx.as_of, "stale_days": stale,
+        "stale": stale is not None and stale > STALE_DAYS,
+        "universe": len(idx.rows),
+        "industries": [{"name": n, "count": c} for n, c in industries(idx)],
+        "notes": idx.notes,
+    }
+
+
+@app.post("/api/screener/refresh")
+async def screener_refresh() -> dict:
+    """상장사 인덱스 재빌드(FDR 2콜). 시가총액 신선도를 되돌린다."""
+    try:
+        idx = _load_screener(force=True)
+    except ImportError as e:
+        raise HTTPException(503, f"FinanceDataReader 미설치: {e}") from e
+    except Exception as e:
+        raise HTTPException(502, f"상장사 목록 조회 실패: {e}") from e
+    return {"as_of": idx.as_of, "universe": len(idx.rows), "notes": idx.notes}
+
+
+def _num_or_none(v):
+    if v in (None, ""):
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+@app.post("/api/dart/company-check")
+async def dart_company_check(request: Request,
+                             x_dart_key: str | None = Header(default=None)) -> dict:
+    """{corp_code, years?} → 개황 + **정기공시 실적** — '이 회사가 공시 주체인가'를 확정.
+
+    회사명 검색만으로는 조회 가능 여부를 알 수 없다. 실측: '비올'은 동명 후보가 둘인데
+    사업회사 `01124398 (주)비올`(설립 2009, 비상장)은 **정기공시 0건**이고, 공시 의무는
+    상장사 `01406618 (주)비올메디컬`(335890)에 있다. 앞의 것을 고르면 이후 모든 조회가
+    빈손이 되는데 화면에는 '결과 없음'으로만 보여 원인을 알 수 없다.
+
+    그래서 선택 시점에 사업보고서 존재를 실제로 확인해 돌려준다(개황 1콜 + 공시목록 1콜).
+    `usable=false` 면 다른 후보를 고르라는 신호다 — 조회를 막지는 않는다(판단은 사람).
+    """
+    if not x_dart_key:
+        raise HTTPException(400, "X-Dart-Key 헤더 없음")
+    # 이 파일 말미에 `from datetime import datetime`이 있어 모듈명 `datetime`이 클래스로
+    # 가려진다 — 지역 import 로 격리한다(그쪽 정의는 건드리지 않는다).
+    from datetime import date as _date
+
+    from ingest.dart_corp import list_filings
+    from ingest.dart_reports import DartReportError, fetch_company
+
+    d = await request.json()
+    corp = str(d.get("corp_code", "")).strip()
+    if not re.fullmatch(r"\d{8}", corp):
+        raise HTTPException(422, "corp_code 는 숫자 8자리입니다")
+    years = max(1, min(int(d.get("years", 3) or 3), 10))
+    today = _date.today()
+    bgn = today.replace(year=today.year - years).strftime("%Y%m%d")
+
+    company = None
+    try:
+        company = fetch_company(x_dart_key, corp)
+    except DartReportError as e:
+        # 개황이 없다고 조회 불가는 아니다 — 사유만 남기고 공시목록으로 계속 판정한다.
+        company = {"error": f"{e.status} {e.message}"}
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
+
+    try:
+        rows = list_filings(x_dart_key, corp, bgn_de=bgn,
+                            end_de=today.strftime("%Y%m%d"), pblntf_ty="A")
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
+    except Exception:
+        rows = []                      # 조회데이터 없음(013) 등은 '0건'으로 취급
+
+    annuals = [r for r in rows if "사업보고서" in (r.get("report_nm") or "")]
+    return {
+        "corp_code": corp, "company": company,
+        "filing_count": len(rows), "annual_count": len(annuals),
+        "latest_annual": annuals[0] if annuals else None,
+        "recent": rows[:5],
+        "usable": bool(annuals),
+        "window": f"{bgn}~{today.strftime('%Y%m%d')}",
+    }
+
+
+@app.post("/api/dart/document/parse")
+async def dart_document_parse(request: Request,
+                              x_dart_key: str | None = Header(default=None)) -> dict:
+    """{rcept_no, only_financial?} → 원문 공시서류의 **재무제표 본표 + 주석 전문** 구조화.
+
+    `/api/dart/financials/multi`(fnlttSinglAcntAll)와 **출처가 다르다**. OpenDART 에는
+    주석 조회 API 가 없어서, 주석 본문과 **계정↔주석번호 매핑**은 접수번호 원문에만 있다.
+    (실측: 감사보고서 ACODE 00760/00761 첨부에 재무제표와 주석 1~N번이 함께 실린다.)
+
+    가져오면서 **같은 정합성 SSOT**(`fs_integrity.IDENTITIES`)를 태운다 — 대차·손익체인·
+    CF 롤포워드가 통과해야 표를 옳게 읽은 것이다(열 오프셋을 잘못 처리하면 즉시 깨진다).
+    그래서 checks 는 공시 검증이면서 동시에 **파서 자기검증**이다.
+    """
+    if not x_dart_key:
+        raise HTTPException(400, "X-Dart-Key 헤더 없음")
+    from ingest.dart_corp import download_document
+    from ingest.dart_document import DocumentError, check_document, parse_document_zip
+    from ingest.dart_document import to_dict as doc_to_dict
+    from ingest.fs_integrity import to_dicts as findings_to_dicts
+
+    d = await request.json()
+    rcept = str(d.get("rcept_no", "")).strip() or _resolve_annual(
+        x_dart_key, d.get("corp_code"), d.get("bsns_year") or d.get("year"))
+    if not rcept:
+        raise HTTPException(422, "rcept_no 또는 (corp_code + bsns_year) 필요")
+    try:
+        blob = download_document(x_dart_key, rcept)
+        docs = parse_document_zip(
+            blob, only_financial=bool(d.get("only_financial", True)))
+    except DocumentError as e:
+        raise HTTPException(422, str(e)) from e
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
+
+    from ingest.note_check import check_document_notes
+    out = []
+    for doc in docs:
+        payload = doc_to_dict(doc)
+        findings, summary = check_document(doc)
+        payload["checks"] = findings_to_dicts(findings)
+        payload["summary"] = summary
+        # 주석 정합성(A1 소계·A2 롤포워드·A3 본표 대사) — 본표 항등식과 층위가 달라
+        # 별도 버킷으로 낸다. 주석은 XBRL 로 안 나오므로 이 검사가 유일한 자기검산이다.
+        note_rep = check_document_notes(doc)
+        payload["note_checks"] = [
+            {"rule": f.rule, "severity": f.severity.value, "message": f.message}
+            for f in note_rep.findings]
+        payload["note_summary"] = {
+            "tieout": sum(1 for f in note_rep.findings if f.rule == "note_tieout"),
+            "fail": sum(1 for f in note_rep.findings if f.severity.value == "fail"),
+            "warn": sum(1 for f in note_rep.findings if f.severity.value == "warn"),
+        }
+        out.append(payload)
+    return {"rcept_no": rcept, "documents": out, "count": len(out)}
+
+
+def _resolve_annual(api_key: str | None, corp_code, year) -> str:
+    """(corp_code, 사업연도) → 사업보고서 접수번호. 못 찾으면 빈 문자열.
+
+    주석·본표는 사업보고서 접수번호의 원문 zip 에만 있는데(감사보고서 첨부), 그 번호를
+    사람이 공시목록에서 눈으로 찾아야 했다. 여기서 자동으로 푼다 — 정정본이 있으면
+    정정본을 고른다(`find_annual_reports`).
+    """
+    corp = str(corp_code or "").strip()
+    y = str(year or "").strip()
+    if not (api_key and corp and y.isdigit()):
+        return ""
+    from ingest.dart_corp import find_annual_reports
+    try:
+        found = find_annual_reports(api_key, corp, years=[int(y)])
+    except Exception as e:                              # 목록 조회 실패는 사유를 보인다
+        raise HTTPException(502, f"공시목록 조회 실패: {e}") from e
+    hit = found.get(int(y))
+    if not hit:
+        raise HTTPException(
+            422, f"{y} 사업연도 사업보고서를 찾지 못했습니다 — 아직 미제출이거나 "
+                 "corp_code 를 확인하세요(정기공시 A 유형에서 '사업보고서 (YYYY.12)' 검색)")
+    return str(hit["rcept_no"])
+
+
+@app.post("/api/dart/annual-reports")
+async def dart_annual_reports(request: Request,
+                              x_dart_key: str | None = Header(default=None)) -> dict:
+    """{corp_code, years?} → 사업연도별 사업보고서 접수번호(정정본 반영).
+
+    ⚠️ 사업연도는 **표제의 (YYYY.MM)** 이지 접수일이 아니다 — 2025 사업보고서는 2026-03 에
+    접수된다. 접수일로 귀속하면 전 연도가 한 칸씩 밀린다.
+    """
+    if not x_dart_key:
+        raise HTTPException(400, "X-Dart-Key 헤더 없음")
+    from ingest.dart_corp import find_annual_reports
+    d = await request.json()
+    corp = str(d.get("corp_code", "")).strip()
+    if not corp:
+        raise HTTPException(422, "corp_code 필요")
+    years = [int(y) for y in (d.get("years") or []) if str(y).strip().isdigit()] or None
+    try:
+        found = find_annual_reports(x_dart_key, corp, years=years)
+    except Exception as e:
+        raise HTTPException(502, f"공시목록 조회 실패: {e}") from e
+    return {"corp_code": corp,
+            "reports": [{"year": y, **found[y]} for y in sorted(found, reverse=True)]}
+
+
+@app.post("/api/dart/document/compare")
+async def dart_document_compare(request: Request,
+                                x_dart_key: str | None = Header(default=None)) -> dict:
+    """{rcept_no, prior_rcept_no} → 두 보고서의 **주석 연도 간 대조**.
+
+    당해 보고서의 **전기 열** ↔ 직전 보고서의 **당기 열**. 어긋나면 재작성·재분류다.
+    본표는 다년도 API 응답끼리 대조할 수 있지만(`dart_fs` 연도 중복관측) 주석에는 그
+    공짜 대조가 없어, 원문 zip 을 두 개 받아 비교하는 이 경로가 유일하다.
+
+    ⚠️ 비용: 접수번호당 원문 zip 1개(사업보고서는 수백 KB~수 MB)를 내려받는다.
+    """
+    if not x_dart_key:
+        raise HTTPException(400, "X-Dart-Key 헤더 없음")
+    from ingest.dart_corp import download_document
+    from ingest.dart_document import DocumentError, parse_document_zip
+    from ingest.note_check import compare_documents
+
+    d = await request.json()
+    corp = d.get("corp_code")
+    # 접수번호를 직접 주거나, (corp_code + 사업연도) 로 자동 해소한다.
+    cur_no = str(d.get("rcept_no", "")).strip() or _resolve_annual(
+        x_dart_key, corp, d.get("bsns_year") or d.get("year"))
+    prev_no = str(d.get("prior_rcept_no", "")).strip() or _resolve_annual(
+        x_dart_key, corp, d.get("prior_year"))
+    if not (cur_no and prev_no):
+        raise HTTPException(
+            422, "접수번호 2개가 필요합니다 — rcept_no/prior_rcept_no 또는 "
+                 "corp_code + bsns_year/prior_year")
+    if cur_no == prev_no:
+        raise HTTPException(422, "같은 접수번호끼리는 대조할 수 없습니다")
+    try:
+        cur = parse_document_zip(download_document(x_dart_key, cur_no))
+        prev = parse_document_zip(download_document(x_dart_key, prev_no))
+    except DocumentError as e:
+        raise HTTPException(422, str(e)) from e
+    except urllib.error.URLError as e:
+        raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
+
+    report, summary = compare_documents(cur[0], prev[0])
+    return {
+        "rcept_no": cur_no, "prior_rcept_no": prev_no,
+        "company": cur[0].company, "prior_company": prev[0].company,
+        "summary": summary,
+        "findings": [{"rule": f.rule, "severity": f.severity.value, "message": f.message}
+                     for f in report.findings],
+    }
+
+
 # ── DART 정기보고서 주요정보 5종 (BYOK, 서버 미저장) ─────────────────────────────
 # 재무 숫자(fnlttSinglAcntAll) 밖의 구조·귀속 정보: 개황·감사의견·주식총수·최대주주·
 # 타법인출자·배당. 전부 {corp_code, bsns_year, reprt_code?} 공통(개황만 corp_code).
@@ -1483,10 +2109,16 @@ def _dart_report_args(d: dict) -> tuple[str, str, str]:
 @app.post("/api/dart/company")
 async def dart_company(request: Request,
                        x_dart_key: str | None = Header(default=None)) -> dict:
-    """{corp_code} + X-Dart-Key → 기업개황. acc_mt(결산월)는 DCF 기간 정합 게이트."""
+    """{corp_code} + X-Dart-Key → 기업개황. acc_mt(결산월)는 DCF 기간 정합 게이트.
+
+    `labels`(표시명·순서)와 `url_fields`를 함께 실어 보낸다 — 라벨을 프론트에 복제하면
+    필드가 늘 때 화면만 낡는다. 백엔드가 이미 들고 있는 것을 정본으로 쓴다.
+    """
     if not x_dart_key:
         raise HTTPException(400, "X-Dart-Key 헤더 없음")
-    from ingest.dart_reports import DartReportError, fetch_company
+    from ingest.dart_reports import (
+        COMPANY_FIELDS, COMPANY_URL_FIELDS, DartReportError, fetch_company,
+    )
     d = await request.json()
     corp = str(d.get("corp_code", "")).strip()
     if not corp:
@@ -1497,7 +2129,8 @@ async def dart_company(request: Request,
         raise HTTPException(422, f"DART 오류: {e.status} {e.message}") from e
     except urllib.error.URLError as e:
         raise HTTPException(502, f"네트워크 오류: {e.reason}") from e
-    return {"company": info, "corp_code": corp}
+    return {"company": info, "corp_code": corp,
+            "labels": dict(COMPANY_FIELDS), "url_fields": list(COMPANY_URL_FIELDS)}
 
 
 @app.post("/api/dart/audit-opinion")
@@ -1955,6 +2588,56 @@ async def viu_endpoint(request: Request) -> dict:
             "effective_pre_tax_rate": r.effective_pre_tax_rate,
             "recoverable_amount": r.recoverable_amount,
             "impairment_loss": r.impairment_loss, "warnings": r.warnings}
+
+
+@app.post("/api/convertible")
+async def convertible_endpoint(request: Request) -> dict:
+    """전환사채(CB) 공정가치 — T-F 격자 + **with-without 분해** + S1 게이트 3종.
+
+    엔진(`calc_core.convertible`)은 골든까지 검증돼 있었는데 화면이 없어 능력이 드러나지
+    않던 부분이다(정직 표기 2축에서 'engine 有 · ui 無').
+
+    분해는 **동일 모델·동일 가정 안에서만** 성립한다 — 이종 가정 차감(연속할인 트리 −
+    이산할인 채권)을 '내재옵션'이라 부르는 실무 오류를 `check_cb_decomposition` 이 잡는다.
+    `baseline_value`(신용악화 전 가치)를 주면 상쇄효과(408)까지 판정한다.
+    """
+    from calc_core.checks import check_cb_decomposition, check_convertible_distress
+    from calc_core.convertible import ConvertibleInputs, price_convertible, with_without
+
+    d = await request.json()
+    try:
+        inp = ConvertibleInputs(
+            face=float(d["face"]), stock_price=float(d["stock_price"]),
+            conversion_ratio=float(d["conversion_ratio"]),
+            maturity_years=float(d["maturity_years"]),
+            volatility=float(d["volatility"]), risk_free=float(d["risk_free"]),
+            credit_spread=float(d["credit_spread"]),
+            coupon_rate=float(d.get("coupon_rate", 0.0)),
+            dividend_yield=float(d.get("dividend_yield", 0.0)),
+            call_price=_num_or_none(d.get("call_price")),
+            call_start_year=float(d.get("call_start_year", 0.0)),
+            put_price=_num_or_none(d.get("put_price")),
+            put_start_year=float(d.get("put_start_year", 0.0)),
+            put_accrual_rate=_num_or_none(d.get("put_accrual_rate")),
+            call_accrual_rate=_num_or_none(d.get("call_accrual_rate")),
+            steps=int(d.get("steps", 200)),
+        )
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(422, f"입력 오류: {e}") from e
+
+    res = price_convertible(inp)
+    ww = with_without(inp)
+    findings = check_convertible_distress(
+        inp.credit_spread, res.value, baseline_value=_num_or_none(d.get("baseline_value")))
+    findings.append(check_cb_decomposition(
+        ww.with_value, ww.without_value, ww.embedded_value))
+    return {
+        "result": dataclasses.asdict(res),
+        "with_without": dataclasses.asdict(ww),
+        "findings": [{"rule": f.rule, "severity": f.severity.value,
+                      "message": f.message, "detail": f.detail} for f in findings],
+        "ok": all(f.severity.value != "fail" for f in findings),
+    }
 
 
 @app.post("/api/rcps")

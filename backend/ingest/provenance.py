@@ -34,6 +34,7 @@ class ExtractMethod(str, Enum):
     STRUCTURED = "structured"     # 구조화 API(DART XBRL 등)
     REGEX = "regex"               # 정규식/규칙 파싱
     OCR = "ocr"                   # 광학문자인식(검증 필수)
+    LLM = "llm"                   # 모델 판정 — **승인 전 초안**(승인 후에도 출처는 남는다)
     MANUAL = "manual"             # 사람 입력
 
 

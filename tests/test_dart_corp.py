@@ -14,6 +14,8 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from ingest.dart_corp import (  # noqa: E402
     extract_corpcode_zip, fetch_corp_index, list_filings, parse_corp_index,
+    infer_search_by,
+    search_corp,
     search_corp_index,
 )
 
@@ -44,6 +46,39 @@ def test_search_listed_only():
     idx = parse_corp_index(_XML)
     res = search_corp_index(idx, "삼성", listed_only=True)
     assert all(c["stock_code"] for c in res) and len(res) == 2
+
+
+def test_infer_search_axis():
+    """실무자는 회사명·종목코드·고유번호를 한 칸에 친다 — 입력 모양으로 축을 가른다."""
+    assert infer_search_by("00126380") == "corp"      # 8자리 = 고유번호
+    assert infer_search_by("005930") == "stock"       # 6자리 = 종목코드
+    assert infer_search_by("삼성전자") == "name"
+    assert infer_search_by("12345") == "name"         # 6·8자리 아닌 숫자는 이름 취급
+
+
+def test_search_by_corp_and_stock():
+    idx = parse_corp_index(_XML)
+    hits, total, axis = search_corp(idx, "00126380")
+    assert axis == "corp" and total == 1 and hits[0]["corp_name"] == "삼성전자"
+    hits, total, axis = search_corp(idx, "009150")
+    assert axis == "stock" and total == 1 and hits[0]["corp_name"] == "삼성전기"
+    # 비상장은 종목코드가 빈 문자열 — 빈 질의로 전부 걸리면 안 된다
+    assert search_corp(idx, "000000", by="stock")[1] == 0
+
+
+def test_search_total_reports_matches_not_index_size():
+    """total 은 **매칭 건수**여야 한다 — 인덱스 크기를 실어 보내면 화면이 거짓말한다."""
+    idx = parse_corp_index(_XML)
+    hits, total, _ = search_corp(idx, "삼성", limit=2)
+    assert len(hits) == 2 and total == 3              # 잘렸지만 전체는 3건
+    assert total != len(idx) or len(idx) == 3         # 인덱스 크기와 우연히 같은 경우만 허용
+
+
+def test_search_by_override_beats_inference():
+    """명시 축이 auto 추론을 이긴다 — 숫자 상호를 이름으로 찾을 길이 있어야 한다."""
+    idx = parse_corp_index(_XML)
+    assert search_corp(idx, "005930", by="name")[1] == 0
+    assert search_corp(idx, "005930", by="stock")[1] == 1
 
 
 def test_extract_corpcode_zip():
@@ -92,3 +127,52 @@ if __name__ == "__main__":
         except Exception:
             print(f"  FAIL {fn.__name__}"); traceback.print_exc()
     print(f"\n{ok}/{len(fns)} passed")
+
+
+# ── 사업연도 → 사업보고서 접수번호 자동 해소 ─────────────────────────────────
+def _annual_http(rows):
+    def http(url, params):
+        assert params.get("pblntf_ty") == "A"          # 정기공시만
+        return {"status": "000", "list": rows}
+    return http
+
+
+_ROWS = [
+    {"rcept_no": "20260318000182", "report_nm": "사업보고서 (2025.12)",
+     "rcept_dt": "20260318", "flr_nm": "리노공업"},
+    {"rcept_no": "20230321000231", "report_nm": "사업보고서 (2022.12)",
+     "rcept_dt": "20230321", "flr_nm": "리노공업"},
+    {"rcept_no": "20230814000718", "report_nm": "[기재정정]사업보고서 (2022.12)",
+     "rcept_dt": "20230814", "flr_nm": "리노공업"},
+    {"rcept_no": "20250515000111", "report_nm": "분기보고서 (2025.03)",
+     "rcept_dt": "20250515", "flr_nm": "리노공업"},
+]
+
+
+def test_annual_year_comes_from_title_not_receipt_date():
+    """2025 사업보고서는 2026-03 에 접수된다 — 접수일로 귀속하면 한 해씩 밀린다."""
+    from ingest.dart_corp import find_annual_reports
+    got = find_annual_reports("K", "00369657", http_json=_annual_http(_ROWS))
+    assert got[2025]["rcept_no"] == "20260318000182"
+    assert got[2025]["rcept_dt"] == "20260318"          # 접수는 이듬해
+    assert 2026 not in got
+
+
+def test_amended_report_wins():
+    """같은 사업연도에 정정본이 따로 접수된다 — 늦게 접수된 쪽을 쓴다(실측 2022)."""
+    from ingest.dart_corp import find_annual_reports
+    got = find_annual_reports("K", "00369657", http_json=_annual_http(_ROWS))
+    assert got[2022]["rcept_no"] == "20230814000718"
+    assert got[2022]["amended"] is True
+
+
+def test_non_annual_reports_are_ignored():
+    from ingest.dart_corp import find_annual_reports
+    got = find_annual_reports("K", "00369657", http_json=_annual_http(_ROWS))
+    assert set(got) == {2025, 2022}                     # 분기보고서 제외
+
+
+def test_year_filter_narrows_result():
+    from ingest.dart_corp import find_annual_reports
+    got = find_annual_reports("K", "00369657", years=[2022], http_json=_annual_http(_ROWS))
+    assert set(got) == {2022}
