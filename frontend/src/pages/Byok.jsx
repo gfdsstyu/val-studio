@@ -3,7 +3,7 @@ import { api } from "../api.js";
 
 /** BYOK: 키는 localStorage 에만 — 서버는 요청 헤더로 통과만 받는다. */
 const KEYS = { gemini: "byok_gemini_key", anthropic: "byok_anthropic_key",
-               dart: "byok_dart_key", ecos: "byok_ecos_key" };
+               dart: "byok_dart_key", ecos: "byok_ecos_key", kexim: "byok_kexim_key" };
 export const loadKey = (k) => localStorage.getItem(KEYS[k]) || "";
 const saveKey = (k, v) => localStorage.setItem(KEYS[k], v);
 
@@ -12,6 +12,7 @@ export default function ByokPanel() {
   const [anthropic, setAnthropic] = useState(loadKey("anthropic"));
   const [dart, setDart] = useState(loadKey("dart"));
   const [ecos, setEcos] = useState(loadKey("ecos"));
+  const [kexim, setKexim] = useState(loadKey("kexim"));
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -20,6 +21,7 @@ export default function ByokPanel() {
     saveKey("anthropic", anthropic.trim());
     saveKey("dart", dart.trim());
     saveKey("ecos", ecos.trim());
+    saveKey("kexim", kexim.trim());
     setStatus({ msg: "저장됨 (이 브라우저 localStorage 에만)", ok: true });
   };
 
@@ -76,6 +78,12 @@ export default function ByokPanel() {
             <input type="password" value={ecos} placeholder="ecos.bok.or.kr 발급 키"
               onChange={(e) => setEcos(e.target.value)} />
           </div>
+        </div>
+        <div className="row">
+          <label>한국수출입은행 API Key (환율·금리)</label>
+          <input type="password" value={kexim} placeholder="koreaexim.go.kr 발급 키"
+            onChange={e => setKexim(e.target.value)} />
+          <small>저장 후 자료·Brief → 환율·금리에서 날짜를 선택해 조회하세요.</small>
         </div>
         <button className="primary" onClick={save}>저장</button>{" "}
         <button className="ghost" onClick={validate} disabled={busy || !gemini.trim()}>

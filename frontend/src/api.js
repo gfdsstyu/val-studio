@@ -18,8 +18,9 @@ async function j(method, url, body, headers = {}) {
  * 판별하면 서버 문구가 바뀌는 순간 조용히 오작동한다("프로젝트 없음"에 '404'가 없다).
  */
 function httpError(status, detail) {
-  const e = new Error(detail || `HTTP ${status}`);
+  const e = new Error(typeof detail === "string" ? detail : detail?.message || `HTTP ${status}`);
   e.status = status;
+  e.code = detail?.code;
   return e;
 }
 
@@ -38,6 +39,13 @@ async function blob(method, url, body, headers = {}) {
 }
 
 export const api = {
+  market: {
+    capabilities: () => j("GET", "/api/market/capabilities"),
+    quotes: (key, body) => j("POST", "/api/market/quotes", body, { "X-Kexim-Key": key }),
+    restore: body => j("POST", "/api/market/restore", body),
+    sheetPlan: body => j("POST", "/api/market/sheet-plan", body),
+    bindingPlan: body => j("POST", "/api/market/binding-plan", body),
+  },
   health: () => j("GET", "/api/health"),
   dcf: (body) => j("POST", "/api/dcf", body),
   scenario: (body) => j("POST", "/api/scenario", body),

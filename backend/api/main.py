@@ -63,6 +63,8 @@ from ingest.manual_paste import (  # noqa: E402
 )
 
 app = FastAPI(title="val-studio local", docs_url="/api/docs", openapi_url="/api/openapi.json")
+from .market import router as market_router  # noqa: E402
+app.include_router(market_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  # Vite dev
