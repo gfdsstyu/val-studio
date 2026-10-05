@@ -1,8 +1,10 @@
-# 수출입은행 시장자료 1차 구현·검증 기록
+# 수출입은행 시장자료·외화 금액 환산 구현·검증 기록
 
 작성일: 2026-10-05 (Asia/Seoul). 대상: 로컬 `D:\valuation-platform` 작업 트리. 배포하지 않음.
 
 상위 문서: [강화 계획](kexim_market_data_integration.md), [상세 구현 명세](kexim_market_data_implementation_spec.md).
+
+2026-10-05 추가: 선택 범위의 외화 금액 환산을 같은 PR에 구현했다. [환산 기능 계약](kexim_fx_conversion_spec.md)에 사용자 흐름·범위·단위·실패 처리와 검증을 정리했다. 아래 자동검증 결과는 환산 추가 후 누적 결과다.
 
 ## 1. 이번에 구현한 범위
 
@@ -29,6 +31,7 @@ Excel 기록은 새 `marketBridge.js`를 사용한다. 기존 시트 교체 함�
 | API 라우터·환경 설정 | `backend/api/market.py`, `backend/api/main.py` |
 | 원자료·사실 추가 계획 | `backend/excel/market_sheet.py` |
 | 명시적 채택·수식 계획 | `backend/excel/market_binding.py` |
+| 외화 금액 범위 환산 계획·화면 | `backend/excel/market_conversion.py`, `MarketConversionPanel.jsx` |
 | 화면·BYOK·메뉴 | `frontend/src/pages/appraiser/MarketDataPanel.jsx`, `Byok.jsx`, `App.jsx`, `nav.js`, `api.js` |
 | Excel 쓰기·충돌 감지·재읽기 | `frontend/src/marketBridge.js` |
 | 실호출 준비 | `scripts/kexim_probe.py` |
@@ -40,6 +43,7 @@ Excel 기록은 새 `marketBridge.js`를 사용한다. 기존 시트 교체 함�
 | `POST /api/market/restore` | 저장 ID를 현재 조회·평가기준일 정책으로 재검증 |
 | `POST /api/market/sheet-plan` | 서버 스냅샷으로 원자료·사실 추가 계획 생성 |
 | `POST /api/market/binding-plan` | 서버 스냅샷 재검증 후 대상 셀 변경 계획 생성 |
+| `POST /api/market/conversion-plan` | 서버 환율 재검증 후 원본/출력 범위·통화·단위 대사 및 환산 수식 계획 |
 
 원자료 값은 클라이언트가 보낸 숫자로 만들지 않는다. 계획 요청에는 `snapshot_id`, 조회 조건, 현재 Excel 격자를 보낸다. 금리·엄격 모드·미검증 날짜의 차단 상태는 서버에서 다시 판정한다.
 
@@ -84,9 +88,9 @@ py -3.12 scripts/kexim_probe.py --date 2026-10-02 --date 2026-10-03 --dataset al
 
 | 검증 | 결과 | 해석 |
 |---|---|---|
-| 신규 백엔드 테스트 | 52 통과 | 합성 응답·로컬 파일·FastAPI TestClient 사용 |
-| 관련 기존 회귀 포함 | 99 통과 | 사실 원장·거시 API·거시 클라이언트·프로젝트 저장·중복 라우트 포함 |
-| `npm run test:market` | 8 통과 | 가짜 Office 어댑터에서 추가·충돌·부분 실패·모델 값 대사·수식형 문자열 확인 |
+| 신규 백엔드 테스트 | 85 통과 | 합성 응답·로컬 파일·FastAPI TestClient·범위 환산 사용 |
+| 관련 기존 회귀 포함 | 132 통과 | 사실 원장·거시 API·거시 클라이언트·프로젝트 저장·중복 라우트 포함 |
+| `npm run test:market` | 19 통과 | 가짜 Office 어댑터에서 추가·충돌·부분 실패·모델/환산 값 대사·수식형 문자열 확인 |
 | `npm run build` | 성공 | Vite의 크기 기준인 500 kB를 넘는 번들 경고 발생 |
 | 로컬 브라우저 | 메뉴·화면 렌더링 확인 | 기존 골든 프로젝트에서 새 탭 진입, 기준일 결측 시 버튼 비활성 확인, 콘솔 오류 없음 |
 | `git diff --check` | 통과 | 기존 작업 변경은 유지 |
@@ -97,7 +101,7 @@ py -3.12 scripts/kexim_probe.py --date 2026-10-02 --date 2026-10-03 --dataset al
 재현 명령:
 
 ```powershell
-py -3.12 -m pytest tests/test_market_data.py tests/test_api_market.py tests/test_facts_sheet.py tests/test_api_macro.py tests/test_macro_client.py tests/test_project_store.py tests/test_api_routes_unique.py -q
+py -3.12 -m pytest tests/test_market_conversion.py tests/test_market_data.py tests/test_api_market.py tests/test_facts_sheet.py tests/test_api_macro.py tests/test_macro_client.py tests/test_project_store.py tests/test_api_routes_unique.py -q
 # frontend 디렉터리
 npm run test:market
 npm run build
@@ -120,6 +124,7 @@ npm run build
 | KX06 원자료 추가 계획 | `done` | 소유권·ID·열 이름·중복·변조 대사 |
 | KX07 Excel 원자료·사실 | `in_progress` | 구현 및 어댑터 테스트 완료, 실제 Excel 검수 필요 |
 | KX08 채택·모델 연결 | `in_progress` | 명시적 채택·입력 연결·대사 구현. 실제 날짜 근거·템플릿 단위 확인 필요 |
+| KX08a 외화 금액 환산 | `in_progress` | 선택 범위·원화 단위·수식/값 대사 구현 및 자동검증 완료. 실제 Excel 호스트 검수 필요 |
 | KX09 저장·복원 | `in_progress` | 스냅샷 복원·저장 실패 재시도 구현. 워크북 이동/다른 서버 복구 시나리오 실검수 필요 |
 | KX10 MVP 통합 시연 | `not_started` | 키와 날짜 근거를 확보한 뒤 실제 Excel에서 조회→기록→연결→대사 |
 | KX11~16 후속 단계 | `not_started` | 금리 약정 연결·노출별 시나리오·통계·호스팅 강화 등 상위 명세 범위 |

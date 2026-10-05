@@ -1,12 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "../../api.js";
 import { loadKey } from "../Byok.jsx";
+import MarketConversionPanel from "./MarketConversionPanel.jsx";
 import { appendMarketWorkbook, applyMarketBinding, marketExcelAvailable,
   readMarketTarget, readMarketWorkbook } from "../../marketBridge.js";
 
 const stages = { raw_written: "원자료 재읽기 완료", facts_written: "사실 원장 재읽기 완료",
   inputs_written: "채택 입력 기록 완료", target_written: "대상 수식 기록 완료",
-  bindings_verified: "모델 수식·값 대사 완료", adoption_recorded: "채택 이력 기록 완료" };
+  bindings_verified: "모델 수식·값 대사 완료", adoption_recorded: "채택 이력 기록 완료",
+  conversion_written: "환산 수식 기록 완료", conversion_verified: "환산 계산값 대사 완료",
+  conversion_recorded: "환산 근거 기록 완료" };
 
 export default function MarketDataPanel({ project, onSave }) {
   const base = project.setup?.valuation_date || "";
@@ -153,6 +156,8 @@ export default function MarketDataPanel({ project, onSave }) {
             {" → "}{binding.expected_value} ({ob?.value_unit})<br />수식: {binding.target.formula}</p>
             <button className="primary" onClick={adopt}>이 환율을 모델에 반영</button></div>}
         </fieldset>}
+        {excel && <MarketConversionPanel view={result} query={query} observation={ob} busy={busy}
+          work={work} save={save} setStatus={setStatus} onStage={s => setStatus(stages[s])} />}
       </>}
     </div>
   </div>;

@@ -45,6 +45,7 @@ export const api = {
     restore: body => j("POST", "/api/market/restore", body),
     sheetPlan: body => j("POST", "/api/market/sheet-plan", body),
     bindingPlan: body => j("POST", "/api/market/binding-plan", body),
+    conversionPlan: body => j("POST", "/api/market/conversion-plan", body),
   },
   health: () => j("GET", "/api/health"),
   dcf: (body) => j("POST", "/api/dcf", body),

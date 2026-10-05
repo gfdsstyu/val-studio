@@ -32,6 +32,12 @@ def test_routes_preview_record_restore_and_guard(client):
     blocked = client.post("/api/market/binding-plan", json={**body, "observation_id": data["observations"][0]["observation_id"]})
     assert blocked.status_code == 409 and blocked.json()["detail"]["code"] == "MARKET_ADOPTION_BLOCKED"
     assert "fake-secret-key" not in res.text + plan.text + blocked.text
+    conversion = client.post("/api/market/conversion-plan", json={**body,
+      "observation_id": data["observations"][0]["observation_id"], "source_sheet": "Sales", "source_address": "A1",
+      "output_sheet": "Sales", "output_start": "B1", "source_scale": "unit", "output_unit": "KRW",
+      "expected_source": {"values": [[1]], "formulas": [[1]]},
+      "expected_output": {"values": [[""]], "formulas": [[""]]}})
+    assert conversion.status_code == 409 and conversion.json()["detail"]["code"] == "MARKET_ADOPTION_BLOCKED"
 
 
 def test_route_missing_key_and_input_errors(client):
@@ -45,3 +51,24 @@ def test_feature_switch_and_capabilities(client, monkeypatch):
     monkeypatch.setenv("FEATURE_KEXIM_MARKET_DATA", "0")
     assert not client.get("/api/market/capabilities").json()["enabled"]
     assert client.post("/api/market/quotes", json=BODY).status_code == 503
+    assert client.post("/api/market/conversion-plan", json=BODY).status_code == 503
+
+
+def test_conversion_route_restores_server_snapshot_and_rechecks_contract(client):
+    from ingest.market_data import DateContract
+    from test_market_data import apply
+    svc = app.dependency_overrides[get_service]()
+    svc.contracts = {"exchange": DateContract(True, "MOCK route evidence", "mock-date-1")}
+    v = client.post("/api/market/quotes", json=BODY, headers={"X-Kexim-Key": "fake-key"}).json()
+    request = {**BODY, "snapshot_id": v["snapshot_id"]}
+    p = client.post("/api/market/sheet-plan", json=request).json()
+    request.update(observation_id=v["observations"][0]["observation_id"], market_grid=apply(p["market"]),
+      facts_grid=apply(p["facts"]), source_sheet="Sales", source_address="A1", output_sheet="Sales", output_start="B1",
+      source_currency="USD", source_scale="unit", output_unit="KRW", expected_unit="KRW_per_1_USD",
+      expected_source={"values": [[2]], "formulas": [[2]]}, expected_output={"values": [[""]], "formulas": [[""]]},
+      reason="MOCK route conversion", acknowledge_warnings=True, normalized_value="9999")
+    response = client.post("/api/market/conversion-plan", json=request)
+    assert response.status_code == 200, response.text
+    assert response.json()["output"]["expected_values"] == [[2800]]
+    svc.contracts = {}
+    assert client.post("/api/market/conversion-plan", json=request).status_code == 409

@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Header, HTTPException
 
 from excel.market_binding import binding_plan
+from excel.market_conversion import conversion_plan
 from excel.market_sheet import append_plan
 from ingest.market_data import DateContract, ENDPOINTS, MarketError, MarketQuery
 from ingest.market_service import MarketService
@@ -83,3 +84,8 @@ def sheet_plan_route(body: dict, service: MarketService = Depends(get_service)):
 @router.post("/binding-plan")
 def binding_plan_route(body: dict, service: MarketService = Depends(get_service)):
     return invoke(lambda: binding_plan(restore(body, service), body))
+
+
+@router.post("/conversion-plan")
+def conversion_plan_route(body: dict, service: MarketService = Depends(get_service)):
+    return invoke(lambda: conversion_plan(restore(body, service), body))
