@@ -18,6 +18,7 @@ import CostsSheet from "./pages/appraiser/CostsSheet.jsx";
 import FaSheet from "./pages/appraiser/FaSheet.jsx";
 import WcSheet from "./pages/appraiser/WcSheet.jsx";
 import MaterialsSheet from "./pages/appraiser/MaterialsSheet.jsx";
+import MarketDataPanel from "./pages/appraiser/MarketDataPanel.jsx";
 import MappingSheet from "./pages/appraiser/MappingSheet.jsx";
 import Dashboard from "./pages/appraiser/Dashboard.jsx";
 import Roundtrip from "./pages/appraiser/Roundtrip.jsx";
@@ -238,6 +239,12 @@ function Workspace({ projectId, onHome, onMissing }) {
       .then((p) => { setProject(p); setSaveErr(null); })
       .catch((e) => { setSaveErr(e.message || "저장 실패"); });
 
+  // Market writes distinguish workbook success from project persistence failure.
+  const saveMarketData = (patch) =>
+    api.projects.patch(project.id, { data: patch })
+      .then((p) => { setProject(p); setSaveErr(null); })
+      .catch((e) => { setSaveErr(e.message || "저장 실패"); throw e; });
+
   const body = (() => {
     if (showByok) return <ByokPanel />;
     if (stage.id === "cover")
@@ -245,6 +252,8 @@ function Workspace({ projectId, onHome, onMissing }) {
         ? <Dashboard project={project}
             onNavigate={(sid) => { const st = stages.find((x) => x.id === sid); if (st) gotoStage(st); }} />
         : <CoverSheet project={project} />;
+    if (stage.id === "materials" && sheet.id === "market")
+      return <MarketDataPanel key={project.id} project={project} onSave={saveMarketData} />;
     if (stage.id === "materials")
       return <MaterialsSheet project={project} sheet={sheet.id} onSave={saveData} />;
     if (stage.id === "mapping")

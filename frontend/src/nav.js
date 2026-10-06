@@ -8,6 +8,7 @@ export const NAV = {
     { id: "materials", label: "0. 자료·Brief", sheets: [
       { id: "files", label: "자료함" },
       { id: "disclosure", label: "공시자료" },
+      { id: "market", label: "환율·금리" },
       { id: "brief", label: "Company Brief" },
     ]},
     { id: "mapping", label: "1. 계정분류", sheets: [
@@ -89,7 +90,7 @@ export const MODE_LABEL = { appraiser: "평가인", auditor: "감사인" };
 const EMBED_ALLOW = {
   appraiser: {
     cover: ["summary"],
-    materials: ["files", "disclosure"],
+    materials: ["files", "disclosure", "market"],
     valuation: ["dcf"],
     output: ["export", "diff", "audit", "connectivity"],
   },
