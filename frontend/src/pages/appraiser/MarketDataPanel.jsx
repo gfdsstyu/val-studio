@@ -135,7 +135,7 @@ export default function MarketDataPanel({ project, onSave }) {
         <div style={{ overflowX: "auto" }}><table><thead><tr><th>선택</th><th>통화·만기</th><th>원본</th><th>정규화</th><th>적용일·검증</th></tr></thead>
           <tbody>{result.observations.map(o => <tr key={o.observation_id}>
             <td><input aria-label={`${o.currency_label} 선택`} type="radio" name="market-observation" checked={selected === o.observation_id}
-              disabled={busy} onChange={() => { setSelected(o.observation_id); setBinding(null); }} /></td>
+              disabled={busy} onChange={() => { setSelected(o.observation_id); setBinding(null); setAck(false); }} /></td>
             <td>{o.currency_label} {o.tenor_label}</td><td>{o.raw_value || "결측"}</td>
             <td>{o.normalized_value ?? "미확인"}<br /><small>{o.value_unit}</small></td>
             <td>{o.effective_date || "미확인"}{o.findings.map((f, i) => <div key={i}><small>{f.message}</small></div>)}</td>
