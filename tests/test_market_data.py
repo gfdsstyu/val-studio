@@ -3,7 +3,7 @@ import copy
 import json
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -168,6 +168,72 @@ def test_cache_only_and_quota(tmp_path):
     with pytest.raises(MarketError) as err:
         svc.query(query(cache_policy="refresh"), KEY)
     assert err.value.code == "KEXIM_LOCAL_BUDGET_EXHAUSTED" and len(calls) == 1
+
+
+@pytest.mark.parametrize("checked_at", ["original", None, "invalid timestamp"])
+def test_old_nonempty_history_reuses_snapshot_without_key_network_or_quota(tmp_path, checked_at):
+    svc, calls = service(tmp_path)
+    first = svc.query(query(), KEY)
+    if checked_at != "original":
+        index = tmp_path / "index" / "exchange-2026-10-02.json"
+        entry = json.loads(index.read_text(encoding="utf-8"))
+        entry["checked_at"] = checked_at
+        index.write_text(json.dumps(entry), encoding="utf-8")
+    svc.now = lambda: NOW + timedelta(days=30)
+    svc.daily_limit = 0
+    counts_before = svc.counts.copy()
+    cached = svc.query(query())  # No authentication key; any fetch would fail.
+    assert cached["cache_status"] == "hit" and len(calls) == 1
+    assert cached["snapshot_id"] == first["snapshot_id"] and cached["fetched_at"] == first["fetched_at"]
+    assert svc.counts == counts_before
+
+
+def test_historical_explicit_refresh_fetches_revision_and_keeps_old_snapshot(tmp_path):
+    responses = {"20261002": raw()}
+    svc, calls = service(tmp_path, responses)
+    original = svc.query(query(), KEY)
+    svc.now = lambda: NOW + timedelta(days=30)
+    responses["20261002"] = raw("1401")
+    assert svc.query(query())["snapshot_id"] == original["snapshot_id"]
+    refreshed = svc.query(query(cache_policy="refresh"), KEY)
+    assert len(calls) == 2 and refreshed["cache_status"] == "refreshed"
+    assert refreshed["snapshot_id"] != original["snapshot_id"]
+    assert svc.store.load(original["snapshot_id"])["observations"][0]["raw_value"] == "1,400.00"
+    assert refreshed["findings"][-1]["rule"] == "market_snapshot_changed"
+
+
+@pytest.mark.parametrize("day,payload", [("2026-10-04", raw()), ("2026-10-04", b"[]"), ("2026-10-02", b"[]")])
+def test_today_or_empty_cache_still_expires_after_five_minutes(tmp_path, day, payload):
+    svc, calls = service(tmp_path, {day.replace("-", ""): payload})
+    q = query(requested_date=day)
+    svc.query(q, KEY)
+    svc.now = lambda: NOW + timedelta(seconds=299)
+    assert svc.query(q)["cache_status"] == "hit" and len(calls) == 1
+    svc.now = lambda: NOW + timedelta(seconds=300)
+    with pytest.raises(MarketError) as err:
+        svc.query(q)
+    assert err.value.code == "KEXIM_AUTH_REQUIRED"
+    assert svc.query(q, KEY)["cache_status"] == "refreshed" and len(calls) == 2
+
+
+def test_current_nonempty_snapshot_becomes_persistent_history_after_day_rollover(tmp_path):
+    svc, calls = service(tmp_path)
+    q = query(requested_date="2026-10-04")
+    first = svc.query(q, KEY)
+    svc.now = lambda: NOW + timedelta(days=1)
+    assert svc.query(q)["snapshot_id"] == first["snapshot_id"] and len(calls) == 1
+
+
+@pytest.mark.parametrize("contract", [DateContract(), DateContract(True, CONTRACT.evidence, "new-version"),
+                                    DateContract(True, "new evidence", CONTRACT.version)])
+def test_old_history_with_incompatible_date_contract_is_not_a_cache_hit(tmp_path, contract):
+    svc, calls = service(tmp_path)
+    svc.query(query(), KEY)
+    svc.now = lambda: NOW + timedelta(days=30)
+    svc.contracts = {"exchange": contract}
+    with pytest.raises(MarketError) as err:
+        svc.query(query())
+    assert err.value.code == "KEXIM_AUTH_REQUIRED" and len(calls) == 1
 
 
 def test_immutable_snapshots_revision_and_corruption(tmp_path):

@@ -49,13 +49,14 @@ class MarketService:
                 if usable:
                     usable = all(o["date_evidence"] == contract.evidence and bool(o["effective_date"]) == contract.verified
                                  for o in cached["observations"])
-                fresh = False
-                if usable and checked:
+                now = self.now()
+                # Historical nonempty snapshots change only on explicit refresh.
+                fresh = usable and bool(cached["observations"]) and day < now.astimezone(KST).date().isoformat()
+                if usable and not fresh and checked:
                     try:
-                        age = (self.now() - datetime.fromisoformat(checked)).total_seconds()
+                        age = (now - datetime.fromisoformat(checked)).total_seconds()
                         # Today's data and empty historical responses must be rechecked.
-                        ttl = 300 if not cached["observations"] or day == self.now().astimezone(KST).date().isoformat() else 86400
-                        fresh = 0 <= age < ttl
+                        fresh = 0 <= age < 300
                     except (ValueError, TypeError):
                         pass
                 if query.cache_policy == "cache_only":
